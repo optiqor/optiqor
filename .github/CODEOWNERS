@@ -1,0 +1,20 @@
+# Default owner: founders, until team grows.
+*                                  @costify/founders
+
+# Domain ownership (fill in as team grows)
+/internal/agent/                   @costify/founders
+/internal/cost/                    @costify/founders
+/internal/prwriter/                @costify/founders
+/internal/receipts/                @costify/founders
+/internal/tenancy/                 @costify/founders
+/internal/platform/                @costify/founders
+
+# Infra
+/infra/terraform/                  @costify/founders
+/deploy/                           @costify/founders
+/.github/                          @costify/founders
+
+# Security-sensitive
+/migrations/                       @costify/founders
+*.tf                               @costify/founders
+SECURITY.md                        @costify/founders
