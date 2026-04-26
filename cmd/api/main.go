@@ -1,11 +1,16 @@
 // Command api is the Sevro HTTP API server.
 //
-// It serves the GitHub App webhook receiver, sandbox endpoints, and customer
-// dashboard API. Real handler implementations land in Phase 1+ (see todo.md).
+// It serves the GitHub App webhook receiver, sandbox endpoints, and
+// customer dashboard API. Phase 1 wires config + structured logging +
+// readiness checks + graceful shutdown; concrete handlers land in
+// later phases.
 package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,68 +20,130 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/lowplane/backend/internal/platform/config"
+	"github.com/lowplane/backend/internal/platform/healthz"
+	"github.com/lowplane/backend/internal/platform/logging"
 )
 
 var version = "dev"
 
 func main() {
+	if code := run(); code != 0 {
+		os.Exit(code)
+	}
+}
+
+func run() int {
 	showVersion := flag.Bool("version", false, "print version and exit")
-	addr := flag.String("addr", envOr("SEVRO_HTTP_ADDR", ":8080"), "HTTP listen address")
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println(version)
-		return
+		return 0
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config:", err)
+		return 2
+	}
+
+	logger := logging.New(os.Stdout, cfg.LogLevel)
 	slog.SetDefault(logger)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
-		// TODO(phase-1): check DB + Redis + Temporal connectivity.
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ready"))
-	})
+	checks := healthz.NewRegistry()
+	checks.Register("self", healthz.AlwaysOK)
+	// Future phases register: postgres, redis, temporal, anthropic.
 
+	mux := buildMux(checks, logger)
 	srv := &http.Server{
-		Addr:              *addr,
-		Handler:           mux,
+		Addr:              cfg.HTTPAddr,
+		Handler:           withRequestID(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	listenErr := make(chan error, 1)
 	go func() {
-		logger.Info("api listening", "addr", *addr, "version", version)
+		logger.Info("api listening", "addr", cfg.HTTPAddr, "version", version, "env", cfg.Env)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("listen failed", "err", err)
+			listenErr <- err
 			cancel()
+			return
 		}
+		listenErr <- nil
 	}()
 
-	<-ctx.Done()
-	logger.Info("api shutting down")
+	select {
+	case <-ctx.Done():
+	case err := <-listenErr:
+		if err != nil {
+			logger.Error("listen failed", "err", err)
+			return 1
+		}
+	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	logger.Info("api shutting down", "grace", cfg.ShutdownGrace)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownGrace)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown failed", "err", err)
-		// Cancel explicitly before exit so the deferred cancel is a safety net only.
-		shutdownCancel()
-		os.Exit(1) //nolint:gocritic // exitAfterDefer: shutdownCancel called explicitly above
+		return 1
 	}
 	logger.Info("api stopped")
+	return 0
 }
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// buildMux returns the HTTP routes the api serves. Exposed so tests can
+// hit handlers without spinning a real socket.
+func buildMux(checks *healthz.Registry, logger *slog.Logger) *http.ServeMux {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+	})
+
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		results, ok := checks.Run(r.Context(), 2*time.Second)
+		status := http.StatusOK
+		if !ok {
+			status = http.StatusServiceUnavailable
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":      ok,
+			"checks":  results,
+			"version": version,
+		})
+	})
+
+	return mux
+}
+
+// withRequestID assigns or echoes an X-Request-ID header and stashes the
+// id in the request context so logs/traces can join on it.
+func withRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			id = newRequestID()
+		}
+		w.Header().Set("X-Request-ID", id)
+		ctx := logging.WithRequestID(r.Context(), id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func newRequestID() string {
+	var b [12]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// fall back to time-based id; never block requests on entropy.
+		return fmt.Sprintf("t-%d", time.Now().UnixNano())
 	}
-	return fallback
+	return hex.EncodeToString(b[:])
 }
