@@ -19,6 +19,7 @@ import (
 	"github.com/lowplane/backend/internal/platform/config"
 	"github.com/lowplane/backend/internal/platform/logging"
 	"github.com/lowplane/backend/internal/worker"
+	"github.com/lowplane/backend/internal/worker/workflows"
 )
 
 var version = "dev"
@@ -48,9 +49,14 @@ func run() int {
 	slog.SetDefault(logger)
 
 	dispatcher := worker.NewInMemory()
-	// Phase 3 will register: PR-analysis, Apply Fix, Receipt issuer,
-	// Auto-Rollback monitor, Cost Spike detector. Phase 1 leaves the
-	// dispatcher empty so the binary boots without external services.
+	// Phase 1: register the Echo workflow so the dispatcher contract
+	// is exercised end-to-end at boot. Phase 3+ replaces this with
+	// PR-analysis, Apply Fix, Receipt issuer, Auto-Rollback monitor,
+	// Cost Spike detector.
+	if err := dispatcher.Register(workflows.NewEcho(logger)); err != nil {
+		logger.Error("workflow registration failed", "err", err)
+		return 1
+	}
 
 	logger.Info("worker started",
 		"version", version,
