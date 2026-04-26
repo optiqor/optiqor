@@ -55,3 +55,21 @@ jobs:
           go-version: "1.24"
           cache: true
       - run: make build
+
+  terraform-tags:
+    name: Terraform tag check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify default_tags block on every env
+        run: bash scripts/check-terraform-tags.sh
+
+  terraform-fmt:
+    name: Terraform fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+      - run: terraform -chdir=infra/terraform fmt -recursive -check
