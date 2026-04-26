@@ -349,3 +349,72 @@ func TestRecordingWriter_DoesNotDoubleWriteHeader(t *testing.T) {
 		t.Errorf("status = %d, want 400", rw.status)
 	}
 }
+
+func TestGitHubOAuthCallback_RequiresCode(t *testing.T) {
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/oauth/github/callback", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestGitHubOAuthCallback_AcceptsCode(t *testing.T) {
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/oauth/github/callback?state=abc&code=xyz", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"phase":"1"`) {
+		t.Errorf("body missing phase ack: %s", rec.Body.String())
+	}
+}
+
+func TestPProf_GatedByAdminToken(t *testing.T) {
+	mux := http.NewServeMux()
+	mountPProf(mux, "secret-token")
+
+	// no header → 401
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("missing token: status = %d, want 401", rec.Code)
+	}
+
+	// wrong header → 401
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil)
+	req.Header.Set("X-Admin-Token", "wrong")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong token: status = %d, want 401", rec.Code)
+	}
+
+	// correct header → 200 (the index handler)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil)
+	req.Header.Set("X-Admin-Token", "secret-token")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("correct token: status = %d, want 200", rec.Code)
+	}
+}
+
+func TestSubtleConstantTimeEq(t *testing.T) {
+	cases := []struct {
+		a, b string
+		eq   int
+	}{
+		{"abc", "abc", 1},
+		{"abc", "abd", 0},
+		{"abc", "ab", 0},
+		{"", "", 1},
+	}
+	for _, tc := range cases {
+		if got := subtleConstantTimeEq(tc.a, tc.b); got != tc.eq {
+			t.Errorf("eq(%q,%q) = %d, want %d", tc.a, tc.b, got, tc.eq)
+		}
+	}
+}

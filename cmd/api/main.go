@@ -150,6 +150,39 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 		mux.Handle("GET /metrics", metrics.Handler())
 	}
 
+	// GitHub OAuth callback. Phase 5 wires the full code-exchange +
+	// session-issuance flow; Phase 1 records the (state, code) pair
+	// to the structured log and returns a deterministic ack so the
+	// app's redirect URI is reachable during onboarding.
+	mux.HandleFunc("GET /oauth/github/callback", func(w http.ResponseWriter, r *http.Request) {
+		state := r.URL.Query().Get("state")
+		code := r.URL.Query().Get("code")
+		if code == "" {
+			http.Error(w, "missing ?code", http.StatusBadRequest)
+			return
+		}
+		// We never log the raw code; only that one was received and
+		// the state token (used to bind the redirect to the originator).
+		logger.InfoContext(r.Context(), "github oauth callback",
+			"state_len", len(state),
+			"code_len", len(code),
+		)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status": "ok",
+			"phase":  "1",
+			"note":   "session issuance lands in Phase 5",
+		})
+	})
+
+	// pprof endpoints — gated on the SEVRO_ADMIN_TOKEN header to
+	// avoid exposing them to unauthenticated traffic. Empty token
+	// disables pprof entirely (the safe default in dev).
+	if os.Getenv("SEVRO_ADMIN_TOKEN") != "" {
+		mountPProf(mux, os.Getenv("SEVRO_ADMIN_TOKEN"))
+	}
+
 	// GitHub App webhook receiver: HMAC-verifies the signature and
 	// (in later phases) hands off to a Temporal workflow. Phase 1
 	// returns 202 with a stable ack body so the GitHub App can be
@@ -315,6 +348,31 @@ func withAccessLog(logger *slog.Logger, requests telemetry.Counter, latency tele
 			latency.Observe(dur.Seconds())
 		}
 	})
+}
+
+// mountPProf wires the standard pprof handlers behind a constant-time
+// header check. Production deploys keep SEVRO_ADMIN_TOKEN long and
+// rotated; the operator fetches profiles via:
+//
+//	curl -H "X-Admin-Token: $TOKEN" https://api.sevro.dev/debug/pprof/heap > heap.pb
+func mountPProf(mux *http.ServeMux, token string) {
+	require := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got := r.Header.Get("X-Admin-Token")
+			// Constant-time compare avoids timing-side-channel leakage
+			// when the token is wrong.
+			if subtleConstantTimeEq(got, token) != 1 {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			h.ServeHTTP(w, r)
+		})
+	}
+	mux.Handle("GET /debug/pprof/", require(http.HandlerFunc(pprofIndex)))
+	mux.Handle("GET /debug/pprof/cmdline", require(http.HandlerFunc(pprofCmdline)))
+	mux.Handle("GET /debug/pprof/profile", require(http.HandlerFunc(pprofProfile)))
+	mux.Handle("GET /debug/pprof/symbol", require(http.HandlerFunc(pprofSymbol)))
+	mux.Handle("GET /debug/pprof/trace", require(http.HandlerFunc(pprofTrace)))
 }
 
 // recordingWriter intercepts the status code and byte count without
