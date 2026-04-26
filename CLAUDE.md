@@ -37,6 +37,8 @@ Domain packages: `ingestion`, `parser`, `agent` (LLM orchestration), `cost`, `pr
 - Customer secrets (their AWS credentials, GitHub tokens): KMS-encrypted at rest, decrypted only inside Temporal workflow context.
 - CI: `gitleaks` runs on every PR.
 
+CodeQL is intentionally **not** wired into this private repo — GitHub Advanced Security is required for CodeQL on private repos and we have not bought the seat. We rely on `gosec` + `govulncheck` + `trivy` (filesystem) for SAST; see `.github/workflows/security.yml`. If GHAS is later enabled at the org level, restore `.github/workflows/codeql.yml` from the cli repo's identical workflow.
+
 ## Testing
 
 - Unit tests beside the code (`foo.go` + `foo_test.go`).
