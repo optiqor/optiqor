@@ -67,7 +67,9 @@ func main() {
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown failed", "err", err)
-		os.Exit(1)
+		// Cancel explicitly before exit so the deferred cancel is a safety net only.
+		shutdownCancel()
+		os.Exit(1) //nolint:gocritic // exitAfterDefer: shutdownCancel called explicitly above
 	}
 	logger.Info("api stopped")
 }
