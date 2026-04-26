@@ -1,4 +1,4 @@
-// Command api is the Costify HTTP API server.
+// Command api is the Sevro HTTP API server.
 //
 // It serves the GitHub App webhook receiver, sandbox endpoints, and customer
 // dashboard API. Real handler implementations land in Phase 1+ (see todo.md).
@@ -21,7 +21,7 @@ var version = "dev"
 
 func main() {
 	showVersion := flag.Bool("version", false, "print version and exit")
-	addr := flag.String("addr", envOr("COSTIFY_HTTP_ADDR", ":8080"), "HTTP listen address")
+	addr := flag.String("addr", envOr("SEVRO_HTTP_ADDR", ":8080"), "HTTP listen address")
 	flag.Parse()
 
 	if *showVersion {

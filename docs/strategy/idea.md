@@ -1,4 +1,4 @@
-# Costify — The Idea (Kubernetes-First)
+# Sevro — The Idea (Kubernetes-First)
 
 > **The GitOps-native cost and security layer for Kubernetes. Every Helm PR, reviewed by an AI that ships the fix.**
 
@@ -38,7 +38,7 @@
 
 ## 1. One-Line Pitch
 
-Costify is the first Kubernetes PR remediation platform — every Helm values change, Kustomize overlay, or ArgoCD Application PR gets a one-click Apply Fix commit backed by 30 days of real Prometheus data, a transparent Confidence Score, a signed savings receipt against the real cloud bill, and an Auto-Rollback Guarantee if anything drifts.
+Sevro is the first Kubernetes PR remediation platform — every Helm values change, Kustomize overlay, or ArgoCD Application PR gets a one-click Apply Fix commit backed by 30 days of real Prometheus data, a transparent Confidence Score, a signed savings receipt against the real cloud bill, and an Auto-Rollback Guarantee if anything drifts.
 
 ---
 
@@ -48,7 +48,7 @@ Kubernetes is where modern cloud waste hides. Teams over-provision pod requests 
 
 The existing tooling has a hole. **Kubecost** shows you costs on a dashboard after the fact. **Cast AI** takes over your cluster as a black box. **OpenCost** exposes raw metrics. **Infracost** handles Terraform, not Helm. Kubecost attempted a cost-prediction GitHub Action in 2023 — it never made it out of alpha (v0.1.1, 31 stars, abandoned for 3 years). Nobody has shipped a working PR-layer remediation product for Kubernetes. That's the wedge.
 
-Costify is that missing tool. Every Helm values change, Kustomize overlay, or ArgoCD Application PR gets a comment within 30 seconds showing cost impact, security findings, a rightsizing recommendation based on real Prometheus usage, and a one-click **Apply Fix** button that pushes the optimized commit back to the branch. We monitor every merged change for 7 days with our **Auto-Rollback Guarantee** — if cost or reliability drifts beyond bounds, Costify opens a rollback PR and notifies on-call. Auto-merging the rollback is opt-in for non-critical workloads; for everything else, a human approves in minutes.
+Sevro is that missing tool. Every Helm values change, Kustomize overlay, or ArgoCD Application PR gets a comment within 30 seconds showing cost impact, security findings, a rightsizing recommendation based on real Prometheus usage, and a one-click **Apply Fix** button that pushes the optimized commit back to the branch. We monitor every merged change for 7 days with our **Auto-Rollback Guarantee** — if cost or reliability drifts beyond bounds, Sevro opens a rollback PR and notifies on-call. Auto-merging the rollback is opt-in for non-critical workloads; for everything else, a human approves in minutes.
 
 30 days later we verify actual savings against the customer's real cloud bill and issue a cryptographically signed receipt.
 
@@ -68,7 +68,7 @@ Kubecost tried entering this space in 2023 with a cost-prediction GitHub Action.
 
 Cost dashboards live in the cluster. Cast AI's autopilot lives in the cluster. Wiz's findings live in Jira. Nobody sits in the PR with Apply Fix, Receipts, and Auto-Rollback.
 
-Costify lives in the PR with hands. Write the diff. Verify the savings. Catch the regression. That's the whole product.
+Sevro lives in the PR with hands. Write the diff. Verify the savings. Catch the regression. That's the whole product.
 
 ---
 
@@ -93,9 +93,9 @@ Costify lives in the PR with hands. Write the diff. Verify the savings. Catch th
 | **Wiz / Snyk** | K8s security detection | Detection only — findings sit in Jira for weeks |
 | **Kubernetes-native (VPA, HPA, Goldilocks)** | Free, built-in rightsizing | No cost visibility, no PR workflow, manual tuning |
 
-**Honest positioning:** Costify is the first working Kubernetes PR remediation platform. A simple cost-prediction comment (which Kubecost attempted) is not the product — a simple cost-prediction comment without Prometheus-grounded confidence, Apply Fix generation, signed receipts, and Auto-Rollback is precisely what Kubecost tried and shelved. The category exists. The easy version doesn't work. We're building the version that does.
+**Honest positioning:** Sevro is the first working Kubernetes PR remediation platform. A simple cost-prediction comment (which Kubecost attempted) is not the product — a simple cost-prediction comment without Prometheus-grounded confidence, Apply Fix generation, signed receipts, and Auto-Rollback is precisely what Kubecost tried and shelved. The category exists. The easy version doesn't work. We're building the version that does.
 
-*"Kubecost showed you the price. Costify writes the fix, verifies the savings, and catches regressions."*
+*"Kubecost showed you the price. Sevro writes the fix, verifies the savings, and catches regressions."*
 
 ### 4.3 The Platform Engineer's Lament
 
@@ -110,11 +110,11 @@ Every one of these complaints is architecturally unfixable by the incumbent. The
 
 ## 5. The Solution
 
-Costify operates through two modes, delivered entirely through Kubernetes pull requests. Every interaction has one hero action: **Apply Fix**. One click, and Costify pushes the optimized commit.
+Sevro operates through two modes, delivered entirely through Kubernetes pull requests. Every interaction has one hero action: **Apply Fix**. One click, and Sevro pushes the optimized commit.
 
 ### 5.1 Helm-PR Analysis (The Flagship)
 
-The moment a developer opens a PR that modifies Helm values, a Kustomize overlay, or a raw Kubernetes manifest, Costify comments within 30 seconds:
+The moment a developer opens a PR that modifies Helm values, a Kustomize overlay, or a raw Kubernetes manifest, Sevro comments within 30 seconds:
 
 ```
 🎯 Kubernetes Impact Analysis · checkout-api
@@ -153,7 +153,7 @@ Signals:
 • HPA would not trigger at proposed requests under observed peak
 • Auto-Rollback Guard active for 7 days post-merge
 
-(Costify uses qualitative confidence bands in Year 1 — Low / Medium / High.
+(Sevro uses qualitative confidence bands in Year 1 — Low / Medium / High.
 Numerical scores ship in Year 2 once we have enough merged PRs to calibrate them.)
 
 🔒 Security findings: 1 medium
@@ -167,7 +167,7 @@ Numerical scores ship in Year 2 once we have enough merged PRs to calibrate them
 [ 🛠 Apply Fix ]  [ Approve as-is ]  [ Explain more ]
 ```
 
-**Kustomize PR example.** For teams running Kustomize-only (no templating, plain YAML overlays — ~20% of modern K8s shops), Costify comments the same way on overlay modifications:
+**Kustomize PR example.** For teams running Kustomize-only (no templating, plain YAML overlays — ~20% of modern K8s shops), Sevro comments the same way on overlay modifications:
 
 ```
 🎯 Kubernetes Impact Analysis · payment-service (prod overlay)
@@ -202,17 +202,17 @@ Signals:
 [ 🛠 Apply Fix ]  [ Approve as-is ]  [ Explain more ]
 ```
 
-Kustomize support is first-class from Day 1, not an afterthought. Many platform teams specifically choose Kustomize to avoid Helm templating complexity; Costify must feel native to them.
+Kustomize support is first-class from Day 1, not an afterthought. Many platform teams specifically choose Kustomize to avoid Helm templating complexity; Sevro must feel native to them.
 
 ### 5.2 Autonomous Optimization PRs
 
-Costify continuously monitors customer clusters via a read-only ServiceAccount plus Prometheus. When it finds waste, it opens its own PR against the repo that owns the workload:
+Sevro continuously monitors customer clusters via a read-only ServiceAccount plus Prometheus. When it finds waste, it opens its own PR against the repo that owns the workload:
 
 ```
 Title: Rightsize 7 overprovisioned services (saves $18,400/mo)
 
 Description:
-Costify identified 7 services with 30+ days of stable overprovisioning.
+Sevro identified 7 services with 30+ days of stable overprovisioning.
 All proposed changes verified against P95 usage plus 40% headroom.
 
 Services modified:
@@ -229,20 +229,20 @@ Total: $18,400/mo · $220,800/year
 Blast radius: None — no service has an active SLO commitment, and the
 service-level graph shows no critical-path dependencies.
 
-Rollback plan: By default, Costify opens a rollback PR and notifies on-call
+Rollback plan: By default, Sevro opens a rollback PR and notifies on-call
 if cost or reliability drifts beyond bounds within 7 days. Auto-merge of the
 rollback PR is opt-in for non-critical workloads only.
 
-Merge to apply. Costify verifies actual savings in 30 days against
+Merge to apply. Sevro verifies actual savings in 30 days against
 the real AWS bill.
 ```
 
 ### 5.3 Receipts (The Trust Layer)
 
-30 days after a PR merges, Costify correlates the AWS Cost and Usage Report with the pods that were rightsized and issues a signed receipt:
+30 days after a PR merges, Sevro correlates the AWS Cost and Usage Report with the pods that were rightsized and issues a signed receipt:
 
 ```
-✅ Costify Receipt — Verified 2026-05-14
+✅ Sevro Receipt — Verified 2026-05-14
 PR #4821 · "Rightsize 7 overprovisioned services"
 Merged by: @priya · 2026-04-12
 
@@ -252,9 +252,9 @@ Prediction accuracy: 103% (within 3%)
 
 Methodology: transparent allocation model based on node cost and
 resource usage (requests-weighted + usage-weighted hybrid). Full
-methodology at Costify.dev/methodology.
+methodology at sevro.dev/methodology.
 
-Signature: Ed25519 · verify at Costify.dev/verify/a3f9b2...
+Signature: Ed25519 · verify at sevro.dev/verify/a3f9b2...
 Public proof: ✅
 ```
 
@@ -262,24 +262,24 @@ Receipts are shareable — on LinkedIn, Twitter, perf-review docs, engineering w
 
 ### 5.4 Auto-Rollback Guarantee (The Safety Contract)
 
-Every merged Costify PR is watched for 7 days. Per-service statistical baselines are maintained for:
+Every merged Sevro PR is watched for 7 days. Per-service statistical baselines are maintained for:
 - Cost deviation vs prediction
 - OOMKilled events and CrashLoopBackOff
 - P99 latency degradation
 - SLO burn-rate alarms
 - PagerDuty incidents tagged to affected resources
 
-**Default behavior — safe by design:** if any signal breaches for more than 5 minutes, Costify opens a rollback PR and notifies on-call via Slack and PagerDuty. A human approves the rollback merge within minutes. The Auto-Rollback Guarantee is about **detection and proposed remediation**, not blind automation.
+**Default behavior — safe by design:** if any signal breaches for more than 5 minutes, Sevro opens a rollback PR and notifies on-call via Slack and PagerDuty. A human approves the rollback merge within minutes. The Auto-Rollback Guarantee is about **detection and proposed remediation**, not blind automation.
 
-**Opt-in auto-merge:** for explicitly-tagged non-critical workloads (batch jobs, dev namespaces, lower-tier services), Enterprise customers can configure automatic rollback merge after confirmation window. Critical paths (payments, auth, customer-facing APIs) always require human approval — we never let Costify act unilaterally on workloads you've marked critical.
+**Opt-in auto-merge:** for explicitly-tagged non-critical workloads (batch jobs, dev namespaces, lower-tier services), Enterprise customers can configure automatic rollback merge after confirmation window. Critical paths (payments, auth, customer-facing APIs) always require human approval — we never let Sevro act unilaterally on workloads you've marked critical.
 
-**This is the breakthrough feature.** Platform teams have been burned by Cast AI's black-box autopilot. Costify gives them the detection speed of automation with the auditability and control of pull requests. Enterprise platform leads can trust it because trust is built into the default, not bolted on as a toggle.
+**This is the breakthrough feature.** Platform teams have been burned by Cast AI's black-box autopilot. Sevro gives them the detection speed of automation with the auditability and control of pull requests. Enterprise platform leads can trust it because trust is built into the default, not bolted on as a toggle.
 
 ### 5.5 Cost Spike → PR Mapping (The CFO Feature)
 
-Every CFO asks the same question when the cloud bill jumps: *"What the hell happened last week?"* Getting an answer today takes a platform engineer 2-4 weeks of spelunking through CloudWatch, Kubecost dashboards, and git history. Costify answers it in 30 seconds.
+Every CFO asks the same question when the cloud bill jumps: *"What the hell happened last week?"* Getting an answer today takes a platform engineer 2-4 weeks of spelunking through CloudWatch, Kubecost dashboards, and git history. Sevro answers it in 30 seconds.
 
-When Costify detects a meaningful cost anomaly in a customer's K8s spend, it traces the spike back to the specific PR that caused it:
+When Sevro detects a meaningful cost anomaly in a customer's K8s spend, it traces the spike back to the specific PR that caused it:
 
 ```
 📈 Cost anomaly detected — checkout namespace
@@ -292,13 +292,13 @@ Breakdown of attributable increase:
 • CPU requests increased 2× across 6 services     → +$8,000
 • Replica count increased from 4 to 8 on 3 services → +$6,200
 
-Costify predicted +$13,100 at merge time; actual +$14,200 (within 8%).
+Sevro predicted +$13,100 at merge time; actual +$14,200 (within 8%).
 
 Secondary contributors (this week):
 • PR #4847 (@raj, merged April 8): Redis instance upgrade — +$1,700
 • Organic growth:                                   +$500
 
-Would you like Costify to:
+Would you like Sevro to:
 [ 📉 Open rightsizing PR ]  [ 📊 Show detailed breakdown ]  [ 🔕 Dismiss ]
 ```
 
@@ -312,19 +312,19 @@ Would you like Costify to:
 - Hourly scan of AWS CUR + Prometheus detects cost anomalies by service, namespace, or cluster
 - Graph query traces each anomaly-contributing workload back to the Helm chart or Kustomize overlay that defines it
 - Recent PRs on that file are scored by time proximity, resource overlap, and predicted cost delta at merge time
-- Top candidates surface in a weekly Slack digest and on-demand via `/Costify spike`
+- Top candidates surface in a weekly Slack digest and on-demand via `/Sevro spike`
 
 **Year 1 scope:** cost anomalies only. Year 2 extends to error rate and latency spikes, giving platform teams a unified "what broke?" view.
 
 ### 5.6 Time to Value — The 5-Minute Staircase (Accuracy Increases at Every Step)
 
-Best-in-class developer tools deliver first value in **under 5 minutes**. Stripe, Twilio, Vercel set this benchmark. Costify hits it or loses the market — but with a critical nuance: **accuracy increases at every step of the staircase**, and we are honest about that at every step.
+Best-in-class developer tools deliver first value in **under 5 minutes**. Stripe, Twilio, Vercel set this benchmark. Sevro hits it or loses the market — but with a critical nuance: **accuracy increases at every step of the staircase**, and we are honest about that at every step.
 
 **The staircase:**
 
 | Step | Time | What It Reads | Accuracy | What Unlocks |
 |------|------|---------------|----------|--------------|
-| 1. Land on `Costify.dev` | 0 min | — | — | Product pitch + sandbox CTA |
+| 1. Land on `sevro.dev` | 0 min | — | — | Product pitch + sandbox CTA |
 | 2. **Sandbox mode** — paste Helm values | 3 min | Helm values only | ±40% directional | "Your config likely wastes $X — here's the pattern" |
 | 3. Install GitHub App on test repo | 5 min | Helm + GitHub history | ±30% | PR-time cost comments on real repos |
 | 4. Install cluster agent via Helm | 10 min | + Prometheus + K8s state | ±15% | Real Confidence bands, safe Apply Fix on Deployments |
@@ -342,9 +342,9 @@ At **Step 5 (AWS CUR connected)**, we add the actual bill. Node types, spot vs o
 
 **Sandbox mode is the acquisition hook, not the product.** Every landing page visitor sees the product work in 3 minutes without signing up. The sandbox output is valuable directional signal ("your config is clearly over-provisioned"), but it is deliberately not a substitute for cluster install. We say this clearly in sandbox output and during the upgrade funnel.
 
-**Companion: the CLI.** `npx @Costify/cost ./my-chart` runs the same sandbox analysis locally:
+**Companion: the CLI.** `npx @sevro/cli ./my-chart` runs the same sandbox analysis locally:
 ```
-$ npx @Costify/cost ./my-chart
+$ npx @sevro/cli ./my-chart
 💰 Reserved capacity cost (upper bound): ~$5,280/month
    This is what your Helm config commits to AWS.
    Actual cost depends on usage, spot pricing, bin-packing.
@@ -357,18 +357,18 @@ $ npx @Costify/cost ./my-chart
 💡 Estimated savings with cluster-grounded analysis: $1,400-2,100/mo
    Precise number requires 30 days of Prometheus data.
 
-📎 Full report: https://Costify.dev/r/abc123
-👉 Install agent for exact numbers: Costify.dev/install
+📎 Full report: https://sevro.dev/r/abc123
+👉 Install agent for exact numbers: sevro.dev/install
 ```
 Zero install friction. Works in CI. Hacker News launch artifact.
 
 ### 5.7 The Habit Loop — Daily + Weekly Touchpoints
 
-PRs alone are too infrequent for retention. Platform engineers open 3–10 PRs per week — not enough to form habit. Costify earns durable retention by embedding three additional touchpoints:
+PRs alone are too infrequent for retention. Platform engineers open 3–10 PRs per week — not enough to form habit. Sevro earns durable retention by embedding three additional touchpoints:
 
 **Daily Slack digest (9 AM local):**
 ```
-☀️ Good morning @priya — Costify brief
+☀️ Good morning @priya — Sevro brief
 
 💰 Last 24h: $340 saved from 3 merged Apply Fixes
 🎯 Pending: 2 rightsizing PRs awaiting approval
@@ -386,16 +386,16 @@ View dashboard  |  Review pending  |  Mute
 - Team savings leaderboard
 
 **Slash commands (on-demand pull):**
-- `/Costify cost <service>` → instant cost breakdown
-- `/Costify spike` → recent cost anomalies
-- `/Costify top savings` → this week's biggest wins
-- `/Costify score` → current Costify Score
+- `/Sevro cost <service>` → instant cost breakdown
+- `/Sevro spike` → recent cost anomalies
+- `/Sevro top savings` → this week's biggest wins
+- `/Sevro score` → current Sevro Score
 
 **The math:** PR-only = 3–10 touchpoints/week. With daily digest + weekly report + slash commands = **15–25 touchpoints/week**. That's habit territory, not tool territory.
 
 ### 5.8 Fallback Value — When Apply Fix Isn't the Hero
 
-Not every customer has massive overprovisioning. Not every week produces a blockbuster Apply Fix. Costify must deliver concrete value even when its headline feature doesn't fire. Four fallback value layers, always on:
+Not every customer has massive overprovisioning. Not every week produces a blockbuster Apply Fix. Sevro must deliver concrete value even when its headline feature doesn't fire. Four fallback value layers, always on:
 
 **Fallback 1: Cost Spike → PR Mapping.** Even with zero rightsizing opportunity, the CFO feature — "which PR caused last week's spike?" — justifies the bill on its own. Platform teams use this every time the cloud bill surprises.
 
@@ -403,7 +403,7 @@ Not every customer has massive overprovisioning. Not every week produces a block
 
 **Fallback 3: Weekly Platform Report.** Cost trends, reliability signals (SLO burns, OOMKills, CrashLoopBackOff), fleet health metrics, capacity forecasts. Datadog-style ambient value a platform lead reads every Monday.
 
-**Fallback 4: Costify Score.** A single quarterly metric: *"Your platform is performing 73/100 against Costify's best-practice benchmark"* with sub-scores for cost efficiency, security hygiene, reliability. Executive artifact. Platform team shows this to the CTO quarterly, justifying continued investment.
+**Fallback 4: Sevro Score.** A single quarterly metric: *"Your platform is performing 73/100 against Sevro's best-practice benchmark"* with sub-scores for cost efficiency, security hygiene, reliability. Executive artifact. Platform team shows this to the CTO quarterly, justifying continued investment.
 
 Taken together: even a customer with zero Apply Fix merges this month gets Cost Spike insights, security findings, weekly reports, and their Score. The product doesn't collapse when the hero feature doesn't fire.
 
@@ -411,19 +411,19 @@ Taken together: even a customer with zero Apply Fix merges this month gets Cost 
 
 Platform engineers have been burned before. Every prior autopilot promised safety and eventually shipped a bad change that hit production. Trust is earned, not claimed. Three architectural trust commitments:
 
-**Commitment 1: Costify never merges PRs for you.** Every Costify-originated PR requires a human click to merge. Our Apply Fix generates the commit; we don't push it to main. This is absolute. No exception, no toggle.
+**Commitment 1: Sevro never merges PRs for you.** Every Sevro-originated PR requires a human click to merge. Our Apply Fix generates the commit; we don't push it to main. This is absolute. No exception, no toggle.
 
-**Commitment 2: Skeptic Mode is a first-class Year 1 option.** New customers can enable a deployment mode where Costify analyzes every PR, posts comments, and delivers Receipts — but never opens its own PRs and never suggests Apply Fix. Pure passive observer. Graduate to active mode when ready. Many enterprise customers will spend 60-90 days here before enabling Apply Fix. We make that easy.
+**Commitment 2: Skeptic Mode is a first-class Year 1 option.** New customers can enable a deployment mode where Sevro analyzes every PR, posts comments, and delivers Receipts — but never opens its own PRs and never suggests Apply Fix. Pure passive observer. Graduate to active mode when ready. Many enterprise customers will spend 60-90 days here before enabling Apply Fix. We make that easy.
 
-**Commitment 3: Public audit trail.** Every Costify action — every PR opened, every rollback proposed, every Receipt issued — is logged on a tamper-proof ledger accessible to the customer. When auditors ask "what has Costify done in our environment?", the answer is a signed, immutable log. Not a vague assurance.
+**Commitment 3: Public audit trail.** Every Sevro action — every PR opened, every rollback proposed, every Receipt issued — is logged on a tamper-proof ledger accessible to the customer. When auditors ask "what has Sevro done in our environment?", the answer is a signed, immutable log. Not a vague assurance.
 
-These three commitments are marketing artifacts and product guarantees. We say them on the landing page, in pitch decks, in every enterprise RFP. Platform teams install Costify *because* of them.
+These three commitments are marketing artifacts and product guarantees. We say them on the landing page, in pitch decks, in every enterprise RFP. Platform teams install Sevro *because* of them.
 
 ### 5.10 Data Sources — How We Actually Predict Cost and Recommend Fixes
 
 A common sharp question from technical investors and platform engineers: *"If you're reading Helm charts, how can you predict real cost or recommend safe rightsizing? Helm only tells you what was requested, not what's actually used."*
 
-The honest answer: **Helm alone is not enough.** To deliver the full Costify product, we integrate five data sources, each unlocking a different product capability. This section lays out what each source contributes and why the full stack is necessary.
+The honest answer: **Helm alone is not enough.** To deliver the full Sevro product, we integrate five data sources, each unlocking a different product capability. This section lays out what each source contributes and why the full stack is necessary.
 
 **The five data sources:**
 
@@ -468,7 +468,7 @@ The honest answer: **Helm alone is not enough.** To deliver the full Costify pro
 - **The agent is the product adoption moment.** Everything after the 10-minute Helm install is progressively better, but the agent is where the real product begins. Onboarding focuses on getting agents into customer clusters fast, because 30 days of Prometheus history is what makes High-band Confidence possible.
 - **No-Agent Mode (for security-sensitive customers)** replaces the in-cluster agent with external kubeconfig + Prometheus remote-read. Same data, different delivery. Signal richness ~60% of agent mode, latency ~3× higher, but still delivers the full product.
 
-**The honest summary:** Costify is not a Helm chart linter with a pretty UI. It is a full-stack cost and safety platform that integrates five specific data sources, each of which unlocks a different product capability. The sandbox and CLI exist as acquisition funnels that deliberately communicate their limitations while demonstrating product value. This discipline is what makes the Receipts trustworthy — we only promise savings we can measure against real bills, not estimates against public pricing.
+**The honest summary:** Sevro is not a Helm chart linter with a pretty UI. It is a full-stack cost and safety platform that integrates five specific data sources, each of which unlocks a different product capability. The sandbox and CLI exist as acquisition funnels that deliberately communicate their limitations while demonstrating product value. This discipline is what makes the Receipts trustworthy — we only promise savings we can measure against real bills, not estimates against public pricing.
 
 ---
 
@@ -483,7 +483,7 @@ The honest answer: **Helm alone is not enough.** To deliver the full Costify pro
 - **Two co-equal categories:** Cost optimization AND security-per-PR (15 cost detectors + 15 security detectors in Year 1)
 - **One GitOps tool integration:** ArgoCD (read-only state)
 
-**Why security is Year 1 co-equal, not a side feature:** The K8s security TAM (Wiz $12B, Snyk $7B, Aqua/Sysdig/Prisma unicorns) is larger than the K8s cost TAM (~$1B). Cost is the viral wedge that wins demos; security is the stickiness that wins renewals. Once Costify catches a privileged container or an unencrypted secret at PR time, removing it becomes a security incident waiting to happen. Cost detectors attract platform engineers; security detectors lock in the CISO. We ship both from Day 1.
+**Why security is Year 1 co-equal, not a side feature:** The K8s security TAM (Wiz $12B, Snyk $7B, Aqua/Sysdig/Prisma unicorns) is larger than the K8s cost TAM (~$1B). Cost is the viral wedge that wins demos; security is the stickiness that wins renewals. Once Sevro catches a privileged container or an unencrypted secret at PR time, removing it becomes a security incident waiting to happen. Cost detectors attract platform engineers; security detectors lock in the CISO. We ship both from Day 1.
 
 ### 6.2 Year 1 — Out of Scope
 - Non-Kubernetes infrastructure (Terraform for EC2, RDS, etc.) — **Year 2**
@@ -495,7 +495,7 @@ The honest answer: **Helm alone is not enough.** To deliver the full Costify pro
 
 ### 6.3 Why This Narrow Scope Wins
 
-Platform teams running Kubernetes on GitHub with ArgoCD represent ~6,000–8,000 companies globally. It's a small, tight, vocal community concentrated in KubeCon and CNCF Slack. If Costify is the best tool for those 8,000 companies, we own the wedge. Every earlier cost/security platform failed by trying to serve everyone from day one.
+Platform teams running Kubernetes on GitHub with ArgoCD represent ~6,000–8,000 companies globally. It's a small, tight, vocal community concentrated in KubeCon and CNCF Slack. If Sevro is the best tool for those 8,000 companies, we own the wedge. Every earlier cost/security platform failed by trying to serve everyone from day one.
 
 ---
 
@@ -514,7 +514,7 @@ Platform teams running Kubernetes on GitHub with ArgoCD represent ~6,000–8,000
 
 ### 7.2 Buyer, Champion, Validator
 
-- **Champion:** Platform Engineer or SRE — installs Costify on day one after seeing a KubeCon demo
+- **Champion:** Platform Engineer or SRE — installs Sevro on day one after seeing a KubeCon demo
 - **Buyer:** Head of Platform Engineering or VP Infrastructure — signs after verified receipts arrive
 - **Economic validator:** CFO or FinOps Lead — validates the ROI against actual cloud bills
 
@@ -538,12 +538,12 @@ No other DevOps category has such a concentrated distribution surface.
 
 Previous drafts of this document treated KubeCon + CNCF community as the primary GTM channel. That's a bet on one vector that runs three times per year with 6–9 month lead times. If KubeCon underperforms, we've lost 60% of our Year-1 pipeline. We must diversify.
 
-Costify distributes through six channels in parallel. No single channel accounts for more than 25% of signups by Month 12.
+Sevro distributes through six channels in parallel. No single channel accounts for more than 25% of signups by Month 12.
 
 ### 8.2 The Six Channels
 
 **Channel 1: Sandbox Mode + CLI (Week 1 launch)**
-The landing-page sandbox (paste a Helm chart, see Apply Fix in 3 minutes) is shareable via public URLs. The `npx @Costify/cost` CLI is viral because it's one command. Both work without login or install. Target: 5,000 sandbox uses per month by Month 6.
+The landing-page sandbox (paste a Helm chart, see Apply Fix in 3 minutes) is shareable via public URLs. The `npx @sevro/cli` CLI is viral because it's one command. Both work without login or install. Target: 5,000 sandbox uses per month by Month 6.
 
 **Channel 2: "Show HN" launch at Month 3**
 A single high-stakes Hacker News launch post once sandbox + CLI + 3 customer Receipts are live. Two engineers ready to answer every comment for 48 hours. One shot, one lifecycle moment. Historical dev-tool HN launches deliver 1,000–5,000 signups in 72 hours.
@@ -555,7 +555,7 @@ Polished Marketplace listing from Day 1. SEO-optimized for "Kubernetes cost PR,"
 Two deeply-researched posts per month targeting long-tail queries platform engineers actually search:
 - *"How to rightsize Kubernetes Deployments automatically"*
 - *"Verified Kubernetes savings: how we measure them"*
-- *"Kubecost vs Costify for PR-time cost analysis"*
+- *"Kubecost vs Sevro for PR-time cost analysis"*
 - *"Karpenter pod rightsizing in GitOps workflows"*
 
 Each post ranks for 3–5 queries. Target: 5K organic monthly signups by Month 12.
@@ -576,7 +576,7 @@ Still real, still important — but one of six. Budget $150K/year for conference
 
 Product moats decay in 12 months. Distribution moats compound. Four distribution moats to build in Year 1:
 
-**Moat 1: Costify Community (Discord / Slack).** Free-tier users get access to a platform-engineer community. Peer-to-peer help, weekly AMA with our engineers, shared optimization patterns. Once 1,000+ engineers are active, leaving Costify means leaving a community — stickier than any feature.
+**Moat 1: Sevro Community (Discord / Slack).** Free-tier users get access to a platform-engineer community. Peer-to-peer help, weekly AMA with our engineers, shared optimization patterns. Once 1,000+ engineers are active, leaving Sevro means leaving a community — stickier than any feature.
 
 **Moat 2: "State of Kubernetes Efficiency" annual report.** Anonymized data from our customer base. Industry benchmarks: *"typical cluster utilization in fintech: 22%."* Press-cited, analyst-cited. Becomes the reference document. Competitors can't create this — they don't have our cross-customer data.
 
@@ -586,15 +586,15 @@ Product moats decay in 12 months. Distribution moats compound. Four distribution
 
 Chart maintainers care about their score. SEO gold. Creates inbound traffic forever.
 
-**Moat 4: Operator + investor network endorsements.** A small number of well-known platform engineers + angels publicly using Costify. Kelsey Hightower-style endorsement beats any marketing campaign.
+**Moat 4: Operator + investor network endorsements.** A small number of well-known platform engineers + angels publicly using Sevro. Kelsey Hightower-style endorsement beats any marketing campaign.
 
 ### 8.4 Inside-The-Account Virality
 
-Once Costify is installed at a customer:
+Once Sevro is installed at a customer:
 
 1. **Author Impact on every PR** — platform team members compete for savings rank
 2. **Weekly "top savings" Slack digest** — drives team-level cost culture
-3. **Quarterly Costify Score** — platform metric reported to CTO
+3. **Quarterly Sevro Score** — platform metric reported to CTO
 4. **ArgoCD integration** — every Application manifest review flows through us
 5. **Auto-Rollback Guarantee** — once enabled, removal requires rebuilding trust-building processes elsewhere
 
@@ -605,18 +605,18 @@ Target: K-factor > 0.5 by Month 12 across the customer base.
 ## 9. Brand Identity
 
 ### 9.1 Name
-**Costify** — the GitOps-native cost and security layer for Kubernetes.
+**Sevro** — the GitOps-native cost and security layer for Kubernetes.
 
 ### 9.2 Name Rationale
 - **"Safe"** — cost-safe, security-safe, production-safe (Auto-Rollback)
 - **"Merge"** — the native GitHub action; the moment every K8s change gets decided
-- Works as noun, verb, brand: *"Did Costify approve this Helm PR?"* · *"Costify it."*
+- Works as noun, verb, brand: *"Did Sevro approve this Helm PR?"* · *"Sevro it."*
 
 ### 9.3 Tagline Options
 - **Primary:** "Every Helm PR, made safe."
 - **Platform-engineer-facing:** "The rightsizing PR your team actually merges."
 - **CFO-facing:** "Verified Kubernetes savings, signed."
-- **KubeCon booth:** "Kubecost tells you. Costify fixes it."
+- **KubeCon booth:** "Kubecost tells you. Sevro fixes it."
 
 ### 9.4 Brand Voice
 - **Technical, not corporate.** Senior-SRE voice, never sales deck.
@@ -654,34 +654,34 @@ Every savings claim must be verifiable against real cloud billing data within 30
 Suggestions are dashboards in disguise. We ship diffs, not advice. One click equals one commit.
 
 ### 10.5 Auto-Rollback Is the Safety Contract
-Every Costify-originated PR is monitored for 7 days and can be reverted automatically on breach. This is a product guarantee, not a best-effort feature.
+Every Sevro-originated PR is monitored for 7 days and can be reverted automatically on breach. This is a product guarantee, not a best-effort feature.
 
 ### 10.6 Honest Confidence Scores
 Every Apply Fix ships with a Confidence Score backed by real data (Prometheus history, blast radius, pattern match). We never fabricate confidence numbers. If we don't know, we say so.
 
 ### 10.7 Platform Team Love > Enterprise Polish (Year 1)
-Until we have 100 platform teams in love with Costify, everything ships with the platform engineer as the north star. Enterprise features (SSO, compliance) come later.
+Until we have 100 platform teams in love with Sevro, everything ships with the platform engineer as the north star. Enterprise features (SSO, compliance) come later.
 
 ---
 
 ## 11. The Domination Vision
 
-Costify is not a product. It's the **Kubernetes Control Plane for Cost and Safety**. Every Kubernetes change — Helm, Kustomize, operator CRDs, raw YAML, ArgoCD, Flux, Tekton, Crossplane — flows through Costify before it reaches a cluster. We are the gatekeeper between commit and cluster.
+Sevro is not a product. It's the **Kubernetes Control Plane for Cost and Safety**. Every Kubernetes change — Helm, Kustomize, operator CRDs, raw YAML, ArgoCD, Flux, Tekton, Crossplane — flows through Sevro before it reaches a cluster. We are the gatekeeper between commit and cluster.
 
-This is a distinct ambition from "a good remediation product." Good products get acquired by Datadog for $200M. **Platforms define industries.** HashiCorp defined Terraform. Datadog defined observability. MongoDB defined document DBs. Costify defines the **cost-and-security gate for Kubernetes**.
+This is a distinct ambition from "a good remediation product." Good products get acquired by Datadog for $200M. **Platforms define industries.** HashiCorp defined Terraform. Datadog defined observability. MongoDB defined document DBs. Sevro defines the **cost-and-security gate for Kubernetes**.
 
 ### 11.1 What Domination Actually Means
 
-When a platform engineer hears "Kubernetes cost" or "Kubernetes security" in 2028, they think **Costify first**. Not Kubecost. Not Cast AI. Not Wiz.
+When a platform engineer hears "Kubernetes cost" or "Kubernetes security" in 2028, they think **Sevro first**. Not Kubecost. Not Cast AI. Not Wiz.
 
 Concretely:
-- **40%+ of K8s GitOps orgs** run Costify by Year 3 (>12,000 companies)
-- **Every major CNCF project** either integrates with Costify or is recommended to
-- **Every major cloud provider** (AWS, GCP, Azure) has a first-class Costify integration
-- **Every K8s security vendor** (Wiz, Snyk, Aqua, Sysdig) has a Costify integration to ship their findings as Apply Fix PRs
-- **"Costify it"** enters the K8s engineering vocabulary like "Google it" or "Slack me"
-- **Costify Score** becomes a standard engineering metric CTOs ask about
-- **Annual Costify Summit** is a must-attend K8s FinOps + Safety event (Year 3+)
+- **40%+ of K8s GitOps orgs** run Sevro by Year 3 (>12,000 companies)
+- **Every major CNCF project** either integrates with Sevro or is recommended to
+- **Every major cloud provider** (AWS, GCP, Azure) has a first-class Sevro integration
+- **Every K8s security vendor** (Wiz, Snyk, Aqua, Sysdig) has a Sevro integration to ship their findings as Apply Fix PRs
+- **"Sevro it"** enters the K8s engineering vocabulary like "Google it" or "Slack me"
+- **Sevro Score** becomes a standard engineering metric CTOs ask about
+- **Annual Sevro Summit** is a must-attend K8s FinOps + Safety event (Year 3+)
 
 ### 11.2 The Three-Year Expansion to Domination
 
@@ -689,20 +689,20 @@ Concretely:
 AWS EKS, GitHub, Helm + Kustomize, ArgoCD. Cost + Security co-equal. 300 paying teams, $3M ARR. First receipts. First Auto-Rollback. First partnerships signed (Kubecost / Datadog / PagerDuty integrations).
 
 **Year 2: Expansion — Multi-Cloud K8s + Adjacent Cloud**
-GKE, AKS, GitLab, Flux CD. Terraform for K8s-adjacent AWS resources. Platform API opens to partners. Detector SDK public. 2,500 paying teams, $22M ARR. SOC 2 Type 2. EU region. Every major K8s conference has a Costify presence.
+GKE, AKS, GitLab, Flux CD. Terraform for K8s-adjacent AWS resources. Platform API opens to partners. Detector SDK public. 2,500 paying teams, $22M ARR. SOC 2 Type 2. EU region. Every major K8s conference has a Sevro presence.
 
 **Year 3: Platform — The Control Plane**
-Full non-K8s cloud support (Terraform parity with Infracost). AI/LLM infrastructure cost analysis. Operator-managed workload support (Prometheus, Strimzi, cert-manager CRDs). Apply Fix Marketplace live. Public Detector SDK with 100+ community detectors. 5,500 paying teams, $95M ARR. First "Costify Summit" runs with 1,000+ attendees.
+Full non-K8s cloud support (Terraform parity with Infracost). AI/LLM infrastructure cost analysis. Operator-managed workload support (Prometheus, Strimzi, cert-manager CRDs). Apply Fix Marketplace live. Public Detector SDK with 100+ community detectors. 5,500 paying teams, $95M ARR. First "Sevro Summit" runs with 1,000+ attendees.
 
 **Year 4-5: Dominance — The Category**
-Costify is the default K8s PR gate. Every K8s security vendor integrates. Analyst reports (Gartner Magic Quadrant, Forrester Wave) place Costify as leader in K8s FinOps + Safety. 20K+ paying customers, $500M+ ARR. Acquisition offers from Datadog, GitHub/Microsoft, Palo Alto, HashiCorp/IBM — which we decline because we're building to last, not to flip.
+Sevro is the default K8s PR gate. Every K8s security vendor integrates. Analyst reports (Gartner Magic Quadrant, Forrester Wave) place Sevro as leader in K8s FinOps + Safety. 20K+ paying customers, $500M+ ARR. Acquisition offers from Datadog, GitHub/Microsoft, Palo Alto, HashiCorp/IBM — which we decline because we're building to last, not to flip.
 
 ### 11.3 The End State (Year 5)
 
-- **Every K8s PR at every modern engineering org gets a Costify review** — the way every code PR today gets a Copilot review
-- Costify is **the trusted autopilot** — platform teams enable auto-merge on non-critical workloads because our Auto-Rollback track record (five years of receipts) has earned it
-- Costify is **cited by industry** — "according to Costify's State of Kubernetes Efficiency report…" is how press covers K8s cost/security
-- Costify is **on every K8s engineer's resume** — because platform teams who saved $1M+/year using Costify put that on their resumes, and that's how careers advance
+- **Every K8s PR at every modern engineering org gets a Sevro review** — the way every code PR today gets a Copilot review
+- Sevro is **the trusted autopilot** — platform teams enable auto-merge on non-critical workloads because our Auto-Rollback track record (five years of receipts) has earned it
+- Sevro is **cited by industry** — "according to Sevro's State of Kubernetes Efficiency report…" is how press covers K8s cost/security
+- Sevro is **on every K8s engineer's resume** — because platform teams who saved $1M+/year using Sevro put that on their resumes, and that's how careers advance
 
 This is the difference between "we built a product" and "we defined a category." We are building to define.
 
@@ -710,7 +710,7 @@ This is the difference between "we built a product" and "we defined a category."
 
 ## 12. Network Effects & Data Moat
 
-Single-player products get copied. Network-effect products become industry standard. Costify's moat isn't features — it's the **compounding value of cross-customer data** that no competitor can replicate without our customer base.
+Single-player products get copied. Network-effect products become industry standard. Sevro's moat isn't features — it's the **compounding value of cross-customer data** that no competitor can replicate without our customer base.
 
 ### 12.1 Four Network Effects That Compound Monthly
 
@@ -724,15 +724,15 @@ When customer A's platform team fixes a Prometheus overprovisioning pattern, the
 Platform teams opt into seeing how their cluster efficiency compares to peers — by industry, by company size, by K8s spend. *"Your fintech org is in the top 20% of K8s efficiency."* This is a CTO / VP-Engineering artifact. Status drives retention and referrals.
 
 **4. Shared Detector Library.**
-Customers, security researchers, and FinOps consultants contribute detectors through the Detector SDK (Year 2). A detector built at Acme Corp benefits every Costify customer the next day. This creates **a community-maintained detection library** that scales beyond our engineering team.
+Customers, security researchers, and FinOps consultants contribute detectors through the Detector SDK (Year 2). A detector built at Acme Corp benefits every Sevro customer the next day. This creates **a community-maintained detection library** that scales beyond our engineering team.
 
 ### 12.2 The Data Moat — Year-by-Year
 
-**Year 1:** Every merged Costify PR goes into anonymized pattern learning. Confidence Score improves with every outcome. Cost attribution accuracy improves with every Receipt.
+**Year 1:** Every merged Sevro PR goes into anonymized pattern learning. Confidence Score improves with every outcome. Cost attribution accuracy improves with every Receipt.
 
 **Year 2:** First "State of Kubernetes Efficiency" annual report. Anonymized benchmarks from 2,500+ clusters. Press-cited. Analyst-cited. Becomes *the* reference for "typical K8s utilization is 22% in fintech."
 
-**Year 3:** Chart-specific benchmarks public. `helm show Costify bitnami/postgresql` returns efficiency stats and recommended optimizations drawn from our customer base. **Chart maintainers start caring about their Costify efficiency score.** This becomes SEO gold and moat in one.
+**Year 3:** Chart-specific benchmarks public. `helm show Sevro bitnami/postgresql` returns efficiency stats and recommended optimizations drawn from our customer base. **Chart maintainers start caring about their Sevro efficiency score.** This becomes SEO gold and moat in one.
 
 **Year 4-5:** Cross-customer pattern library becomes **the training set for industry-standard LLM-based K8s tooling**. Kubernetes maintainers consult our data for defaults. Cloud providers consult our data for sizing recommendations.
 
@@ -756,7 +756,7 @@ Customers contribute to the network because the value is mutual, not because the
 
 ## 13. Community Play & CNCF Strategy
 
-Distribution channels are how you reach customers. **Community is how you become identity.** Costify is not a vendor selling into the Kubernetes community — Costify is *of* the Kubernetes community.
+Distribution channels are how you reach customers. **Community is how you become identity.** Sevro is not a vendor selling into the Kubernetes community — Sevro is *of* the Kubernetes community.
 
 ### 13.1 Why Community Matters More Than Marketing
 
@@ -773,21 +773,21 @@ Our path:
 
 **Year 1:**
 - **CNCF Silver membership** ($20K/year) — brand credibility, access to maintainer channels
-- **Open-source the in-cluster agent** (`github.com/Costify/agent`) under Apache 2.0 — enterprise audit requirement + community signal
+- **Open-source the in-cluster agent** (`github.com/sevro/agent`) under Apache 2.0 — enterprise audit requirement + community signal
 - **Sponsor Helm, Kustomize, and ArgoCD projects** — $10K/year per project, explicit funding in project docs
-- **Core team contribution** — at least one Costify engineer maintaining a non-trivial issue in Helm or Kustomize by Month 12
+- **Core team contribution** — at least one Sevro engineer maintaining a non-trivial issue in Helm or Kustomize by Month 12
 
 **Year 2:**
 - **CNCF Gold membership** ($50K/year) — more visibility, more access
-- **Submit Helm parser to CNCF Sandbox** as `Costify-helm-parser` — huge credibility signal
-- **Join TAG-Runtime or TAG-Observability** — Costify engineer on a CNCF Technical Advisory Group
+- **Submit Helm parser to CNCF Sandbox** as `Sevro-helm-parser` — huge credibility signal
+- **Join TAG-Runtime or TAG-Observability** — Sevro engineer on a CNCF Technical Advisory Group
 - **KubeCon EU keynote submission** — not a sponsored talk; a keynote
 
 **Year 3:**
-- **CNCF Incubation status** for an open-source Costify component
+- **CNCF Incubation status** for an open-source Sevro component
 - **CNCF Platinum membership** ($150K/year) — board-level influence
-- **Host annual Costify Summit** — own event for K8s FinOps + Safety community, 1,000+ attendees
-- **Recognized Costify contributors** on at least 3 CNCF-graduated projects
+- **Host annual Sevro Summit** — own event for K8s FinOps + Safety community, 1,000+ attendees
+- **Recognized Sevro contributors** on at least 3 CNCF-graduated projects
 
 ### 13.3 Content & Distribution Engine (Full Scale)
 
@@ -801,34 +801,34 @@ Current docs describe one Developer Advocate hired Month 9. For domination, this
 | Partner Engineer | 18 | Integrations with Kubecost, Datadog, Wiz, PagerDuty |
 
 **Content targets by Month 18:**
-- Costify YouTube channel: 10K+ subscribers, weekly videos
-- Costify podcast: bi-weekly interviews with platform engineers
-- Costify newsletter: 50K+ subscribers (target KubeWeekly scale by Year 3)
-- Costify Discord: 5K+ active members
+- Sevro YouTube channel: 10K+ subscribers, weekly videos
+- Sevro podcast: bi-weekly interviews with platform engineers
+- Sevro newsletter: 50K+ subscribers (target KubeWeekly scale by Year 3)
+- Sevro Discord: 5K+ active members
 - 50+ speaking slots per year at K8s / FinOps / platform events by Month 24
 
 **What this costs:** ~$800K/year by Month 18 in DevRel salaries + event budget. This is a Series A line item, not a Seed line item. Budget accordingly.
 
-### 13.4 The Costify Summit (Year 3)
+### 13.4 The Sevro Summit (Year 3)
 
 Own event for the K8s FinOps + Safety community. Format:
 - 2-day conference, 1,000–2,000 attendees
-- Keynotes from Costify, customer platform leads, CNCF project maintainers
-- Hands-on workshops (Costify detector SDK, Apply Fix design patterns)
+- Keynotes from Sevro, customer platform leads, CNCF project maintainers
+- Hands-on workshops (Sevro detector SDK, Apply Fix design patterns)
 - "State of Kubernetes Efficiency" report release
 - Industry awards (best platform team, best open-source detector, best receipt story)
 
-Why this matters: **owning the event means owning the category conversation.** Re:Invent made AWS the default. HashiConf made HashiCorp the default for infra. The Costify Summit does the same for K8s cost + safety.
+Why this matters: **owning the event means owning the category conversation.** Re:Invent made AWS the default. HashiConf made HashiCorp the default for infra. The Sevro Summit does the same for K8s cost + safety.
 
 ### 13.5 Partnership Program (Year 2 Launch)
 
-Strategic integrations that make Costify the surface other tools plug into:
+Strategic integrations that make Sevro the surface other tools plug into:
 
 | Partner Category | Examples | Integration |
 |------------------|----------|-------------|
 | **Observability** | Datadog, Grafana, New Relic, Dynatrace | Import their SLO breaches as Auto-Rollback signals |
-| **Security** | Wiz, Snyk, Aqua, Sysdig, Kubescape | Import their findings as Costify Apply Fix PRs |
-| **CI/CD** | CircleCI, GitHub Actions, GitLab CI | Costify as a required check before merge |
+| **Security** | Wiz, Snyk, Aqua, Sysdig, Kubescape | Import their findings as Sevro Apply Fix PRs |
+| **CI/CD** | CircleCI, GitHub Actions, GitLab CI | Sevro as a required check before merge |
 | **Incident** | PagerDuty, Opsgenie, FireHydrant | Auto-Rollback routes through their escalation |
 | **Cloud** | AWS Marketplace, Google Cloud Marketplace, Azure Marketplace | Native marketplace listings |
 | **FinOps platforms** | Apptio (Kubecost's parent!), Harness, nOps | Data exchange where complementary |
@@ -837,16 +837,16 @@ Partner program includes:
 - **Technical integration support** from our Partner Engineer
 - **Joint customer case studies**
 - **Co-marketing** at KubeCon, webinars, blog posts
-- **Marketplace listing** with Costify as the K8s PR gate recommendation
+- **Marketplace listing** with Sevro as the K8s PR gate recommendation
 
-Each partnership either makes Costify indispensable (security findings get fixed automatically) or commoditizes the competition (Kubecost integrations flow through Costify, not the reverse).
+Each partnership either makes Sevro indispensable (security findings get fixed automatically) or commoditizes the competition (Kubecost integrations flow through Sevro, not the reverse).
 
 ---
 
 ## 14. What Success Looks Like
 
 ### 14.1 Product Success (Year 1)
-- Every Helm and Kustomize PR in customer repos carries a Costify comment
+- Every Helm and Kustomize PR in customer repos carries a Sevro comment
 - Apply Fix merge rate > 60%
 - Customer K8s bill trends down 30–45% in the first 6 months
 - Auto-Rollback Guard false-positive rate < 5%
@@ -863,11 +863,11 @@ Each partnership either makes Costify indispensable (security findings get fixed
 - First KubeCon talk accepted
 
 ### 14.3 Cultural Success
-- Platform engineers put "Costify saved $200K" on their resumes
+- Platform engineers put "Sevro saved $200K" on their resumes
 - KubeCon talk accepted for Year 2 summit
-- CTOs check the Costify Score in weekly metrics reviews
-- "Costify it" enters K8s engineering vocabulary
-- At least 1 Costify engineer is a recognized contributor to Helm, Kustomize, or ArgoCD
+- CTOs check the Sevro Score in weekly metrics reviews
+- "Sevro it" enters K8s engineering vocabulary
+- At least 1 Sevro engineer is a recognized contributor to Helm, Kustomize, or ArgoCD
 
 ### 14.4 Domination Trajectory (Year 3)
 - 5,500+ paying customers (25% penetration of target K8s-GitOps orgs)
@@ -875,8 +875,8 @@ Each partnership either makes Costify indispensable (security findings get fixed
 - Apply Fix Marketplace live with 50+ community-contributed patterns
 - Detector SDK public with 100+ community-contributed detectors
 - Partnership program active with Wiz, Datadog, PagerDuty, Kubecost, AWS, Google
-- First Costify Summit runs successfully
-- Analyst reports (Gartner, Forrester) place Costify as K8s FinOps + Safety leader
+- First Sevro Summit runs successfully
+- Analyst reports (Gartner, Forrester) place Sevro as K8s FinOps + Safety leader
 
 ---
 
@@ -908,7 +908,7 @@ Real risks that need engagement in the first 6 months:
 
 ## 16. The One-Paragraph Summary
 
-Kubernetes is where modern cloud waste hides, and Kubernetes changes happen through pull requests — yet no working tool exists at the PR layer to analyze cost AND security with a safe remediation path. Kubecost attempted a cost-prediction Action in 2023 and abandoned it at v0.1.1 with 31 stars. Costify is the first Kubernetes PR remediation platform that actually works: it sits inside every Helm, Kustomize, and ArgoCD Application PR and ships a one-click Apply Fix (cost and security, co-equal) backed by 30 days of real Prometheus data and a transparent Confidence Score. We monitor every merged change with an Auto-Rollback Guarantee, and we prove the savings against the real cloud bill with a cryptographically signed receipt. We don't stop at a product — we're building the **Kubernetes Control Plane for Cost and Safety**: a platform with open APIs, a detector SDK, an Apply Fix Marketplace, a partner program with every major K8s security and observability vendor, and an anonymized cross-customer data moat published as industry-standard benchmarks. Year 1 we own Kubernetes PR remediation. Year 2 we become the integration surface. Year 3 we run the Costify Summit as the must-attend K8s FinOps + Safety event. Year 5 we're the Datadog of K8s cost-and-safety — $500M+ ARR, analyst-cited as category leader, impossible to displace. Not "a good remediation product." The industry standard.
+Kubernetes is where modern cloud waste hides, and Kubernetes changes happen through pull requests — yet no working tool exists at the PR layer to analyze cost AND security with a safe remediation path. Kubecost attempted a cost-prediction Action in 2023 and abandoned it at v0.1.1 with 31 stars. Sevro is the first Kubernetes PR remediation platform that actually works: it sits inside every Helm, Kustomize, and ArgoCD Application PR and ships a one-click Apply Fix (cost and security, co-equal) backed by 30 days of real Prometheus data and a transparent Confidence Score. We monitor every merged change with an Auto-Rollback Guarantee, and we prove the savings against the real cloud bill with a cryptographically signed receipt. We don't stop at a product — we're building the **Kubernetes Control Plane for Cost and Safety**: a platform with open APIs, a detector SDK, an Apply Fix Marketplace, a partner program with every major K8s security and observability vendor, and an anonymized cross-customer data moat published as industry-standard benchmarks. Year 1 we own Kubernetes PR remediation. Year 2 we become the integration surface. Year 3 we run the Sevro Summit as the must-attend K8s FinOps + Safety event. Year 5 we're the Datadog of K8s cost-and-safety — $500M+ ARR, analyst-cited as category leader, impossible to displace. Not "a good remediation product." The industry standard.
 
 ---
 

@@ -42,8 +42,8 @@ jobs:
           file: ./Dockerfile.${{ matrix.binary }}
           push: true
           tags: |
-            ${{ secrets.ECR_REGISTRY }}/costify-${{ matrix.binary }}:${{ github.ref_name }}
-            ${{ secrets.ECR_REGISTRY }}/costify-${{ matrix.binary }}:latest
+            ${{ secrets.ECR_REGISTRY }}/sevro-${{ matrix.binary }}:${{ github.ref_name }}
+            ${{ secrets.ECR_REGISTRY }}/sevro-${{ matrix.binary }}:latest
           build-args: |
             VERSION=${{ github.ref_name }}
           provenance: false
@@ -53,12 +53,12 @@ jobs:
           COSIGN_EXPERIMENTAL: "true"
         run: |
           cosign sign --yes \
-            ${{ secrets.ECR_REGISTRY }}/costify-${{ matrix.binary }}@${{ steps.build.outputs.digest }}
+            ${{ secrets.ECR_REGISTRY }}/sevro-${{ matrix.binary }}@${{ steps.build.outputs.digest }}
 
       - name: Trivy scan released image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ secrets.ECR_REGISTRY }}/costify-${{ matrix.binary }}:${{ github.ref_name }}
+          image-ref: ${{ secrets.ECR_REGISTRY }}/sevro-${{ matrix.binary }}:${{ github.ref_name }}
           severity: HIGH,CRITICAL
           exit-code: 1
           ignore-unfixed: true

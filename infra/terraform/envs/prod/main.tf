@@ -14,7 +14,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "costify"
+      Project     = "sevro"
       Environment = "prod"
       ManagedBy   = "terraform"
     }

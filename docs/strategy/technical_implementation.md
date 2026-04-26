@@ -1,4 +1,4 @@
-# Costify — Technical Implementation
+# Sevro — Technical Implementation
 
 > **Kubernetes-first, modular-monolith, boring-tech. This is how we actually build it.**
 
@@ -26,7 +26,7 @@
 >
 > **Two algorithmic additions:**
 >
-> - **`internal/validator/`** (Phase 4, ~1 wk) — pipeline stage between candidate generation (`internal/cost`) and PR rendering (`internal/prwriter`). Validators: `pdb`, `resourcequota`, `limitrange`, `hpabounds`, `dependency`, `oom-recent`. Rejects ~5–10% of impossible recommendations with logged reasons. Metric: `costify_validator_rejects_total{reason}`.
+> - **`internal/validator/`** (Phase 4, ~1 wk) — pipeline stage between candidate generation (`internal/cost`) and PR rendering (`internal/prwriter`). Validators: `pdb`, `resourcequota`, `limitrange`, `hpabounds`, `dependency`, `oom-recent`. Rejects ~5–10% of impossible recommendations with logged reasons. Metric: `sevro_validator_rejects_total{reason}`.
 > - **`internal/workload/classifier/`** (Phase 7, ~3 wk) — partitions workloads into `web-steady` / `worker-bursty` / `batch` / `stateful-db` / `ml-inference` / `unknown`. Per-class strategies in `internal/cost/strategy/`. Backfill via Temporal workflow.
 >
 > **Universal agent positioning.** Even though Year 1 only ships EKS / AKS / Hetzner billing connectors, the agent itself runs on any CNCF-conformant K8s from Day 1. The CLI runs against any K8s. Marketing positioning at Show HN (Month 3) is "any K8s, anywhere" — Receipts are explicitly Tier-1 cloud-only at launch and that's stated honestly.
@@ -39,18 +39,18 @@
 >
 > 2. **`internal/receipts/{signing,tlog,auditor}`** — three-surface verification:
 >    - Public verification page with browser WebCrypto verification (no server roundtrip)
->    - `@costify/verify` CLI (Apache 2.0, npm) with offline operation for air-gapped enterprise
+>    - `@sevro/verify` CLI (Apache 2.0, npm) with offline operation for air-gapped enterprise
 >    - Auditor mode: third-party verification token lets external auditors query the customer's CUR independently — we never aggregate customer billing data
 >    - **AWS KMS asymmetric `SIGN_VERIFY` keys** (no extraction, sign-inside-HSM)
 >    - **Sigstore Rekor-style transparency log** — must ship with the first Receipt because Merkle history can't be retrofitted
->    - Stable receipt YAML schema versioned at `methodology.costify.dev/<methodology>/<version>`
+>    - Stable receipt YAML schema versioned at `methodology.sevro.dev/<methodology>/<version>`
 >    - Phase 6 for verification page + CLI + tlog + KMS; Phase 9 for auditor mode.
 >
 > 3. **`internal/metrics/{activation,retention,churn,expansion,health,leading}`** — six-metric health framework computed nightly into `metrics.tenant_daily` (TimescaleDB hypertable). Activation Rate (≥60% Y1) · Time to First Receipt (≤35 days p50) · Gross Retention (≥95%) · NRR (≥120%) · per-tenant Health Score (0–100) · Leading Churn Indicator. Customer-visible health score in dashboard creates positive feedback loops. Phase 5 lights up activation; Phase 9 ships the full framework.
 >
-> 4. **`internal/api/` + `cmd/api/v1/...` + webhooks** — REST API (OpenAPI 3.1, oapi-codegen, `/v1/` forever stable), webhooks (`receipt.issued`, `apply_fix.merged`, `cost_spike.detected`, `rollback.opened`, `validator.rejected`, `health_score.changed` — HMAC-SHA256, 30-day replay buffer), and `@costify/sdk-typescript` (npm, MIT). Three-tier access (Public / Partner / Internal) with different rate limits + SLAs. **GraphQL deferred until customers ask** — don't pre-build query languages for use cases nobody has demanded. **Go SDK deferred to Year 2.** Webhooks Phase 6 (cheap, high-value); REST + TS SDK Phase 9.
+> 4. **`internal/api/` + `cmd/api/v1/...` + webhooks** — REST API (OpenAPI 3.1, oapi-codegen, `/v1/` forever stable), webhooks (`receipt.issued`, `apply_fix.merged`, `cost_spike.detected`, `rollback.opened`, `validator.rejected`, `health_score.changed` — HMAC-SHA256, 30-day replay buffer), and `@sevro/sdk-typescript` (npm, MIT). Three-tier access (Public / Partner / Internal) with different rate limits + SLAs. **GraphQL deferred until customers ask** — don't pre-build query languages for use cases nobody has demanded. **Go SDK deferred to Year 2.** Webhooks Phase 6 (cheap, high-value); REST + TS SDK Phase 9.
 >
-> 5. **Cost visibility — Costify-on-Costify + cost-attribution dashboard** — install our own product against our own EKS from Day 1 of Phase 5; Terraform `default_tags` from Phase 1 (`Project=costify Environment={dev,staging,prod} Tenant={shared|tenant-id}`); CI fails if any TF resource is missing required tags; Athena workgroup `costify-cost-attribution` powers daily Grafana panels (`cost_per_tenant`, `cost_per_workflow`, `cost_per_apply_fix`, `cost_per_llm_call{model}`, `cost_per_receipt`); monthly Cost Council; LLM cost guardrails (per-tenant budget, prompt cache-hit-rate tracking, weekly top-10 expensive prompt review); idle-resource auto-shutdown (staging scales to zero overnight + weekends). **Public quarterly transparency report from Month 6.**
+> 5. **Cost visibility — Sevro-on-Sevro + cost-attribution dashboard** — install our own product against our own EKS from Day 1 of Phase 5; Terraform `default_tags` from Phase 1 (`Project=sevro Environment={dev,staging,prod} Tenant={shared|tenant-id}`); CI fails if any TF resource is missing required tags; Athena workgroup `sevro-cli-attribution` powers daily Grafana panels (`cost_per_tenant`, `cost_per_workflow`, `cost_per_apply_fix`, `cost_per_llm_call{model}`, `cost_per_receipt`); monthly Cost Council; LLM cost guardrails (per-tenant budget, prompt cache-hit-rate tracking, weekly top-10 expensive prompt review); idle-resource auto-shutdown (staging scales to zero overnight + weekends). **Public quarterly transparency report from Month 6.**
 >
 > Total operational-backbone effort: **~21 engineer-weeks** distributed across Phases 1, 5, 6, 9.
 >
@@ -62,9 +62,9 @@
 >    - L1 owner-reference walker (Phase 4, 2 days) — 100% accurate operator-ownership detection
 >    - L2 generic CRD-aware advice (Phase 7, 1 wk) — copy-pasteable YAML patch for any operator with a CRD OpenAPI schema
 >    - L3 top-5 presets (Phase 7, 1 wk) — Prometheus Operator, kube-prometheus-stack, cert-manager, Strimzi, Istio
->    - L4 community-contributed presets (Phase 9, 3 days framework) — `costify/operator-presets` Apache-2.0 repo
+>    - L4 community-contributed presets (Phase 9, 3 days framework) — `sevro/operator-presets` Apache-2.0 repo
 >
->    **Effective Y1 workload coverage rises from ~60% → ~98%** for ~3 weeks of work. Coverage SLO `costify_workload_coverage_ratio` per tenant; alert at <90%.
+>    **Effective Y1 workload coverage rises from ~60% → ~98%** for ~3 weeks of work. Coverage SLO `sevro_workload_coverage_ratio` per tenant; alert at <90%.
 >
 > **Eight production-readiness gaps closed** (added 2026-04-26 review, total ~19.5 engineer-weeks distributed across Phases 1, 4, 5, 6, 8):
 >
@@ -106,11 +106,11 @@ Seven principles that govern every decision:
 
 1. **Boring technology wins.** PostgreSQL, Redis, Go, Temporal, AWS. No exotic data stores, no bleeding-edge frameworks, no language zoo. You can hire for these at 3am on a Saturday.
 
-2. **One deployable in Year 1.** A modular monolith (`Costify-backend`) instead of nine microservices. Extract services only when a specific scaling or ownership boundary demands it — not before.
+2. **One deployable in Year 1.** A modular monolith (`Sevro-backend`) instead of nine microservices. Extract services only when a specific scaling or ownership boundary demands it — not before.
 
 3. **Pick one language.** Go for the whole backend including the LLM orchestration layer. One dependency system, one test framework, one ops playbook. The Anthropic Go SDK is production-grade.
 
-4. **Read heavy, write careful.** Unlimited read on customer clusters via ServiceAccount. Writes only through PRs the customer approves and merges. Costify never mutates a cluster directly, never merges a PR automatically (human click required — always, even in Enterprise).
+4. **Read heavy, write careful.** Unlimited read on customer clusters via ServiceAccount. Writes only through PRs the customer approves and merges. Sevro never mutates a cluster directly, never merges a PR automatically (human click required — always, even in Enterprise).
 
 5. **Determinism where we can, LLMs where we must.** Helm parsing, cost arithmetic, Prometheus query construction, policy evaluation, validation — all deterministic Go code. LLMs generate the fix diff and explain the reasoning. Never trust an LLM with arithmetic.
 
@@ -125,7 +125,7 @@ Seven principles that govern every decision:
 ### 2.1 The Shortlist
 
 ```
-Application:      Go 1.23+ (modular monolith: Costify-backend)
+Application:      Go 1.23+ (modular monolith: Sevro-backend)
 Orchestration:    Temporal (workflows, retries, timeouts, async jobs)
 Primary DB:       PostgreSQL 16 + TimescaleDB extension
 Cache/Pub-Sub:    Redis 7
@@ -180,21 +180,21 @@ Python only enters the stack in Year 2 if we train custom classifiers, and even 
 │                                                                    │
 │   Customer EKS Cluster                    Customer GitHub Org      │
 │   ┌──────────────────┐                   ┌──────────────────┐     │
-│   │ Costify-agent  │ ServiceAccount    │  GitHub App      │     │
+│   │ Sevro-agent  │ ServiceAccount    │  GitHub App      │     │
 │   │ (Go, ~50m CPU)   │◄────read-only─────┤  (webhooks)      │     │
 │   └────────┬─────────┘                   └────────┬─────────┘     │
 └────────────┼──────────────────────────────────────┼───────────────┘
              │ mTLS egress                          │ HTTPS webhook
              ▼                                      ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│                     Costify SaaS (our EKS, us-east-1)            │
+│                     Sevro SaaS (our EKS, us-east-1)            │
 │                                                                    │
 │   ┌────────────────────────────────────────────────────────────┐  │
 │   │                      API Gateway (ALB + WAF)               │  │
 │   └────────────────────────┬───────────────────────────────────┘  │
 │                            │                                       │
 │   ┌────────────────────────▼───────────────────────────────────┐  │
-│   │            Costify-backend (Go, modular monolith)        │  │
+│   │            Sevro-backend (Go, modular monolith)        │  │
 │   │                                                            │  │
 │   │   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │  │
 │   │   │ingestion │  │  parser  │  │  agent   │  │   cost   │  │  │
@@ -223,7 +223,7 @@ Python only enters the stack in Year 2 if we train custom classifiers, and even 
 ### 3.2 Modular Monolith Package Layout
 
 ```
-Costify-backend/
+Sevro-backend/
 ├── cmd/
 │   ├── api/           # HTTP + webhook entry point
 │   ├── worker/        # Temporal worker (same binary, different mode)
@@ -268,7 +268,7 @@ A single opinionated Go binary, deployed via Helm chart:
 
 ```yaml
 # values.yaml (defaults)
-Costify:
+Sevro:
   token: "one-time-bootstrap-token"  # exchanged for persistent token on first contact
   mode: active                        # or "skeptic" for passive-observer deployment
   resources:
@@ -281,7 +281,7 @@ Costify:
     allowPrivilegeEscalation: false
     capabilities: { drop: [ALL] }
   egress:
-    endpoint: "https://ingest.Costify.dev"
+    endpoint: "https://ingest.sevro.dev"
     proxy: ""  # customer may route through corporate egress proxy
 ```
 
@@ -295,11 +295,11 @@ Costify:
 - No write access to the cluster. RBAC is `ClusterRole` with only `get`, `list`, `watch` verbs.
 - No local state beyond ephemeral buffers
 - No hostPath, hostNetwork, or privileged containers
-- No direct internet egress — all traffic flows to `ingest.Costify.dev` or a customer-controlled egress proxy
+- No direct internet egress — all traffic flows to `ingest.sevro.dev` or a customer-controlled egress proxy
 
-**Agent is open-source (Apache 2.0)** at `github.com/Costify/agent`. Customers audit source, verify signed binaries (Sigstore), review SBOMs. This is the only repo we make public in Year 1.
+**Agent is open-source (Apache 2.0)** at `github.com/sevro/agent`. Customers audit source, verify signed binaries (Sigstore), review SBOMs. This is the only repo we make public in Year 1.
 
-**No-Agent Mode** (enterprise security unlock): customers who cannot install the agent provide kubeconfig + Prometheus remote-read endpoint. Costify runs a polling worker on our side. Same functionality, ~60% data richness, slightly higher latency.
+**No-Agent Mode** (enterprise security unlock): customers who cannot install the agent provide kubeconfig + Prometheus remote-read endpoint. Sevro runs a polling worker on our side. Same functionality, ~60% data richness, slightly higher latency.
 
 ---
 
@@ -400,7 +400,7 @@ CREATE TABLE pull_requests (
     repo TEXT NOT NULL,
     number INT NOT NULL,
     author TEXT,
-    Costify_role TEXT CHECK (Costify_role IN ('observer','apply_fix','rollback','savings_proposal')),
+    Sevro_role TEXT CHECK (Sevro_role IN ('observer','apply_fix','rollback','savings_proposal')),
     status TEXT NOT NULL,
     confidence_band TEXT CHECK (confidence_band IN ('low','medium','high')),
     confidence_raw REAL,
@@ -475,10 +475,10 @@ Every table has `tenant_id`. Every query runs under a Postgres role scoped to a 
 ALTER TABLE workloads ENABLE ROW LEVEL SECURITY;
 CREATE POLICY workload_tenant_isolation ON workloads
     FOR ALL
-    USING (tenant_id = current_setting('Costify.tenant_id')::uuid);
+    USING (tenant_id = current_setting('Sevro.tenant_id')::uuid);
 ```
 
-Before every query, the application sets `SET LOCAL Costify.tenant_id = '<uuid>'`. A bug that forgets to set it = zero rows returned, not another customer's data.
+Before every query, the application sets `SET LOCAL Sevro.tenant_id = '<uuid>'`. A bug that forgets to set it = zero rows returned, not another customer's data.
 
 For high-tier (Enterprise) customers, we can go further: per-customer Postgres schema, or dedicated logical database. The RLS model is the Year-1 default; schema isolation is Month 15+ optional.
 
@@ -502,7 +502,7 @@ Go binary. Single container. The surface area is deliberately tiny.
 type Agent struct {
     k8sClient    kubernetes.Interface
     promClient   prometheus.API
-    egress       *EgressClient   // mTLS to ingest.Costify.dev
+    egress       *EgressClient   // mTLS to ingest.sevro.dev
     mode         Mode            // Active, Skeptic, Discovery
 }
 
@@ -521,9 +521,9 @@ func (a *Agent) WatchCluster(ctx context.Context) error {
 
 **Memory ceiling:** `GOMEMLIMIT=384Mi`. The agent OOMs itself before taking cluster memory.
 
-**Network:** all outbound traffic is to `ingest.Costify.dev:443` over mTLS. Certificate is pinned. Customer proxy supported via `HTTPS_PROXY` env var.
+**Network:** all outbound traffic is to `ingest.sevro.dev:443` over mTLS. Certificate is pinned. Customer proxy supported via `HTTPS_PROXY` env var.
 
-**Resilience:** if `ingest.Costify.dev` is down, the agent buffers up to 4 hours of events in an in-memory ring buffer, then drops oldest. It does not write to disk. It does not retry indefinitely.
+**Resilience:** if `ingest.sevro.dev` is down, the agent buffers up to 4 hours of events in an in-memory ring buffer, then drops oldest. It does not write to disk. It does not retry indefinitely.
 
 ### 5.2 GitHub App
 
@@ -547,7 +547,7 @@ Token handling: customer-level installation tokens are short-lived (1 hour). We 
 
 **ArgoCD.** Read-only access to `Application` and `ApplicationSet` CRDs via the in-cluster agent. We extract which repo/path backs each workload.
 
-**Failure mode.** Parse failures are non-fatal. The PR comment says: *"Costify couldn't parse this chart. Supported: standard Helm 3, sub-charts, common templating. Not yet: [specific feature]. Tracked at [issue]."* Never crash, never silently skip.
+**Failure mode.** Parse failures are non-fatal. The PR comment says: *"Sevro couldn't parse this chart. Supported: standard Helm 3, sub-charts, common templating. Not yet: [specific feature]. Tracked at [issue]."* Never crash, never silently skip.
 
 **Operator-managed workloads.** Detected via `ownerReferences` on the Pod/ReplicaSet. When a workload is owned by a CRD (e.g., `Prometheus` from prometheus-operator), Apply Fix is disabled with an explanation that the CRD instance is the correct place to edit.
 
@@ -597,7 +597,7 @@ Prompt injection is a real threat because customer Helm values contain arbitrary
 
 **Layer 4: Deterministic post-validators.** JSON schema validation, Helm values.schema.json validation, `helm template` rendering, `kubeconform` K8s schema validation, and a custom "did this modify anything outside the allowed set of keys?" check.
 
-Any single failure of layers 1-4 rejects the output with logging. Customer sees: *"Costify's automated validation rejected this change. Queued for human review."*
+Any single failure of layers 1-4 rejects the output with logging. Customer sees: *"Sevro's automated validation rejected this change. Queued for human review."*
 
 ### 6.4 Validation Without Ephemeral Clusters
 
@@ -718,7 +718,7 @@ Daily aggregation rolls up hour-level attributions → pod-day cost → workload
 Methodology: hybrid_v1 (0.6 × requests + 0.4 × usage)
 Attribution confidence: 88% (node-hours where all pods had labels)
 Not attributed: $180 of $19,120 (0.9%) — shared cluster overhead
-Full methodology: Costify.dev/methodology/hybrid-v1
+Full methodology: sevro.dev/methodology/hybrid-v1
 ```
 
 Honesty about what's attributed vs. what's overhead is how we earn trust. The methodology URL is public and versioned.
@@ -746,7 +746,7 @@ Attribution runs per (node × lifetime window). Nodes that lived for 3 hours get
 
 ### 7.4 Receipt Verification Workflow
 
-30 days after a Costify PR merges, a Temporal workflow fires:
+30 days after a Sevro PR merges, a Temporal workflow fires:
 
 ```
 1. Fetch CUR snapshot for (tenant × affected_namespaces × [merge_date - 30d, merge_date + 30d])
@@ -759,7 +759,7 @@ Attribution runs per (node × lifetime window). Nodes that lived for 3 hours get
 8. Emit metric: receipt_accuracy_pct = min(predicted, actual) / max(predicted, actual)
 ```
 
-Signing keys rotate quarterly. Old public keys remain available on the verification endpoint. Any third party can verify a receipt by fetching `Costify.dev/verify/{receipt_id}` and checking the signature against the published public keys.
+Signing keys rotate quarterly. Old public keys remain available on the verification endpoint. Any third party can verify a receipt by fetching `sevro.dev/verify/{receipt_id}` and checking the signature against the published public keys.
 
 ---
 
@@ -787,7 +787,7 @@ Naive rollback triggers fire constantly on normal variance. Getting this right i
 - Critical paths (payments, auth, customer-facing APIs) always require human approval
 - Enterprise tier only, with financial SLA.
 
-At every phase, **Costify never auto-merges PRs against customer-marked critical paths.** This is absolute.
+At every phase, **Sevro never auto-merges PRs against customer-marked critical paths.** This is absolute.
 
 ### 8.3 Signals Monitored (5 Sources, 7-Day Window)
 
@@ -819,7 +819,7 @@ A signal breach alone is not enough. Before any rollback action:
 Trigger: confirmed breach on workload W from PR P
 Action:
   1. Compute inverse diff (revert the commit that caused the deployment)
-  2. Open "🚨 Costify ROLLBACK" PR with clear reasoning:
+  2. Open "🚨 Sevro ROLLBACK" PR with clear reasoning:
      - "PR #P merged 4 days ago caused [specific signals]"
      - "Reverting these changes to restore pre-merge state"
      - "If you want to keep the change, close this PR"
@@ -866,7 +866,7 @@ WITH candidate_prs AS (
   JOIN workloads w ON w.source_iac_path = f.path
   WHERE pr.merged_at BETWEEN T - INTERVAL '21 days' AND T
     AND w.namespace = $1
-    AND pr.tenant_id = current_setting('Costify.tenant_id')::uuid
+    AND pr.tenant_id = current_setting('Sevro.tenant_id')::uuid
 )
 SELECT id, repo, number, merged_at, predicted_cost_delta_usd_month,
   (CASE 
@@ -888,7 +888,7 @@ For Team+ tier, we go further: run a small regression where anomaly magnitude is
 
 ### 9.4 Presentation
 
-Weekly Slack digest, and on-demand via `/Costify spike`:
+Weekly Slack digest, and on-demand via `/Sevro spike`:
 
 ```
 📈 Cost anomaly — checkout namespace
@@ -901,7 +901,7 @@ Breakdown of attributable increase:
 • CPU requests increased 2× across 6 services → +$8,000
 • Replica count 4→8 on 3 services         → +$6,200
 
-Costify predicted +$13,100; actual +$14,200 (within 8%).
+Sevro predicted +$13,100; actual +$14,200 (within 8%).
 
 Secondary contributors (this week):
 • PR #4847 (@raj, Apr 8): Redis m5.2xlarge upgrade  → +$1,700
@@ -914,14 +914,14 @@ Secondary contributors (this week):
 
 ### 10.1 Trust Model
 
-Costify reads customer IaC, reads customer cluster state, reads customer billing data. A breach is catastrophic. Security is Day-1 concern, not a Year-2 roadmap item.
+Sevro reads customer IaC, reads customer cluster state, reads customer billing data. A breach is catastrophic. Security is Day-1 concern, not a Year-2 roadmap item.
 
 ### 10.2 Multi-Tenancy Isolation
 
 | Layer | Mechanism |
 |-------|-----------|
 | Database | Row-level security policies on every table |
-| API | Every handler sets `SET LOCAL Costify.tenant_id` before any query |
+| API | Every handler sets `SET LOCAL Sevro.tenant_id` before any query |
 | LLM workers | Per-tenant prompt contexts; no cross-tenant data in any single inference |
 | Redis | Keys prefixed with `t:<tenant_id>:`; ACL-enforced namespaces |
 | S3 | Per-tenant prefix; IAM policies restrict access by prefix |
@@ -946,14 +946,14 @@ Costify reads customer IaC, reads customer cluster state, reads customer billing
 
 ### 10.5 Agent Security (the thing customers audit)
 
-- Open source, Apache 2.0, `github.com/Costify/agent`
+- Open source, Apache 2.0, `github.com/sevro/agent`
 - Binary signed with Sigstore; SBOM published per release
 - Runs as non-root UID 1000
 - `readOnlyRootFilesystem: true`
 - No hostNetwork, no hostPath, no privilegedContainers
 - `allowPrivilegeEscalation: false`
 - All capabilities dropped
-- Egress allowlist: only `ingest.Costify.dev` over port 443
+- Egress allowlist: only `ingest.sevro.dev` over port 443
 - Customer can inspect every outbound request via their egress proxy
 
 ### 10.6 Application Security
@@ -1080,9 +1080,9 @@ Stateless Go binary. Polling at 15-min intervals (configurable). Prometheus quer
 
 For customers who cannot install the agent:
 
-- Customer provides: read-only kubeconfig for a Costify ServiceAccount (cluster-scoped `get`, `list`, `watch`), Prometheus remote-read endpoint, AWS CUR S3 bucket IAM role
+- Customer provides: read-only kubeconfig for a Sevro ServiceAccount (cluster-scoped `get`, `list`, `watch`), Prometheus remote-read endpoint, AWS CUR S3 bucket IAM role
 - Polling worker runs on our side at 60-min intervals (vs 15 for agent)
-- All network flows initiated from Costify, outbound-only from their perspective
+- All network flows initiated from Sevro, outbound-only from their perspective
 - Signal richness ~60% of agent mode (no real-time events)
 - PR comment latency ~90s instead of 30s
 
@@ -1113,7 +1113,7 @@ Target: <$0.35 cost per merged PR by Month 6, <$0.20 by Month 18.
 
 **Fallback to deterministic.** For trivial fixes (e.g., setting `runAsNonRoot: true`), skip the LLM entirely and apply a templated fix.
 
-**Fine-tuning (Month 18+).** Once we have 50K+ merged Costify PRs with verified outcomes, fine-tune a small open-weight model on them. For the common 80% of Helm values patterns, the fine-tuned model beats Sonnet at a tenth the cost.
+**Fine-tuning (Month 18+).** Once we have 50K+ merged Sevro PRs with verified outcomes, fine-tune a small open-weight model on them. For the common 80% of Helm values patterns, the fine-tuned model beats Sonnet at a tenth the cost.
 
 ### 12.3 LLM Cost Observability
 
@@ -1131,13 +1131,13 @@ Concrete weekly targets. This is the build that produces seed-ready demo artifac
 - Observability stack live (Prometheus, Grafana, Loki, Sentry, OTEL)
 - Postgres schema + migrations via sqlc + golang-migrate
 - GitHub OAuth + GitHub App registration working end-to-end
-- **Milestone:** empty `Costify-backend` deploys to staging automatically; observability dashboards populated
+- **Milestone:** empty `Sevro-backend` deploys to staging automatically; observability dashboards populated
 
 **Weeks 3–4 — Ingestion & Sandbox MVP**
 - In-cluster agent (Go): watch Deployments/StatefulSets/HPAs via informers, ship to ingest endpoint
 - Prometheus query runner in backend
 - Helm parser (values.yaml + common templating patterns)
-- **Public sandbox** (`Costify.dev/sandbox`): accepts pasted Helm values.yaml, returns synthetic cost analysis using AWS generic pricing (no Prometheus data needed)
+- **Public sandbox** (`sevro.dev/sandbox`): accepts pasted Helm values.yaml, returns synthetic cost analysis using AWS generic pricing (no Prometheus data needed)
 - Dogfood: install agent in our own EKS cluster
 - **Milestone:** any public visitor can paste a Helm chart and see cost analysis in <10s
 
@@ -1146,11 +1146,11 @@ Concrete weekly targets. This is the build that produces seed-ready demo artifac
 - Sonnet-backed Helm values diff generation (with structured prompts + strict JSON output + validator)
 - Multi-layer validation pipeline (helm template + kubeconform + diff analysis)
 - Confidence band computation (rules from 6.5)
-- CLI (`npx @Costify/cost`) wrapping the sandbox backend — our Hacker News artifact
+- CLI (`npx @sevro/cli`) wrapping the sandbox backend — our Hacker News artifact
 - **Milestone:** Apply Fix PR generated end-to-end on our own dogfood cluster; CLI published on npm
 
 **Weeks 7–8 — PR Writer, Apply Fix Flow, Kustomize**
-- GitHub App PR composition with embedded Costify metadata
+- GitHub App PR composition with embedded Sevro metadata
 - Apply Fix signed-token flow (Ed25519, 24h TTL, tenant-scoped)
 - Full PR comment template with Confidence band, signals, Engineer Impact
 - Kustomize parser
@@ -1159,7 +1159,7 @@ Concrete weekly targets. This is the build that produces seed-ready demo artifac
 **Weeks 9–10 — Design Partner #1 + Slack**
 - Helm chart polished for customer install; bootstrap token flow hardened
 - First design partner onboarded (founder's network), embedded in their Slack for rapid feedback
-- Slack daily digest + `/Costify` slash commands v0
+- Slack daily digest + `/Sevro` slash commands v0
 - Skeptic Mode (passive-observer) deployment toggle
 - **Milestone:** design partner #1 has Apply Fix PRs landing on their real Helm charts; Slack digest delivering daily
 
@@ -1287,7 +1287,7 @@ These are the problems we don't fully know how to solve yet. We'll resolve them 
 
 ## 18. One-Paragraph Summary
 
-Costify is a modular-monolith Go backend on AWS that reads customer Kubernetes clusters (via an open-source in-cluster agent using client-go informers + Prometheus queries) and customer GitHub repositories (via a GitHub App), merges that state into a Postgres + TimescaleDB data model with strict row-level-security multi-tenancy, runs deterministic classifiers over workloads to identify overprovisioning and security issues, orchestrates Anthropic Claude models (Haiku for enrichment, Sonnet for Helm values diff generation, Opus for escalation) through a defense-in-depth prompt pipeline with input sanitization / structured prompts / second-pass validator / deterministic post-validators, computes a rule-based Confidence band using Prometheus-grounded signals, opens pull requests with one-click Apply Fix through a signed-token flow, monitors merged changes for 7 days against statistical baselines (Box-Cox transformed cost signals, STL-decomposed latency) via Auto-Rollback Guard in a phased observe-then-act rollout, attributes AWS CUR costs to pods via a hybrid requests+usage model with published methodology, and issues Ed25519-signed Receipts verifying savings 30 days after merge. The entire stack runs on boring well-understood technology (PostgreSQL, Redis, Go, Temporal, EKS), is built by 3 founding engineers in 12 weeks, and is deliberately the opposite of the "nine microservices in three languages with a graph database" that kills most infra startups.
+Sevro is a modular-monolith Go backend on AWS that reads customer Kubernetes clusters (via an open-source in-cluster agent using client-go informers + Prometheus queries) and customer GitHub repositories (via a GitHub App), merges that state into a Postgres + TimescaleDB data model with strict row-level-security multi-tenancy, runs deterministic classifiers over workloads to identify overprovisioning and security issues, orchestrates Anthropic Claude models (Haiku for enrichment, Sonnet for Helm values diff generation, Opus for escalation) through a defense-in-depth prompt pipeline with input sanitization / structured prompts / second-pass validator / deterministic post-validators, computes a rule-based Confidence band using Prometheus-grounded signals, opens pull requests with one-click Apply Fix through a signed-token flow, monitors merged changes for 7 days against statistical baselines (Box-Cox transformed cost signals, STL-decomposed latency) via Auto-Rollback Guard in a phased observe-then-act rollout, attributes AWS CUR costs to pods via a hybrid requests+usage model with published methodology, and issues Ed25519-signed Receipts verifying savings 30 days after merge. The entire stack runs on boring well-understood technology (PostgreSQL, Redis, Go, Temporal, EKS), is built by 3 founding engineers in 12 weeks, and is deliberately the opposite of the "nine microservices in three languages with a graph database" that kills most infra startups.
 
 ---
 

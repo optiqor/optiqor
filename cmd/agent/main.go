@@ -1,7 +1,7 @@
-// Command agent is the in-cluster Costify agent.
+// Command agent is the in-cluster Sevro agent.
 //
 // Runs inside customer Kubernetes clusters. Reads K8s API via client-go
-// informers and scrapes Prometheus, then ships data over mTLS to the Costify
+// informers and scrapes Prometheus, then ships data over mTLS to the Sevro
 // SaaS using short-lived JWTs.
 //
 // Licensed under Apache 2.0 (see ../../LICENSE-agent). Regulated customers

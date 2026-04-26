@@ -1,2 +1,2 @@
-# Our own Helm charts (api, worker, costify-agent) live here, deployed via
+# Our own Helm charts (api, worker, sevro-agent) live here, deployed via
 # the ArgoCD Applications in ../argocd/.

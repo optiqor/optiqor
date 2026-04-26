@@ -67,8 +67,8 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [ ] SLO recording rules + alerts: API uptime, PR comment latency, cost/PR
 
 ### Cost visibility — tag from Day 1 (retrofit is expensive)
-- [ ] Every AWS resource in Terraform tagged `Project=costify Environment={dev,staging,prod} Tenant={shared|tenant-id}` via `default_tags` block
-- [ ] Athena workgroup `costify-cost-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment`
+- [ ] Every AWS resource in Terraform tagged `Project=sevro Environment={dev,staging,prod} Tenant={shared|tenant-id}` via `default_tags` block
+- [ ] Athena workgroup `sevro-cost-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment`
 - [ ] CI check: `terraform plan` fails if any resource is missing required tags
 
 ### Production-readiness baseline (Phase 1 — must land before Phase 2)
@@ -139,12 +139,12 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [ ] Validators: `pdb`, `resourcequota`, `limitrange`, `hpabounds`, `dependency`, `oom-recent`
 - [ ] Wire as a pipeline stage between `internal/cost` (candidate generation) and `internal/prwriter` (rendering)
 - [ ] Rejected candidates logged with reason for tuning the detector library (not surfaced to PR comment)
-- [ ] Metric: `costify_validator_rejects_total{reason}`; alert if reject rate jumps >2× week-over-week (signals a detector regression)
+- [ ] Metric: `sevro_validator_rejects_total{reason}`; alert if reject rate jumps >2× week-over-week (signals a detector regression)
 
 ### Differentiator additions (folded into Phase 4)
 - [ ] `internal/prwriter/narrative` — LLM-generated 2-sentence diff narrative at the top of every PR comment (3 days)
 - [ ] `internal/cost/detectors/sec/cis` — CIS Kubernetes Benchmark control IDs attached to each security finding (2 days)
-- [ ] `internal/prwriter/labels` — PR labels-as-policy parser (`costify:skip`, `costify:budget=$X`, `costify:wait-for-prom=Nd`) (2 days)
+- [ ] `internal/prwriter/labels` — PR labels-as-policy parser (`sevro:skip`, `sevro:budget=$X`, `sevro:wait-for-prom=Nd`) (2 days)
 - [ ] `internal/ingestion/coalesce` — collapse two PRs against the same chart within 24h into one analysis (2 days)
 
 ### Production-readiness — Apply Fix safety + LLM defense + environment classification (Phase 4)
@@ -172,8 +172,8 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 ## Phase 5 — Weeks 9–10: Design Partner #1 + Slack + Dashboards
 
 - [ ] `cmd/agent` real watch loop: client-go informers + Prometheus scrape, mTLS to SaaS
-- [ ] Helm chart in `deploy/helm/costify-agent/` for customer install
-- [ ] Slack: digest workflow, `/costify status` slash command
+- [ ] Helm chart in `deploy/helm/sevro-agent/` for customer install
+- [ ] Slack: digest workflow, `/sevro status` slash command
 - [ ] Customer dashboard pages in `web/`
 - [ ] On-call docs + runbooks in `docs/runbooks/`
 
@@ -191,13 +191,13 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [ ] `internal/notify/slack/diff` — render Apply Fix diff inline in Slack thread for mobile-first review (3 days)
 - [ ] `internal/integrations/argocd-notifications` — accept ArgoCD Notifications webhook back into our pipeline; close the Apply Fix → merge → sync → measure → Receipt loop (3 days)
 
-### Operational backbone — onboarding + costify-on-costify (Phase 5)
+### Operational backbone — onboarding + sevro-on-sevro (Phase 5)
 - [ ] `internal/onboarding/` — state machine (`signed_up → vcs_connected → repo_selected → first_pr_analyzed → agent_installed → first_apply_fix → first_receipt_issued`); each transition timestamped in `tenants.onboarding_state` JSONB column
 - [ ] `internal/onboarding/preflight` — pre-flight checker reads cluster K8s version, Prometheus presence, RBAC, Karpenter, PDB/RQ counts; renders preview page before `helm install`
 - [ ] `internal/onboarding/nudges` — Temporal cron workflows: 24h no-VCS email · 72h no-agent in-app prompt · 7-day no-Apply-Fix CSM/Slack alert
 - [ ] `internal/onboarding/demo` — synthetic-but-clearly-labeled demo data path for clusters with <30 days of Prometheus history
 - [ ] `cmd/api` route `/onboarding/health` — per-tenant funnel position + blockers; shareable with the customer
-- [ ] **Costify-on-Costify install** against our own EKS — production GitHub App, in-cluster agent on `prod` cluster, every PR to `backend/` gets a Costify comment (zero engineering effort beyond using the product)
+- [ ] **Sevro-on-Sevro install** against our own EKS — production GitHub App, in-cluster agent on `prod` cluster, every PR to `backend/` gets a Sevro comment (zero engineering effort beyond using the product)
 - [ ] `internal/metrics/activation` — Activation Rate (≥60% target) + Time to First Receipt (≤35 days p50) computed daily
 
 ### Hard SLOs to enforce in Phase 5
@@ -210,7 +210,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 
 #### Recommendation lifecycle (drives churn if missing)
 - [ ] `internal/recommendations/lifecycle` — five-state machine: `active` / `snoozed` / `dismissed` / `ignored-workload` / `ignored-class`
-- [ ] PR-label parser handles `costify:snooze=14d` (label-driven snooze)
+- [ ] PR-label parser handles `sevro:snooze=14d` (label-driven snooze)
 - [ ] "Dismiss" button on PR comment writes to lifecycle store; reason captured for detector tuning
 - [ ] Dashboard toggles for `ignored-workload` and `ignored-class`
 - [ ] **Drift detection** — agent compares cluster state vs last-known-recommendation; if customer applied manually, mark `applied-externally` and route through measured-delta → Receipt path
@@ -245,10 +245,10 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [ ] `internal/receipts/tlog` — Sigstore Rekor-style transparency log; every Receipt appended to a Merkle log; cannot be retrofitted
 - [ ] `cmd/api` routes `/verify/<id>` (HTML page) + `/api/v1/receipts/<id>/verify` (JSON) — anonymous, public, no auth
 - [ ] Browser **WebCrypto** verification — verify Receipt locally without server roundtrip
-- [ ] **`@costify/verify` CLI** (npm, Apache 2.0, lives in `cli/` repo) — fetches public key via DID/HKP, validates Ed25519 offline, exit code 0/1 for CI gating
+- [ ] **`@sevro/verify` CLI** (npm, Apache 2.0, lives in `cli/` repo) — fetches public key via DID/HKP, validates Ed25519 offline, exit code 0/1 for CI gating
 - [ ] Yearly key rotation procedure documented; old keys remain valid forever via tlog
 - [ ] Documented + pen-tested compromise procedure (revoke in tlog → rolling-shadow re-sign → 24h customer alert)
-- [ ] Stable Receipt YAML schema versioned at `methodology.costify.dev/<methodology>/<version>`
+- [ ] Stable Receipt YAML schema versioned at `methodology.sevro.dev/<methodology>/<version>`
 
 #### Webhooks (cheap and high-value)
 - [ ] `internal/api/webhooks` — outbound event dispatcher; events: `receipt.issued`, `apply_fix.merged`, `cost_spike.detected`, `rollback.opened`, `validator.rejected`, `health_score.changed`
@@ -303,7 +303,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
   - `unknown` → fall back to current Year-1 logic, flag for human review
 - [ ] Classification result attached to every recommendation and stored in `recommendations.workload_class` for retrospective accuracy tracking
 - [ ] Migration: backfill existing tenants' workloads in a single Temporal workflow
-- [ ] Metric: `costify_recommendation_accuracy_by_class` — weekly accuracy lift dashboard
+- [ ] Metric: `sevro_recommendation_accuracy_by_class` — weekly accuracy lift dashboard
 
 ### Differentiator additions (folded into Phase 7)
 - [ ] `internal/parser/helmfile` — Helmfile reader (declarative state of multiple Helm releases); opens self-managed platform-team segment (2 wk)
@@ -317,7 +317,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
   - `presets/cert-manager` — `Certificate`, `Issuer`; CPU sizing only, memory is heap-bound
   - `presets/strimzi` — `Kafka`, `KafkaTopic`, `KafkaUser`; per-broker resource math; never auto-fix StatefulSets
   - `presets/istio` — `IstioOperator`, `Gateway`, `VirtualService`; sidecar resource recs bounded by mesh-wide policy
-- [ ] Coverage SLO instrumented: `costify_workload_coverage_ratio` per tenant; alert if a tenant's ratio < 90% (signals a missing preset for an operator they're using heavily)
+- [ ] Coverage SLO instrumented: `sevro_workload_coverage_ratio` per tenant; alert if a tenant's ratio < 90% (signals a missing preset for an operator they're using heavily)
 
 ## Phase 8 — Months 6–9: GitLab + Hetzner Cloud K8s
 
@@ -329,11 +329,11 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [ ] First GitLab design partner; first Hetzner design partner
 
 ### Differentiator additions (folded into Phase 8)
-- [ ] `internal/agent/qa` + `internal/prwriter/thread` — `@costify` PR-thread Q&A. Engineers ask "@costify why did you suggest 6 GiB?" in the PR thread; the bot answers in-thread with the actual data points it used. Conversational AI in the PR layer (2 wk)
+- [ ] `internal/agent/qa` + `internal/prwriter/thread` — `@sevro` PR-thread Q&A. Engineers ask "@sevro why did you suggest 6 GiB?" in the PR thread; the bot answers in-thread with the actual data points it used. Conversational AI in the PR layer (2 wk)
 - [ ] `internal/receipts/currency` — multi-currency Receipts (EUR for Hetzner customers, GBP, etc.) signed against the original-currency invoice (3 days)
 
 ### Production-readiness — EU GA (Phase 8, gates GitLab + Hetzner customer onboarding)
-- [ ] **Terraform `eu-west-1` deployment** — full Costify control plane in EU; replicates the prod stack
+- [ ] **Terraform `eu-west-1` deployment** — full Sevro control plane in EU; replicates the prod stack
 - [ ] **Region selection at signup** — user chooses US or EU; cannot change post-signup; tenant data never leaves region after first agent install
 - [ ] **EU-specific Anthropic endpoint** — route all EU tenants through Anthropic's EU data-residency endpoint exclusively
 - [ ] **EU-resident KMS Receipt-signing key** — separate KMS key in `eu-west-1`; EU Receipts signed by the EU key; transparency log shards per region
@@ -349,12 +349,12 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 
 ### Differentiator additions (folded into Phase 9)
 - [ ] `internal/cost/regression` — cost regression detection (slow drift, not just spikes); separate alert path from Cost Spike (1 wk)
-- [ ] `costify/detector-sdk` seed release — extract the 30 Year-1 detectors into the SDK shape and ship a rough public release; year ahead of original Y2 plan, builds community-contribution muscle (2 wk)
+- [ ] `sevro/detector-sdk` seed release — extract the 30 Year-1 detectors into the SDK shape and ship a rough public release; year ahead of original Y2 plan, builds community-contribution muscle (2 wk)
 
 ### Operator-Managed Workload Coverage — Layer 4 (Phase 9)
-- [ ] Public `costify/operator-presets` repo (Apache 2.0) for community-contributed YAML presets
+- [ ] Public `sevro/operator-presets` repo (Apache 2.0) for community-contributed YAML presets
 - [ ] CI validates preset schema and runs against a live cluster of the operator
-- [ ] Costify reviews and merges; presets ship in next agent release; long tail of operators covered with zero per-operator engineering effort (3 days framework + ongoing review time)
+- [ ] Sevro reviews and merges; presets ship in next agent release; long tail of operators covered with zero per-operator engineering effort (3 days framework + ongoing review time)
 
 ### Operational backbone — full metrics + REST API + auditor mode (Phase 9)
 
@@ -374,8 +374,8 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [ ] API tokens scoped to tenant with scopes (`receipts:read`, `apply_fix:write`, `admin`); Argon2id hashed at rest; audit-logged
 - [ ] OAuth 2.0 authorization-code flow for third-party app integrations (Backstage, Cortex, Port)
 - [ ] Redis-backed rate limiter; `429` with proper `Retry-After`
-- [ ] **`@costify/sdk-typescript`** (npm, MIT) — REST client + webhook signature verification
-- [ ] `sandbox.costify.dev` — deterministic mock-data API for customer integration testing
+- [ ] **`@sevro/sdk-typescript`** (npm, MIT) — REST client + webhook signature verification
+- [ ] `sandbox.sevro.dev` — deterministic mock-data API for customer integration testing
 - [ ] Docs site auto-generated from OpenAPI; CI fails if a public endpoint changes without docs update
 - [ ] Every endpoint has runnable examples in `curl`, TypeScript, and Go (Go examples even though Go SDK is Y2)
 
@@ -386,8 +386,8 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 
 #### Public transparency (Month 6+, Phase 9 formalization)
 - [ ] Quarterly transparency report blog post template
-- [ ] Live status page at `status.costify.dev`: real-time per-tenant cost (anonymized) + SLO performance
-- [ ] Open-source dogfooding Helm chart at `costify/dogfood` (lets customers install identical infra)
+- [ ] Live status page at `status.sevro.dev`: real-time per-tenant cost (anonymized) + SLO performance
+- [ ] Open-source dogfooding Helm chart at `sevro/dogfood` (lets customers install identical infra)
 
 ---
 

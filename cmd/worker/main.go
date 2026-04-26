@@ -1,4 +1,4 @@
-// Command worker runs the Costify Temporal worker.
+// Command worker runs the Sevro Temporal worker.
 //
 // Workflows: PR analysis, Apply Fix generation, Receipt issuance, Auto-Rollback
 // monitoring, Cost Spike detection. Real workflow implementations land in

@@ -1,28 +1,28 @@
 services:
   postgres:
     image: timescale/timescaledb:latest-pg16
-    container_name: costify-postgres
+    container_name: sevro-postgres
     environment:
-      POSTGRES_USER: costify
-      POSTGRES_PASSWORD: costify
-      POSTGRES_DB: costify
+      POSTGRES_USER: sevro
+      POSTGRES_PASSWORD: sevro
+      POSTGRES_DB: sevro
     ports:
       - "5432:5432"
     volumes:
-      - costify-postgres-data:/var/lib/postgresql/data
+      - sevro-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U costify -d costify"]
+      test: ["CMD-SHELL", "pg_isready -U sevro -d sevro"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: costify-redis
+    container_name: sevro-redis
     ports:
       - "6379:6379"
     volumes:
-      - costify-redis-data:/data
+      - sevro-redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -31,22 +31,22 @@ services:
 
   temporal:
     image: temporalio/auto-setup:1.25
-    container_name: costify-temporal
+    container_name: sevro-temporal
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DB: postgres12
       DB_PORT: 5432
-      POSTGRES_USER: costify
-      POSTGRES_PWD: costify
+      POSTGRES_USER: sevro
+      POSTGRES_PWD: sevro
       POSTGRES_SEEDS: postgres
     ports:
       - "7233:7233"
 
   temporal-ui:
     image: temporalio/ui:2.31.2
-    container_name: costify-temporal-ui
+    container_name: sevro-temporal-ui
     depends_on:
       - temporal
     environment:
@@ -57,7 +57,7 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.108.0
-    container_name: costify-otel-collector
+    container_name: sevro-otel-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./scripts/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -66,5 +66,5 @@ services:
       - "4318:4318"   # OTLP HTTP
 
 volumes:
-  costify-postgres-data:
-  costify-redis-data:
+  sevro-postgres-data:
+  sevro-redis-data:

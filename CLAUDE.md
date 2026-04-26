@@ -1,6 +1,6 @@
 # backend — Claude Conventions
 
-This is the Costify proprietary monorepo: Go modular monolith producing three binaries (`api`, `worker`, `agent`) from `cmd/`. Ground truth for stack and architecture decisions is [docs/strategy/technical_implementation.md](docs/strategy/technical_implementation.md). When code disagrees with that doc, the doc wins unless an ADR in [docs/adr/](docs/adr/) records the change.
+This is the Sevro proprietary monorepo: Go modular monolith producing three binaries (`api`, `worker`, `agent`) from `cmd/`. Ground truth for stack and architecture decisions is [docs/strategy/technical_implementation.md](docs/strategy/technical_implementation.md). When code disagrees with that doc, the doc wins unless an ADR in [docs/adr/](docs/adr/) records the change.
 
 ## Stack
 
@@ -57,7 +57,7 @@ CodeQL is intentionally **not** wired into this private repo — GitHub Advanced
 ## Observability
 
 - Structured logs via `slog` with `tenant_id`, `request_id`, `workflow_id` always present.
-- Metrics via Prometheus client. Naming: `costify_<domain>_<metric>_<unit>`. Histograms for latency.
+- Metrics via Prometheus client. Naming: `sevro_<domain>_<metric>_<unit>`. Histograms for latency.
 - Traces via OpenTelemetry → Tempo. Every Temporal activity is its own span.
 - Errors → Sentry with tenant context (but **never** customer secrets in Sentry payloads — redaction is mandatory).
 

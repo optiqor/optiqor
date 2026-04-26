@@ -10,10 +10,10 @@ terraform {
 
   # Remote state — uncomment + fill once the S3 + DynamoDB resources exist.
   # backend "s3" {
-  #   bucket         = "costify-terraform-state-dev"
+  #   bucket         = "sevro-terraform-state-dev"
   #   key            = "envs/dev/terraform.tfstate"
   #   region         = "us-east-2"
-  #   dynamodb_table = "costify-terraform-locks-dev"
+  #   dynamodb_table = "sevro-terraform-locks-dev"
   #   encrypt        = true
   # }
 }
@@ -23,7 +23,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "costify"
+      Project     = "sevro"
       Environment = "dev"
       ManagedBy   = "terraform"
     }
