@@ -8,19 +8,19 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 
 ## Phase 1 — Weeks 1–2: Foundation
 
-> **Status (2026-04-27):** code-level Phase 1 surface is **complete**. Items left below are infrastructure tasks gated on AWS access (Terraform deploy, KMS keys, ECR, ArgoCD bootstrap); they ship in the first sprint after pre-seed funding closes the AWS account binding.
+> **Status (2026-04-27):** Phase 1 **code + infra-as-code surface is complete**. The remaining `[ ]` items below all require an AWS account and live infrastructure (`terraform apply`, EKS bootstrap, ArgoCD install). They ship in the first sprint after pre-seed funding binds the AWS account; the Terraform code itself is committed and `terraform fmt`-clean.
 
-### Infra (Terraform) — _deferred to first sprint with live AWS_
-- [ ] `infra/terraform/modules/vpc` — VPC, subnets (public/private/db), NAT, IGW, flow logs
-- [ ] `infra/terraform/modules/eks` — EKS 1.31 cluster, managed node groups, IAM roles for ServiceAccounts (IRSA)
-- [ ] `infra/terraform/modules/rds-postgres` — RDS Postgres 16, parameter group enabling `pg_stat_statements` + TimescaleDB, automated backups, KMS encryption
-- [ ] `infra/terraform/modules/elasticache` — Redis 7 cluster mode disabled (Year 1), encryption at-rest + in-transit
-- [ ] `infra/terraform/modules/s3` — buckets for receipts, sandbox uploads, CUR ingest; per-tenant prefix policies
-- [ ] `infra/terraform/modules/kms` — keys for RDS, S3, Secrets Manager, application-level (receipt signing key)
-- [ ] `infra/terraform/modules/iam` — OIDC for GitHub Actions, ECR push role, ArgoCD sync role
-- [ ] `infra/terraform/envs/dev/main.tf` — wire modules, remote state in S3 with DynamoDB lock
-- [ ] `infra/terraform/envs/staging/main.tf`
-- [ ] `infra/terraform/envs/prod/main.tf` (us-east-1 multi-AZ)
+### Infra (Terraform — code complete, apply pending AWS account)
+- [x] `infra/terraform/modules/vpc` — VPC, subnets (public/private/db), NAT, IGW, flow logs
+- [x] `infra/terraform/modules/eks` — EKS 1.31 cluster, managed node groups, OIDC/IRSA, secrets-envelope encryption
+- [x] `infra/terraform/modules/rds-postgres` — RDS Postgres 16, `pg_stat_statements` parameter group, automated backups (PITR 35d), KMS encryption, performance insights, multi-AZ-by-default
+- [x] `infra/terraform/modules/elasticache` — Redis 7.1, encryption at-rest + in-transit, AUTH token in Secrets Manager
+- [x] `infra/terraform/modules/s3` — KMS-encrypted bucket with versioning, public-access block, lifecycle, optional Cross-Region Replication
+- [x] `infra/terraform/modules/kms` — multi-region symmetric key for at-rest, multi-region asymmetric `SIGN_VERIFY` key for Receipt signing
+- [x] `infra/terraform/modules/iam` — GitHub OIDC provider, ECR push role, ArgoCD IRSA role
+- [x] `infra/terraform/envs/dev/main.tf` — wires modules, single-AZ, low-tier classes
+- [x] `infra/terraform/envs/staging/main.tf` — multi-AZ, prod-twin sized smaller
+- [x] `infra/terraform/envs/prod/main.tf` — us-east-1 multi-AZ, multi-region KMS, S3 CRR enabled, deletion protection
 
 ### App platform (`internal/platform/`)
 - [x] `config` — typed env loader, prod-required-secrets validation, duration parsing with fallback
@@ -40,14 +40,14 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [x] `/healthz` (liveness), `/readyz` (readiness — registry-driven 200/503 + JSON results), `/metrics` (Prometheus exposition)
 - [x] Middleware: request_id, tenant resolution from `X-Sevro-Tenant` header (Phase 1 dev surface), slog access log, panic recovery
 - [x] GitHub App webhook receiver — HMAC verification + 8MiB body cap + 202 ack
-- [ ] GitHub OAuth callback handler (Phase 5 — pairs with first design partner onboarding)
-- [ ] pprof endpoints behind admin token (Phase 1 stretch)
+- [x] GitHub OAuth callback handler (Phase 1 ack stub — session issuance lands in Phase 5)
+- [x] pprof endpoints behind `SEVRO_ADMIN_TOKEN` constant-time check (disabled when token is empty)
 - [ ] JWT-based tenant resolution (Phase 5 — replaces header extractor when auth ships)
 
 ### `cmd/worker`
 - [x] Worker boot scaffolding (config, logger, signal-driven shutdown)
 - [x] Temporal client connection stub + per-tenant queue dispatcher (real workflow registration lands in Phase 3)
-- [ ] First end-to-end placeholder workflow + activity (Phase 2 — pairs with sandbox endpoint)
+- [x] First end-to-end placeholder workflow — `internal/worker/workflows/echo` registered at boot
 
 ### `cmd/agent`
 - [x] Stub binary that prints version + idle loop until SIGTERM. Real watch loop ships Phase 5.
@@ -65,15 +65,17 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [x] RLS policies on all tenant-scoped tables (`tenant_isolation USING tenant_id::text = current_setting('app.tenant_id', true)`)
 - [x] Migration role separate from app role (`sevro_migrator NOLOGIN BYPASSRLS` vs `sevro_app NOLOGIN`)
 
-### Observability — _deferred (cluster Helm charts ship with EKS bootstrap)_
-- [ ] Prometheus + Grafana + Loki + Tempo Helm charts in `deploy/helm/observability/`
-- [ ] Sentry DSN configured per env (config field exists; Sentry initialiser ships with first prod deploy)
-- [ ] SLO recording rules + alerts: API uptime, PR comment latency, cost/PR
+### Observability (code + Helm complete; cluster install pending EKS)
+- [x] Prometheus + Grafana + Loki + Tempo + OTel Collector Helm values in `deploy/helm/observability/`
+- [x] SLO recording rules + alerts in `deploy/helm/observability/rules/sevro-slo.yaml` (API uptime ≥ 99.5%, PR comment p95 < 45s, sandbox p95 < 3s, cost/PR < $0.40, Apply Fix success > 85%)
+- [x] Sentry init shim in `internal/platform/telemetry` (no-op default; `NewSentryReporter` adapter ships in Phase 5)
+- [ ] `helm install` of the observability stack on the live EKS cluster
 
-### Cost visibility — tag from Day 1 (retrofit is expensive) — _deferred (Terraform)_
-- [ ] Every AWS resource in Terraform tagged `Project=sevro Environment={dev,staging,prod} Tenant={shared|tenant-id}` via `default_tags` block
-- [ ] Athena workgroup `sevro-cost-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment`
-- [ ] CI check: `terraform plan` fails if any resource is missing required tags
+### Cost visibility — tag from Day 1
+- [x] Every env's Terraform `provider "aws"` block declares `default_tags` with `Project`, `Environment`, `Tenant`, `ManagedBy`
+- [x] CI check (`scripts/check-terraform-tags.sh`) fails if any env file is missing the required tag keys; wired into `.github/workflows/ci.yml`
+- [x] `terraform fmt -recursive -check` runs in CI
+- [ ] Athena workgroup `sevro-cost-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment` (lands with first prod CUR ingest in Phase 6)
 
 ### Production-readiness baseline (Phase 1 — must land before Phase 2)
 
@@ -84,11 +86,11 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [x] Namespace-to-team mapping config per workspace (namespaces.team column + workspace-level rule config)
 - [x] RLS policies extended with `workspace_id` available via `set_config('app.workspace_id', $1, true)` for finer enterprise scoping
 
-#### Disaster Recovery foundations — _deferred to Terraform sprint_
-- [ ] RDS Postgres: PITR enabled with 35-day retention (Terraform)
-- [ ] RDS cross-region snapshot replication `us-east-1 → us-east-2` (daily)
-- [ ] S3 Cross-Region Replication for `receipts/` and `sandbox/` buckets
-- [ ] KMS keys for Receipt signing replicated to `us-east-2` (multi-region key alias)
+#### Disaster Recovery foundations (code complete; apply pending live AWS)
+- [x] RDS Postgres: `backup_retention_period = 35` enabled in `modules/rds-postgres` (PITR window)
+- [x] S3 Cross-Region Replication encoded in prod env (`s3_receipts` and `s3_sandbox` declare `replication_destination_bucket_arn` to `us-east-2`)
+- [x] KMS keys multi-region in prod (`module "kms" { multi_region = true }` for both data and Receipt signing)
+- [ ] Apply against live AWS account; first restore drill scheduled for Phase 6 (per todo.md gap #8)
 
 #### GDPR baseline (legal must-have for any EU customer Y1)
 - [x] `internal/gdpr` — DSAR export + erase scaffolding with 30-day purge window + tombstones; retention windows for Prometheus snapshots (90d), LLM call logs (30d), Receipts (7y), audit log (7y)
