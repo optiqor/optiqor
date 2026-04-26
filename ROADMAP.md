@@ -43,7 +43,7 @@ The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active w
 - [x] Backend: Go modules, `cmd/{api,worker,agent}` stubs, `internal/` partitions, Dockerfiles, `docker-compose.yml`, Makefile
 - [x] Backend: GitHub Actions (ci, security, release, codeql), Dependabot, CODEOWNERS, PR template
 - [x] Backend: Terraform skeleton (`infra/terraform/envs/{dev,staging,prod}` + `modules/`)
-- [x] CLI: Cobra root with all 7 stub subcommands, npm wrapper (`@sevro/cost`), GoReleaser, OSS norms (CONTRIBUTING, CODE_OF_CONDUCT, SECURITY)
+- [x] CLI: Cobra root with all 7 stub subcommands, npm wrapper (`@sevro/cli`), GoReleaser, OSS norms (CONTRIBUTING, CODE_OF_CONDUCT, SECURITY)
 - [x] LICENSE files (proprietary backend, Apache-2.0 CLI)
 - [x] Pre-commit hooks (gofmt, golangci-lint, gitleaks)
 - [x] `git init` + initial commit per repo
@@ -97,12 +97,12 @@ The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active w
 - [ ] LLM diff generation: Claude Haiku (enrichment ~$0.02), Sonnet (generation ~$0.18), Opus (escalation <5%)
 - [ ] Anthropic prompt caching wired (target 50% hit rate Year 1)
 - [ ] Cost cap per analysis: $0.40
-- [ ] CLI v0.1 to `@sevro/cost` on npm
+- [ ] CLI v0.1 to `@sevro/cli` on npm
 - [ ] CLI commands shipping: `analyze`, `demo`, `diff`, `score` + `--version`/`--help`
 - [ ] CLI ASCII output with mandatory ±40% accuracy disclosure
 - [ ] CLI shareable URL upload (opt-in)
 
-**Exit:** `npx @sevro/cost analyze ./my-chart` works; >10 npm installs in week.
+**Exit:** `npx @sevro/cli analyze ./my-chart` works; >10 npm installs in week.
 
 ### Phase 4 — Weeks 7–8: PR Writer + Apply Fix
 

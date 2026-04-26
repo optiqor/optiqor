@@ -68,7 +68,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 
 ### Cost visibility — tag from Day 1 (retrofit is expensive)
 - [ ] Every AWS resource in Terraform tagged `Project=sevro Environment={dev,staging,prod} Tenant={shared|tenant-id}` via `default_tags` block
-- [ ] Athena workgroup `sevro-cost-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment`
+- [ ] Athena workgroup `sevro-cli-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment`
 - [ ] CI check: `terraform plan` fails if any resource is missing required tags
 
 ### Production-readiness baseline (Phase 1 — must land before Phase 2)
