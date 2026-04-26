@@ -1,0 +1,78 @@
+# kube-prometheus-stack values for the Sevro observability namespace.
+# Tuned for ~3-engineer team SLOs in Phase 1; storage is reasonable but
+# not aggressive — ramp at the first $1M-ARR milestone.
+
+fullnameOverride: kps
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: "30GiB"
+    resources:
+      requests: {cpu: "500m", memory: "1Gi"}
+      limits:   {cpu: "2",    memory: "4Gi"}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    additionalScrapeConfigs:
+      - job_name: sevro-api
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [sevro-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            action: keep
+            regex: api
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: "9090"
+      - job_name: sevro-worker
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [sevro-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            action: keep
+            regex: worker
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: {cpu: "100m", memory: "256Mi"}
+      limits:   {cpu: "500m", memory: "512Mi"}
+
+grafana:
+  adminPassword: replace-me-via-secret
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 5Gi
+  defaultDashboardsTimezone: UTC
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+    datasources:
+      enabled: true
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki:3100
+    - name: Tempo
+      type: tempo
+      access: proxy
+      url: http://tempo:3100
+
+# kube-state-metrics + node-exporter ship by default with sensible
+# defaults; we leave them as-is.
