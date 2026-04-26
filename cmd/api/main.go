@@ -19,12 +19,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
 	"github.com/lowplane/backend/internal/platform/config"
 	"github.com/lowplane/backend/internal/platform/healthz"
 	"github.com/lowplane/backend/internal/platform/logging"
+	"github.com/lowplane/backend/internal/platform/telemetry"
 	"github.com/lowplane/backend/internal/tenancy"
 	"github.com/lowplane/backend/internal/vcs"
 )
@@ -59,10 +61,23 @@ func run() int {
 	checks.Register("self", healthz.AlwaysOK)
 	// Future phases register: postgres, redis, temporal, anthropic.
 
-	mux := buildMux(checks, logger, []byte(cfg.GitHubAppWebhookSecret))
+	metrics := telemetry.NewRegistry()
+	httpRequests := metrics.NewCounter("sevro_http_requests_total",
+		"Total HTTP requests served by the api binary, by route and status",
+		nil)
+	httpLatency := metrics.NewHistogram("sevro_http_request_duration_seconds",
+		"HTTP request latency in seconds",
+		nil,
+		[]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5})
+
+	mux := buildMux(checks, logger, []byte(cfg.GitHubAppWebhookSecret), metrics)
+	handler := http.Handler(mux)
+	handler = withAccessLog(logger, httpRequests, httpLatency, handler)
+	handler = withPanicRecovery(logger, handler)
+	handler = withRequestID(handler)
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           withRequestID(mux),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -105,7 +120,10 @@ func run() int {
 //
 // webhookSecret is the GitHub App secret used to verify inbound webhook
 // signatures. Empty in dev; required in prod (config.Validate enforces).
-func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byte) *http.ServeMux {
+//
+// metrics is the Prometheus registry exposed under /metrics; callers
+// wishing to skip the /metrics endpoint may pass nil.
+func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byte, metrics *telemetry.Registry) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -127,6 +145,10 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 			"version": version,
 		})
 	})
+
+	if metrics != nil {
+		mux.Handle("GET /metrics", metrics.Handler())
+	}
 
 	// GitHub App webhook receiver: HMAC-verifies the signature and
 	// (in later phases) hands off to a Temporal workflow. Phase 1
@@ -230,4 +252,94 @@ func newRequestID() string {
 		return fmt.Sprintf("t-%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// withPanicRecovery converts a panicking handler into a 500 response
+// with a structured-log entry that includes the stack trace. The
+// request continues; the surrounding server keeps serving.
+func withPanicRecovery(logger *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			rec := recover()
+			if rec == nil {
+				return
+			}
+			logger.ErrorContext(r.Context(), "panic recovered",
+				"err", fmt.Sprintf("%v", rec),
+				"path", r.URL.Path,
+				"method", r.Method,
+				"stack", string(debug.Stack()),
+			)
+			// Best-effort write: if the handler already wrote headers
+			// the client is hosed, but we still log. WriteHeader on a
+			// committed response is a no-op + warning in stdlib.
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// withAccessLog wraps an http.Handler with structured access logging
+// and Prometheus metrics. Every request emits one info-level slog
+// record carrying method, path, status, duration, bytes, and the
+// request id. Sub-200ms requests are logged at debug for noise control
+// when the api is healthy.
+func withAccessLog(logger *slog.Logger, requests telemetry.Counter, latency telemetry.Histogram, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &recordingWriter{ResponseWriter: w, status: 200}
+		next.ServeHTTP(rec, r)
+		dur := time.Since(start)
+
+		level := slog.LevelInfo
+		switch {
+		case rec.status >= 500:
+			level = slog.LevelError
+		case rec.status >= 400:
+			level = slog.LevelWarn
+		case dur < 200*time.Millisecond:
+			level = slog.LevelDebug
+		}
+		logger.Log(r.Context(), level, "http",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rec.status,
+			"bytes", rec.bytes,
+			"duration_ms", dur.Milliseconds(),
+		)
+
+		if requests != nil {
+			requests.Inc()
+		}
+		if latency != nil {
+			latency.Observe(dur.Seconds())
+		}
+	})
+}
+
+// recordingWriter intercepts the status code and byte count without
+// changing the streaming behaviour of the underlying ResponseWriter.
+type recordingWriter struct {
+	http.ResponseWriter
+	status      int
+	bytes       int
+	wroteHeader bool
+}
+
+func (w *recordingWriter) WriteHeader(code int) {
+	if w.wroteHeader {
+		return
+	}
+	w.wroteHeader = true
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *recordingWriter) Write(b []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	n, err := w.ResponseWriter.Write(b)
+	w.bytes += n
+	return n, err
 }

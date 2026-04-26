@@ -12,10 +12,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lowplane/backend/internal/platform/healthz"
+	"github.com/lowplane/backend/internal/platform/telemetry"
 	"github.com/lowplane/backend/internal/tenancy"
 )
 
@@ -26,7 +28,7 @@ func silentLogger() *slog.Logger {
 }
 
 func TestHealthz(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil)
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if rec.Code != http.StatusOK {
@@ -39,7 +41,7 @@ func TestReadyz_AllOK(t *testing.T) {
 	r.Register("self", healthz.AlwaysOK)
 	r.Register("more", healthz.AlwaysOK)
 
-	mux := buildMux(r, silentLogger(), nil)
+	mux := buildMux(r, silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 
@@ -63,7 +65,7 @@ func TestReadyz_Failing(t *testing.T) {
 	r.Register("self", healthz.AlwaysOK)
 	r.Register("redis", healthz.AlwaysFail("connection refused"))
 
-	mux := buildMux(r, silentLogger(), nil)
+	mux := buildMux(r, silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 
@@ -92,7 +94,7 @@ func TestReadyz_Failing(t *testing.T) {
 }
 
 func TestRequestID_Generated(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil)
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
 	withRequestID(mux).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if got := rec.Header().Get("X-Request-ID"); got == "" {
@@ -101,7 +103,7 @@ func TestRequestID_Generated(t *testing.T) {
 }
 
 func TestRequestID_Echoed(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil)
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	req.Header.Set("X-Request-ID", "abc-123")
 	rec := httptest.NewRecorder()
@@ -122,7 +124,7 @@ func TestReadyz_TimeoutNotPanicking(t *testing.T) {
 		}
 	})
 
-	mux := buildMux(r, silentLogger(), nil)
+	mux := buildMux(r, silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if rec.Body.Len() == 0 {
@@ -138,7 +140,7 @@ func TestGitHubWebhook_ValidSignature(t *testing.T) {
 	mac.Write(body)
 	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), secret)
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), secret, nil)
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader(body))
 	req.Header.Set("X-Hub-Signature-256", signature)
 	req.Header.Set("X-GitHub-Event", "pull_request")
@@ -171,7 +173,7 @@ func TestGitHubWebhook_TamperedRejected(t *testing.T) {
 	mac.Write(body)
 	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), secret)
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), secret, nil)
 	tampered := []byte(`{"action":"closed"}`)
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader(tampered))
 	req.Header.Set("X-Hub-Signature-256", signature)
@@ -185,7 +187,7 @@ func TestGitHubWebhook_TamperedRejected(t *testing.T) {
 }
 
 func TestGitHubWebhook_DevModeAcceptsUnsigned(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil)
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	body := []byte(`{"action":"opened"}`)
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -249,5 +251,101 @@ func TestRequireTenant_Rejects(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestMetrics_ExposesRegistry(t *testing.T) {
+	reg := telemetry.NewRegistry()
+	c := reg.NewCounter("sevro_test_total", "test counter", nil)
+	c.Add(7)
+
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, reg)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "sevro_test_total 7") {
+		t.Errorf("metrics body missing counter:\n%s", rec.Body.String())
+	}
+}
+
+func TestPanicRecovery_Returns500AndDoesNotPropagate(t *testing.T) {
+	panicker := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("kaboom")
+	})
+	wrapped := withPanicRecovery(silentLogger(), panicker)
+
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "internal server error") {
+		t.Errorf("body = %q", rec.Body.String())
+	}
+}
+
+func TestPanicRecovery_PassesThroughWhenNoPanic(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+		_, _ = w.Write([]byte("hi"))
+	})
+	wrapped := withPanicRecovery(silentLogger(), ok)
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	if rec.Code != http.StatusTeapot {
+		t.Fatalf("status = %d, want 418", rec.Code)
+	}
+	if rec.Body.String() != "hi" {
+		t.Errorf("body = %q", rec.Body.String())
+	}
+}
+
+func TestAccessLog_RecordsCounterAndLatency(t *testing.T) {
+	reg := telemetry.NewRegistry()
+	requests := reg.NewCounter("sevro_http_requests_total", "", nil)
+	latency := reg.NewHistogram("sevro_http_request_duration_seconds", "", nil, []float64{0.1, 1})
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	wrapped := withAccessLog(silentLogger(), requests, latency, inner)
+
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+
+	if got := requests.Value(); got != 1 {
+		t.Errorf("requests counter = %v, want 1", got)
+	}
+	if got := latency.Snapshot().Count; got != 1 {
+		t.Errorf("latency histogram count = %d, want 1", got)
+	}
+}
+
+func TestRecordingWriter_StatusDefaultsTo200OnImplicitWrite(t *testing.T) {
+	rec := httptest.NewRecorder()
+	rw := &recordingWriter{ResponseWriter: rec, status: 200}
+	if _, err := rw.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if rw.status != 200 {
+		t.Errorf("status = %d", rw.status)
+	}
+	if rw.bytes != 5 {
+		t.Errorf("bytes = %d", rw.bytes)
+	}
+}
+
+func TestRecordingWriter_DoesNotDoubleWriteHeader(t *testing.T) {
+	rec := httptest.NewRecorder()
+	rw := &recordingWriter{ResponseWriter: rec, status: 200}
+	rw.WriteHeader(http.StatusBadRequest)
+	rw.WriteHeader(http.StatusInternalServerError) // should be ignored
+	if rw.status != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rw.status)
 	}
 }
