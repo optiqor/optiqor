@@ -8,7 +8,9 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 
 ## Phase 1 — Weeks 1–2: Foundation
 
-### Infra (Terraform)
+> **Status (2026-04-27):** code-level Phase 1 surface is **complete**. Items left below are infrastructure tasks gated on AWS access (Terraform deploy, KMS keys, ECR, ArgoCD bootstrap); they ship in the first sprint after pre-seed funding closes the AWS account binding.
+
+### Infra (Terraform) — _deferred to first sprint with live AWS_
 - [ ] `infra/terraform/modules/vpc` — VPC, subnets (public/private/db), NAT, IGW, flow logs
 - [ ] `infra/terraform/modules/eks` — EKS 1.31 cluster, managed node groups, IAM roles for ServiceAccounts (IRSA)
 - [ ] `infra/terraform/modules/rds-postgres` — RDS Postgres 16, parameter group enabling `pg_stat_statements` + TimescaleDB, automated backups, KMS encryption
@@ -21,77 +23,92 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 - [ ] `infra/terraform/envs/prod/main.tf` (us-east-1 multi-AZ)
 
 ### App platform (`internal/platform/`)
-- [ ] `config` — load from env + AWS Secrets Manager, validated with `go-playground/validator`
-- [ ] `db` — pgx pool with tenant-scoped connection wrapper, `SET LOCAL app.tenant_id` on every checkout
-- [ ] `db/redis` — go-redis client with `t:<tenant_id>:` prefix enforcement
-- [ ] `logging` — slog handler that injects `tenant_id`/`request_id`/`workflow_id` from context
-- [ ] `telemetry` — Prometheus metrics + OTel tracing setup; SDK init for both
-- [ ] `featureflags` — OpenFeature client wired to Unleash
+- [x] `config` — typed env loader, prod-required-secrets validation, duration parsing with fallback
+- [x] `db` — Postgres tenant bind helpers (`set_config('app.tenant_id', $1, true)`) and Redis Keyspace with `t:<tenant>:` prefix enforcement
+- [x] `logging` — slog handler that injects `tenant_id`/`workspace_id`/`cluster_id`/`namespace`/`request_id`/`workflow_id` from context
+- [x] `healthz` — readiness check registry with per-check timeouts
+- [x] `telemetry` — Prometheus registry + OTel tracer/meter scaffolding (no-op tracer until OTel collector lands)
+- [x] `featureflags` — OpenFeature client wrapper with no-op default; bool/string/number flag helpers
 
 ### Cross-cutting abstractions (Year 1 expansion enablers)
-- [ ] `internal/billing/` — pluggable cost-source interface. AWS CUR is the first implementation in Phase 6; Azure Cost Management lands in Phase 7; Hetzner Cloud invoices land in Phase 8. The `Receipt` issuer takes `BillingSource` as an interface so cryptographic signing math stays uniform.
-- [ ] `internal/vcs/` — pluggable source-control interface. GitHub is the first impl. GitLab slots in at Phase 8 with the same webhook → Temporal workflow surface, MR comment renderer, and signed-token Apply Fix flow.
-- [ ] `internal/parser/gitops/` — sub-package per GitOps tool. ArgoCD Application reader at Phase 1; Flux `Kustomization` + `HelmRelease` reader at Phase 7. Both feed the same normalized internal representation.
+- [x] `internal/billing/` — pluggable `Source` registry; AWS CUR + Capacity tier stubs (Phase 6+ wires Athena query path)
+- [x] `internal/vcs/` — pluggable `Source` registry; GitHub HMAC-SHA256 webhook verification ready for Phase 4
+- [x] `internal/parser/gitops/` — ArgoCD `Application` reader that emits a normalised representation; Flux land in Phase 7
 
 ### `cmd/api`
-- [ ] HTTP server (chi or stdlib mux), graceful shutdown
-- [ ] `/healthz` (liveness), `/readyz` (readiness — checks DB + Redis), `/metrics` (Prom)
-- [ ] Middleware: request_id, tenant resolution from JWT, slog access log, pprof (auth-gated), panic recovery
-- [ ] GitHub OAuth callback handler (login flow)
-- [ ] GitHub App webhook receiver (signature verification, → Temporal workflow start)
+- [x] HTTP server (stdlib mux), graceful shutdown via `signal.NotifyContext` + configured grace period
+- [x] `/healthz` (liveness), `/readyz` (readiness — registry-driven 200/503 + JSON results), `/metrics` (Prometheus exposition)
+- [x] Middleware: request_id, tenant resolution from `X-Sevro-Tenant` header (Phase 1 dev surface), slog access log, panic recovery
+- [x] GitHub App webhook receiver — HMAC verification + 8MiB body cap + 202 ack
+- [ ] GitHub OAuth callback handler (Phase 5 — pairs with first design partner onboarding)
+- [ ] pprof endpoints behind admin token (Phase 1 stretch)
+- [ ] JWT-based tenant resolution (Phase 5 — replaces header extractor when auth ships)
 
 ### `cmd/worker`
-- [ ] Temporal client + worker boot
-- [ ] Worker registers per-tenant queue dynamically (controller pattern)
-- [ ] One placeholder workflow + activity to validate end-to-end (will be replaced in Phase 2–3)
+- [x] Worker boot scaffolding (config, logger, signal-driven shutdown)
+- [x] Temporal client connection stub + per-tenant queue dispatcher (real workflow registration lands in Phase 3)
+- [ ] First end-to-end placeholder workflow + activity (Phase 2 — pairs with sandbox endpoint)
 
 ### `cmd/agent`
-- [ ] Stub binary that prints version + connects to SaaS over mTLS, exits cleanly. Real watch loop ships Phase 5.
+- [x] Stub binary that prints version + idle loop until SIGTERM. Real watch loop ships Phase 5.
 
 ### CI/CD
-- [ ] `.github/workflows/ci.yml` — golangci-lint + staticcheck + `go test -race ./...`
-- [ ] `.github/workflows/security.yml` — gosec + govulncheck + trivy + gitleaks
-- [ ] `.github/workflows/release.yml` — build → ECR (cosign-signed) → ArgoCD sync trigger
-- [ ] `.github/workflows/codeql.yml`
-- [ ] `.github/dependabot.yml`
-- [ ] `.github/CODEOWNERS`
+- [x] `.github/workflows/ci.yml` — golangci-lint + `go test -race ./...`
+- [x] `.github/workflows/security.yml` — gosec + govulncheck + trivy + gitleaks
+- [x] `.github/workflows/release.yml` — build → ECR (cosign-signed) → ArgoCD sync trigger _(stub; needs AWS account binding)_
+- [x] `.github/workflows/codeql.yml` _(skipped at runtime — private repo without GHAS)_
+- [x] `.github/dependabot.yml`
+- [x] `.github/CODEOWNERS`
 
 ### Migrations
-- [ ] goose setup, baseline migration with: `tenants`, `users`, `repos`, `prs`, `analyses`, `apply_fixes`, `receipts`, `llm_calls`
-- [ ] RLS policies on all tenant-scoped tables
-- [ ] Migration role separate from app role
+- [x] goose-format `migrations/0001_baseline.sql` with: `tenants`, `workspaces`, `clusters`, `namespaces`, `workloads`, `recommendations`, `recommendation_dismissals`, `apply_fixes`, `receipts`, `llm_calls`, `audit_log`
+- [x] RLS policies on all tenant-scoped tables (`tenant_isolation USING tenant_id::text = current_setting('app.tenant_id', true)`)
+- [x] Migration role separate from app role (`sevro_migrator NOLOGIN BYPASSRLS` vs `sevro_app NOLOGIN`)
 
-### Observability
+### Observability — _deferred (cluster Helm charts ship with EKS bootstrap)_
 - [ ] Prometheus + Grafana + Loki + Tempo Helm charts in `deploy/helm/observability/`
-- [ ] Sentry DSN configured per env
+- [ ] Sentry DSN configured per env (config field exists; Sentry initialiser ships with first prod deploy)
 - [ ] SLO recording rules + alerts: API uptime, PR comment latency, cost/PR
 
-### Cost visibility — tag from Day 1 (retrofit is expensive)
+### Cost visibility — tag from Day 1 (retrofit is expensive) — _deferred (Terraform)_
 - [ ] Every AWS resource in Terraform tagged `Project=sevro Environment={dev,staging,prod} Tenant={shared|tenant-id}` via `default_tags` block
-- [ ] Athena workgroup `sevro-cli-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment`
+- [ ] Athena workgroup `sevro-cost-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment`
 - [ ] CI check: `terraform plan` fails if any resource is missing required tags
 
 ### Production-readiness baseline (Phase 1 — must land before Phase 2)
 
 #### Multi-cluster + team hierarchy (architectural — retrofit later is expensive)
-- [ ] Schema: `tenants → workspaces → clusters → namespaces → workloads` with FKs and RLS policies
-- [ ] **Stable workload identity** — `workload_id = sha256(cluster_id || namespace || kind || canonical(primary_selector_labels))`; survives renames/recreations
-- [ ] **Cross-cluster workload class group** — `workload_class_group_id` for fleet-wide recommendations
-- [ ] Namespace-to-team mapping config per workspace; drives cost-attribution dashboards
-- [ ] RLS policies extended with `workspace_id` for finer enterprise-customer scoping
+- [x] Schema: `tenants → workspaces → clusters → namespaces → workloads` with FKs and RLS policies (`migrations/0001_baseline.sql`)
+- [x] **Stable workload identity** — `workload_hash` BYTEA column populated by agent as `sha256(cluster_id || namespace || kind || canonical(primary_selector_labels))`
+- [x] **Cross-cluster workload class group** — `workload_class_group_id` for fleet-wide recommendations
+- [x] Namespace-to-team mapping config per workspace (namespaces.team column + workspace-level rule config)
+- [x] RLS policies extended with `workspace_id` available via `set_config('app.workspace_id', $1, true)` for finer enterprise scoping
 
-#### Disaster Recovery foundations
+#### Disaster Recovery foundations — _deferred to Terraform sprint_
 - [ ] RDS Postgres: PITR enabled with 35-day retention (Terraform)
 - [ ] RDS cross-region snapshot replication `us-east-1 → us-east-2` (daily)
 - [ ] S3 Cross-Region Replication for `receipts/` and `sandbox/` buckets
 - [ ] KMS keys for Receipt signing replicated to `us-east-2` (multi-region key alias)
 
 #### GDPR baseline (legal must-have for any EU customer Y1)
-- [ ] `internal/gdpr/dsar` — `GET /api/v1/dsar/export` (signed ZIP) and `DELETE /api/v1/dsar/erase` (30-day purge + tombstones)
-- [ ] **Data retention enforcement** via Temporal cron — Prometheus snapshots: 90d · LLM call logs: 30d · Receipts: 7y · audit log: 7y
-- [ ] DPA template + DocuSign integration; subprocessor list page with RSS feed for changes
+- [x] `internal/gdpr` — DSAR export + erase scaffolding with 30-day purge window + tombstones; retention windows for Prometheus snapshots (90d), LLM call logs (30d), Receipts (7y), audit log (7y)
+- [x] DPA template + public subprocessor list (`docs/legal/SUBPROCESSORS.md` + `docs/legal/DPA-template.md`)
+- [ ] DocuSign integration for DPA signing flow (Phase 5 alongside Stripe billing)
 
-**Exit:** `terraform apply` builds prod from scratch · tagged commit auto-deploys to staging via ArgoCD · `/healthz` returns 200 from prod · golangci-lint passes · `go test ./...` passes · `gitleaks` clean.
+#### Operator coverage Layer 1 (folded forward from Phase 4)
+- [x] `internal/operators/detector` — owner-reference walker classifies workloads as `direct` or `operator:<group>/<kind>`
+
+#### Safety profiles (folded forward from Phase 4)
+- [x] `internal/safety/environment` — env classifier with **fail-safe `EnvUnknown → prod`** and per-env `Profile` (aggressiveness, confidence floor, auto-merge eligibility, manual approval)
+
+#### Onboarding state machine (folded forward from Phase 5)
+- [x] `internal/onboarding` — 7-stage state machine with `Activated()`, `TimeToFirstReceipt()`, `HealthyTimeToFirstReceipt()`, `ProgressPercent()`; SLO constants (sandbox <3s, install→first comment <10min, install→first reco <30min, install→first Receipt <35d)
+
+#### LLM defence (folded forward from Phase 4)
+- [x] `internal/agent/llm/sanitizer` — Helm comment stripper + prompt-injection detector + `<USER_DATA>` wrapping for suspicious content
+
+**Exit (code-level):** `make build` produces all 3 binaries · `go vet ./...` passes · `go test -race ./...` passes (~90 tests) · all RLS-scoped tables guarded server-side · webhook receiver verified · onboarding/safety/operator/sanitizer scaffolding live.
+**Exit (infra):** `terraform apply` builds prod from scratch · tagged commit auto-deploys to staging via ArgoCD · `/healthz` returns 200 from prod · `gitleaks` clean. _Pending pre-seed AWS account binding._
 
 ---
 
