@@ -1,10 +1,14 @@
 # backend — Sprint Todo
 
-Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as you ship; archive completed phases at the bottom.
+Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is the **canonical engineering tracker for backend work**; CLI-side phase work lives in the [sevro repo](https://github.com/lowplane/sevro). The cross-repo Phase view (cost-detector breakdowns, CLI runtime status, etc.) lives in [ROADMAP.md](ROADMAP.md) — keep both files in sync when a phase milestone moves.
 
-> **Today: 2026-04-26.** Active phase: **Phase 1 — Foundation (Weeks 1–2).**
+> **Today: 2026-04-27.** Active phase: **Phase 1 — Foundation (Weeks 1–2).**
 >
 > **Year 1 surface (expanded):** AWS EKS · Azure AKS · Hetzner Cloud K8s · GitHub · GitLab · ArgoCD · Flux CD · Helm · Kustomize. Day 90 demo stays narrow (EKS + GitHub + ArgoCD + Helm); the rest lands in Phases 7-9 (Months 4-12).
+>
+> **Cross-repo split (consistent with [ROADMAP.md](ROADMAP.md)):**
+> - **This repo (backend)** — proprietary monorepo: API server, Temporal worker, in-cluster K8s agent, sandbox web frontend, Terraform infra, Receipt issuer, LLM Apply Fix path
+> - **[lowplane/sevro](https://github.com/lowplane/sevro)** — Apache-2.0 OSS CLI: deterministic 30-detector rule engine, `analyze`/`demo`/`diff`/`score`/`audit`/`compare`, `--share` HTTPS upload, `@sevro/cli` npm package
 
 ## Phase 1 — Weeks 1–2: Foundation
 
@@ -116,26 +120,42 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). Update this as 
 
 ## Phase 2 — Weeks 3–4: Public Sandbox
 
-- [ ] `internal/parser` — Helm values + templates parser
-- [ ] `internal/sandbox` — public sandbox handlers
-- [ ] `internal/cost` — sandbox-grade rule-based engine v0
-- [ ] Frontend framework decision (Week 3 Day 1) → ADR
+> **Backend scope only.** CLI-side parser, cost engine, shareable-URL hashing, and the `--share` upload client all ship in the [sevro repo](https://github.com/lowplane/sevro); see [ROADMAP.md](ROADMAP.md) for the cross-repo view. The backend Phase 2 work is the sandbox **receiver** — the public HTTP endpoint that accepts uploaded analyses, deduplicates them by hash, and renders a stable share URL.
+
+- [ ] `internal/parser` — Helm values + templates parser (server-side; the CLI re-implements this so the binary is single-source, the SaaS reuses for sandbox uploads)
+- [ ] `internal/sandbox/handlers` — public sandbox API: `POST /api/v1/share` (accepts `X-Sevro-Hash`-headered upload), `GET /r/{hash}` (HTML render), `GET /api/v1/r/{hash}` (JSON)
+- [ ] `internal/cost` — sandbox-grade rule-based engine v0 (mirrors the CLI's 30 detectors so server-issued Receipts and shareable analyses cite the same finding library)
+- [ ] Frontend framework decision (Week 3 Day 1) → ADR — Next.js / Remix / Vite+React
 - [ ] `web/` — sandbox UI: paste textbox, results panel, ±40% accuracy banner, share button
-- [ ] Shareable report URLs `/r/<hash>` (storage in S3)
-- [ ] Rate limit middleware (Redis-backed, IP + fingerprint)
+- [ ] Shareable report storage — S3 bucket `sevro-prod-sandbox` already provisioned in Phase 1 Terraform with KMS + 30-day lifecycle + CRR; receiver writes content-addressed objects keyed by the SHA-256 the CLI sends in `X-Sevro-Hash`
+- [ ] Rate limit middleware (Redis-backed, IP + fingerprint) — wired into `cmd/api` via the existing `internal/platform/db/redis` Keyspace
 - [ ] p95 < 3s benchmark in CI (k6 or hey)
+
+**CLI side already shipped (see [sevro repo](https://github.com/lowplane/sevro)):**
+- [x] Helm values parser, 30-detector engine, shareable-URL hashing, `--share` HTTPS upload client with graceful offline fallback
 
 ---
 
 ## Phase 3 — Weeks 5–6: Detectors + LLM Diff + CLI v0.1
 
-- [ ] 15 cost detectors in `internal/cost/detectors/`
-- [ ] 15 security detectors in `internal/cost/detectors/sec/` (TODO: rename to `internal/security/`)
-- [ ] `internal/confidence` — Low/Med/High banding
-- [ ] `internal/agent/llm` — Anthropic SDK wrapper with prompt caching
-- [ ] `internal/agent/budget` — $0.40/analysis cap
-- [ ] LLM call accounting → `llm_calls` table
-- [ ] CLI: `cli/` Phase 3 work happens in the other repo. Backend ships nothing CLI-related except the share-URL upload endpoint.
+> **Backend scope is the LLM-driven Apply Fix path.** The deterministic 30-detector library is the CLI's responsibility (per the OSS playbook hard rule: no LLM in the CLI); the backend imports/mirrors the same rule definitions so server-issued recommendations cite the exact same detector IDs.
+
+- [ ] **30 detectors mirrored server-side** — the canonical implementations live in the CLI (`github.com/lowplane/sevro/internal/rules`). Backend imports the catalogue for SaaS analysis runs; new detectors land in CLI first, backend follows automatically via vendored module + golden parity tests
+  - Source: 15 cost + 15 security detectors, CIS Kubernetes Benchmark / NSA hardening guide aligned (see [ROADMAP.md](ROADMAP.md) Phase 3 detector tables)
+- [ ] `internal/confidence` — Low/Med/High banding (server-side helper that the LLM augmentation layer down-ranks based on validator-rejection signals; CLI has the qualitative-only equivalent)
+- [ ] `internal/agent/llm` — Anthropic SDK wrapper with prompt caching (50 % hit-rate target Year 1)
+- [ ] `internal/agent/budget` — $0.40/analysis cap, enforced before every Sonnet/Opus call
+- [ ] LLM call accounting → `llm_calls` table (already provisioned in `migrations/0001_baseline.sql`)
+- [ ] LLM-generated Apply Fix diff renderer (consumes detector findings + measured Prometheus context, emits Helm values diff)
+- [ ] LLM canary: same prompt occasionally sent to Sonnet AND Haiku; outputs compared, divergence alerts (todo.md production-readiness gap #6 Layer 3)
+
+**CLI side already shipped (see [sevro repo](https://github.com/lowplane/sevro)):**
+- [x] 15 cost detectors + 15 security detectors firing on bundled demo (30/30)
+- [x] Confidence band engine (`internal/rules.Confidence`)
+- [x] CLI v0.1 build + `npm pack` proven (14 KB `@sevro/cli` tarball); `release.yml` workflow drives publish on `v*` tag
+- [x] Commands: `analyze`, `demo`, `diff`, `score`, `audit`, `compare` + `--version`/`--help`
+- [x] ASCII + JSON output with mandatory ±40% accuracy disclosure
+- [x] `--share` opt-in upload to `https://sandbox.sevro.dev/api/v1/share` over HTTPS with 5 s timeout and graceful offline fallback (overridable via `SEVRO_SHARE_URL`)
 
 ---
 
