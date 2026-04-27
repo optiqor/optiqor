@@ -1,40 +1,57 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
     - bodyclose
     - copyloopvar
+    - errcheck
     - errorlint
     - gocritic
     - gosec
+    - govet
+    - ineffassign
     - misspell
     - nilerr
     - prealloc
     - revive
+    - staticcheck
     - unconvert
     - unparam
-
-linters-settings:
-  gosec:
-    excludes:
-      - G104   # let errcheck handle unhandled errors
-  errcheck:
-    check-type-assertions: true
-  gocritic:
-    enabled-tags: [diagnostic, performance, style]
+    - unused
+  settings:
+    errcheck:
+      check-type-assertions: true
+    gocritic:
+      enabled-tags: [diagnostic, performance, style]
+      disabled-checks:
+        # Many domain types (parser.Workload, Config snapshots, signed
+        # billing rows, GDPR DSAR requests) are intentionally passed by
+        # value to keep them immutable across goroutines. Switching to
+        # pointer would weaken those contracts.
+        - hugeParam
+        - rangeValCopy
+    gosec:
+      excludes:
+        - G104  # let errcheck handle unhandled errors
+    revive:
+      rules:
+        # Group-comment style is the project convention: a single
+        # descriptive paragraph above the const/var block, not a
+        # leading-identifier docstring on every member. Disable the
+        # exported-identifier comment requirement since it conflicts
+        # with that convention; type-level docstrings still pass.
+        - name: exported
+          disabled: true
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [gosec, errcheck]
 
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters: [gosec, errcheck]
   max-issues-per-linter: 0
   max-same-issues: 0
