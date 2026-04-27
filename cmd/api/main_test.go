@@ -30,7 +30,7 @@ func silentLogger() *slog.Logger {
 func TestHealthz(t *testing.T) {
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -43,7 +43,7 @@ func TestReadyz_AllOK(t *testing.T) {
 
 	mux := buildMux(r, silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -67,7 +67,7 @@ func TestReadyz_Failing(t *testing.T) {
 
 	mux := buildMux(r, silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
@@ -96,7 +96,7 @@ func TestReadyz_Failing(t *testing.T) {
 func TestRequestID_Generated(t *testing.T) {
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
-	withRequestID(mux).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	withRequestID(mux).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody))
 	if got := rec.Header().Get("X-Request-ID"); got == "" {
 		t.Fatal("X-Request-ID should be generated when missing")
 	}
@@ -104,7 +104,7 @@ func TestRequestID_Generated(t *testing.T) {
 
 func TestRequestID_Echoed(t *testing.T) {
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
 	req.Header.Set("X-Request-ID", "abc-123")
 	rec := httptest.NewRecorder()
 	withRequestID(mux).ServeHTTP(rec, req)
@@ -126,7 +126,7 @@ func TestReadyz_TimeoutNotPanicking(t *testing.T) {
 
 	mux := buildMux(r, silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
 	if rec.Body.Len() == 0 {
 		t.Fatal("body should not be empty")
 	}
@@ -198,7 +198,7 @@ func TestGitHubWebhook_DevModeAcceptsUnsigned(t *testing.T) {
 }
 
 func TestHeaderTenantExtractor_Valid(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
 	req.Header.Set("X-Sevro-Tenant", "tenant-1")
 	req.Header.Set("X-Sevro-Workspace", "ws-1")
 	t1, err := HeaderTenantExtractor(req)
@@ -211,7 +211,7 @@ func TestHeaderTenantExtractor_Valid(t *testing.T) {
 }
 
 func TestHeaderTenantExtractor_Empty(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
 	if _, err := HeaderTenantExtractor(req); !errors.Is(err, tenancy.ErrNoTenant) {
 		t.Fatalf("expected ErrNoTenant, got %v", err)
 	}
@@ -230,7 +230,7 @@ func TestRequireTenant_Allows(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	}))
-	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
 	req.Header.Set("X-Sevro-Tenant", "t1")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -246,7 +246,7 @@ func TestRequireTenant_Rejects(t *testing.T) {
 	h := requireTenant(HeaderTenantExtractor, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("inner handler should NOT be reached")
 	}))
-	req := httptest.NewRequest(http.MethodGet, "/x", nil) // no tenant header
+	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody) // no tenant header
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
@@ -261,7 +261,7 @@ func TestMetrics_ExposesRegistry(t *testing.T) {
 
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, reg)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -278,7 +278,7 @@ func TestPanicRecovery_Returns500AndDoesNotPropagate(t *testing.T) {
 	wrapped := withPanicRecovery(silentLogger(), panicker)
 
 	rec := httptest.NewRecorder()
-	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", http.NoBody))
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
@@ -295,7 +295,7 @@ func TestPanicRecovery_PassesThroughWhenNoPanic(t *testing.T) {
 	})
 	wrapped := withPanicRecovery(silentLogger(), ok)
 	rec := httptest.NewRecorder()
-	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", http.NoBody))
 	if rec.Code != http.StatusTeapot {
 		t.Fatalf("status = %d, want 418", rec.Code)
 	}
@@ -316,7 +316,7 @@ func TestAccessLog_RecordsCounterAndLatency(t *testing.T) {
 	wrapped := withAccessLog(silentLogger(), requests, latency, inner)
 
 	rec := httptest.NewRecorder()
-	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", http.NoBody))
 
 	if got := requests.Value(); got != 1 {
 		t.Errorf("requests counter = %v, want 1", got)
@@ -353,7 +353,7 @@ func TestRecordingWriter_DoesNotDoubleWriteHeader(t *testing.T) {
 func TestGitHubOAuthCallback_RequiresCode(t *testing.T) {
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/oauth/github/callback", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/oauth/github/callback", http.NoBody))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
@@ -362,7 +362,7 @@ func TestGitHubOAuthCallback_RequiresCode(t *testing.T) {
 func TestGitHubOAuthCallback_AcceptsCode(t *testing.T) {
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/oauth/github/callback?state=abc&code=xyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/oauth/github/callback?state=abc&code=xyz", http.NoBody)
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -378,14 +378,14 @@ func TestPProf_GatedByAdminToken(t *testing.T) {
 
 	// no header → 401
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("missing token: status = %d, want 401", rec.Code)
 	}
 
 	// wrong header → 401
 	rec = httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody)
 	req.Header.Set("X-Admin-Token", "wrong")
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
@@ -394,7 +394,7 @@ func TestPProf_GatedByAdminToken(t *testing.T) {
 
 	// correct header → 200 (the index handler)
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil)
+	req = httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody)
 	req.Header.Set("X-Admin-Token", "secret-token")
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

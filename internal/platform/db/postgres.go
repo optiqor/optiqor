@@ -23,7 +23,7 @@ const TenantWorkspaceStmtSQL = `SELECT set_config('app.tenant_id', $1, true), se
 //
 // If the tenancy.Context has a workspace id set, the workspace GUC is
 // bound too.
-func TenantBindArgs(t tenancy.Context) (string, []any, error) {
+func TenantBindArgs(t tenancy.Context) (query string, args []any, err error) {
 	if err := t.Validate(); err != nil {
 		return "", nil, err
 	}

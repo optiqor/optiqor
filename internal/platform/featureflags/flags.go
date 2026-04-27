@@ -105,7 +105,7 @@ func (noopProvider) BoolValue(_ context.Context, _ string, def bool, _ EvalConte
 	return def
 }
 
-func (noopProvider) StringValue(_ context.Context, _ string, def string, _ EvalContext) string {
+func (noopProvider) StringValue(_ context.Context, _, def string, _ EvalContext) string {
 	return def
 }
 
@@ -139,7 +139,7 @@ func (s *StaticProvider) BoolValue(_ context.Context, flag string, def bool, _ E
 	return def
 }
 
-func (s *StaticProvider) StringValue(_ context.Context, flag string, def string, _ EvalContext) string {
+func (s *StaticProvider) StringValue(_ context.Context, flag, def string, _ EvalContext) string {
 	if v, ok := s.Strings[flag]; ok {
 		return v
 	}

@@ -51,7 +51,7 @@ func TestCapture_NilErrorIsNoop(t *testing.T) {
 	}
 }
 
-func TestSetReporter_NilFallsBackToNoop(t *testing.T) {
+func TestSetReporter_NilFallsBackToNoop(_ *testing.T) {
 	prev := Reporter()
 	defer SetReporter(prev)
 

@@ -168,10 +168,10 @@ func stripComments(s string) string {
 }
 
 // truncateLongFields walks line by line; any line whose length exceeds
-// max is cut to max + " …<truncated>". Returns the modified string and
-// whether any truncation happened.
-func truncateLongFields(s string, max int) (string, bool) {
-	if max <= 0 {
+// maxLen is cut to maxLen + " …<truncated>". Returns the modified string
+// and whether any truncation happened.
+func truncateLongFields(s string, maxLen int) (string, bool) {
+	if maxLen <= 0 {
 		return s, false
 	}
 	var b strings.Builder
@@ -180,11 +180,11 @@ func truncateLongFields(s string, max int) (string, bool) {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		if len(line) <= max {
+		if len(line) <= maxLen {
 			b.WriteString(line)
 			continue
 		}
-		b.WriteString(line[:max])
+		b.WriteString(line[:maxLen])
 		b.WriteString(" …<truncated>")
 		truncated = true
 	}

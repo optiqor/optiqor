@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -101,7 +102,7 @@ func TestRegistry_Handler(t *testing.T) {
 	r := NewRegistry()
 	r.NewCounter("c", "", nil).Inc()
 	rec := httptest.NewRecorder()
-	r.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+	r.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody))
 	if rec.Code != 200 {
 		t.Fatalf("status = %d", rec.Code)
 	}

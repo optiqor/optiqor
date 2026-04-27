@@ -157,7 +157,7 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 
 // envInt is reserved for future numeric config; kept here so the
 // config package is self-contained as more fields land.
-func envInt(key string, fallback int) int { //nolint:unused
+func envInt(key string, fallback int) int { //nolint:unused // reserved for future numeric config fields
 	v := os.Getenv(key)
 	if v == "" {
 		return fallback

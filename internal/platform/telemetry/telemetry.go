@@ -121,10 +121,10 @@ func (r *Registry) WriteText(w io.Writer) error {
 	for _, k := range cnames {
 		c := r.counters[k]
 		if c.help != "" {
-			fmt.Fprintf(w, "# HELP %s %s\n", c.name, c.help)
+			_, _ = fmt.Fprintf(w, "# HELP %s %s\n", c.name, c.help)
 		}
-		fmt.Fprintf(w, "# TYPE %s counter\n", c.name)
-		fmt.Fprintf(w, "%s%s %g\n", c.name, formatLabels(c.labels), c.Value())
+		_, _ = fmt.Fprintf(w, "# TYPE %s counter\n", c.name)
+		_, _ = fmt.Fprintf(w, "%s%s %g\n", c.name, formatLabels(c.labels), c.Value())
 	}
 
 	hnames := make([]string, 0, len(r.histograms))
@@ -135,22 +135,22 @@ func (r *Registry) WriteText(w io.Writer) error {
 	for _, k := range hnames {
 		h := r.histograms[k]
 		if h.help != "" {
-			fmt.Fprintf(w, "# HELP %s %s\n", h.name, h.help)
+			_, _ = fmt.Fprintf(w, "# HELP %s %s\n", h.name, h.help)
 		}
-		fmt.Fprintf(w, "# TYPE %s histogram\n", h.name)
+		_, _ = fmt.Fprintf(w, "# TYPE %s histogram\n", h.name)
 		snap := h.Snapshot()
 		// Cumulative counts per Prometheus convention.
 		var cum uint64
 		for i, b := range snap.Boundaries {
 			cum += snap.Counts[i]
 			labels := mergeLabels(h.labels, "le", fmt.Sprintf("%g", b))
-			fmt.Fprintf(w, "%s_bucket%s %d\n", h.name, formatLabels(labels), cum)
+			_, _ = fmt.Fprintf(w, "%s_bucket%s %d\n", h.name, formatLabels(labels), cum)
 		}
 		cum += snap.Counts[len(snap.Counts)-1]
 		labels := mergeLabels(h.labels, "le", "+Inf")
-		fmt.Fprintf(w, "%s_bucket%s %d\n", h.name, formatLabels(labels), cum)
-		fmt.Fprintf(w, "%s_sum%s %g\n", h.name, formatLabels(h.labels), snap.Sum)
-		fmt.Fprintf(w, "%s_count%s %d\n", h.name, formatLabels(h.labels), snap.Count)
+		_, _ = fmt.Fprintf(w, "%s_bucket%s %d\n", h.name, formatLabels(labels), cum)
+		_, _ = fmt.Fprintf(w, "%s_sum%s %g\n", h.name, formatLabels(h.labels), snap.Sum)
+		_, _ = fmt.Fprintf(w, "%s_count%s %d\n", h.name, formatLabels(h.labels), snap.Count)
 	}
 	return nil
 }

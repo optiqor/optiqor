@@ -39,7 +39,7 @@ func (noopReporter) Flush(_ int) bool                                        { r
 // Capture() at top level; tests can swap reporters via SetReporter.
 var (
 	reporterMu      sync.RWMutex
-	currentReporter ErrorReporter = NoopReporter()
+	currentReporter = NoopReporter()
 )
 
 // SetReporter swaps the global ErrorReporter. Returns the previous
