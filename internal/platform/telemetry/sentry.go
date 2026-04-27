@@ -38,8 +38,8 @@ func (noopReporter) Flush(_ int) bool                                        { r
 // reporterMu guards the package-global reporter. Domain code calls
 // Capture() at top level; tests can swap reporters via SetReporter.
 var (
-	reporterMu       sync.RWMutex
-	currentReporter  ErrorReporter = NoopReporter()
+	reporterMu      sync.RWMutex
+	currentReporter ErrorReporter = NoopReporter()
 )
 
 // SetReporter swaps the global ErrorReporter. Returns the previous
@@ -80,8 +80,8 @@ func FlushReporter(timeoutMs int) bool {
 // requires. Phase 1 surface; the adapter reads this at boot.
 type SentryConfig struct {
 	DSN         string
-	Environment string // dev / staging / prod
-	Release     string // e.g. "api@1.4.2"
+	Environment string  // dev / staging / prod
+	Release     string  // e.g. "api@1.4.2"
 	SampleRate  float64 // 0..1; default 1
 }
 

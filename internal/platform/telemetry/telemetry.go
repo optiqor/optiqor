@@ -181,9 +181,9 @@ func (noopTracer) Start(ctx context.Context, _ string) (context.Context, Span) {
 
 type noopSpan struct{}
 
-func (noopSpan) End()                       {}
+func (noopSpan) End()                         {}
 func (noopSpan) SetAttribute(_ string, _ any) {}
-func (noopSpan) RecordError(_ error)         {}
+func (noopSpan) RecordError(_ error)          {}
 
 // ---- internals ----
 

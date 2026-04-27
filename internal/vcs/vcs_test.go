@@ -85,10 +85,10 @@ func TestGitHub_VerifyWebhook_Tampered(t *testing.T) {
 
 func TestGitHub_VerifyWebhook_BadHeader(t *testing.T) {
 	cases := []string{
-		"",                       // empty
-		"md5=abc",                // wrong algo
-		"sha256=not-hex",         // unhex
-		"sha256=",                // empty digest
+		"",               // empty
+		"md5=abc",        // wrong algo
+		"sha256=not-hex", // unhex
+		"sha256=",        // empty digest
 	}
 	for _, h := range cases {
 		err := NewGitHub().VerifyWebhook([]byte("s"), h, []byte("b"))

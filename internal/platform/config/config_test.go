@@ -12,7 +12,7 @@ func TestEnv_Valid(t *testing.T) {
 		EnvStaging: true,
 		EnvProd:    true,
 		Env(""):    false,
-		Env("qa"): false,
+		Env("qa"):  false,
 	}
 	for e, want := range cases {
 		if got := e.Valid(); got != want {

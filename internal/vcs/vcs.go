@@ -48,26 +48,26 @@ type PullRequest struct {
 type PRState string
 
 const (
-	PRStateOpen        PRState = "open"
-	PRStateMerged      PRState = "merged"
-	PRStateClosed      PRState = "closed"
-	PRStateRolledBack  PRState = "rolled-back"
+	PRStateOpen       PRState = "open"
+	PRStateMerged     PRState = "merged"
+	PRStateClosed     PRState = "closed"
+	PRStateRolledBack PRState = "rolled-back"
 )
 
 // Comment is the body posted under a PR. CommentID is provider-assigned
 // after creation; callers store it so we can edit instead of re-posting.
 type Comment struct {
-	ID    string
-	Body  string
+	ID   string
+	Body string
 }
 
 // OpenPRRequest tells a provider to open a PR/MR with an Apply Fix diff.
 type OpenPRRequest struct {
-	Repo        Repo
-	BaseBranch  string
-	HeadBranch  string
-	Title       string
-	Body        string
+	Repo       Repo
+	BaseBranch string
+	HeadBranch string
+	Title      string
+	Body       string
 	// FilePatches keyed by repo-relative path; raw new file contents.
 	FilePatches map[string][]byte
 	Labels      []string

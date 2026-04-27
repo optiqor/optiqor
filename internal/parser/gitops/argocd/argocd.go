@@ -62,10 +62,10 @@ func Parse(r io.Reader) ([]gitops.Source, error) {
 // at the depth we care about. Fields outside this set are tolerated
 // but ignored.
 type applicationDoc struct {
-	APIVersion string             `yaml:"apiVersion"`
-	Kind       string             `yaml:"kind"`
-	Metadata   metadata           `yaml:"metadata"`
-	Spec       applicationSpec    `yaml:"spec"`
+	APIVersion string          `yaml:"apiVersion"`
+	Kind       string          `yaml:"kind"`
+	Metadata   metadata        `yaml:"metadata"`
+	Spec       applicationSpec `yaml:"spec"`
 }
 
 type metadata struct {
@@ -74,8 +74,8 @@ type metadata struct {
 }
 
 type applicationSpec struct {
-	Source      *sourceSpec   `yaml:"source"`
-	Sources     []sourceSpec  `yaml:"sources"`
+	Source      *sourceSpec     `yaml:"source"`
+	Sources     []sourceSpec    `yaml:"sources"`
 	Destination destinationSpec `yaml:"destination"`
 }
 

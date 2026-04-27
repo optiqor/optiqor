@@ -22,7 +22,7 @@ type OwnerRef struct {
 	APIVersion string // e.g. "kafka.strimzi.io/v1beta2"
 	Kind       string // e.g. "Kafka"
 	Name       string
-	Controller bool   // only the controlling owner reports the operator chain
+	Controller bool // only the controlling owner reports the operator chain
 }
 
 // Workload is a stable, K8s-API-shaped tuple. We only need enough to

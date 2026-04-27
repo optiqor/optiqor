@@ -55,11 +55,11 @@ func Index(s Stage) int {
 // SLO targets, in product. Phase 5 enforces these as P1 incidents
 // when violated for any tenant.
 const (
-	SLOSandboxLatency      = 3 * time.Second   // sandbox p95
-	SLOInstallToFirstPR    = 10 * time.Minute  // install → first PR comment
-	SLOInstallToFirstReco  = 30 * time.Minute  // agent install → first recommendation
+	SLOSandboxLatency        = 3 * time.Second     // sandbox p95
+	SLOInstallToFirstPR      = 10 * time.Minute    // install → first PR comment
+	SLOInstallToFirstReco    = 30 * time.Minute    // agent install → first recommendation
 	SLOInstallToFirstReceipt = 35 * 24 * time.Hour // 35 days p50
-	SLOActivationWindow    = 14 * 24 * time.Hour  // window for "activated" definition
+	SLOActivationWindow      = 14 * 24 * time.Hour // window for "activated" definition
 )
 
 // State is the per-tenant onboarding record. Persisted as JSONB on

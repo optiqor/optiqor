@@ -67,14 +67,14 @@ type Config struct {
 // (cmd/*/main.go) should treat this as a fatal startup error.
 func Load() (Config, error) {
 	c := Config{
-		Env:           Env(envOr("SEVRO_ENV", "dev")),
-		LogLevel:      envOr("SEVRO_LOG_LEVEL", "info"),
-		HTTPAddr:      envOr("SEVRO_HTTP_ADDR", ":8080"),
-		MetricsAddr:   envOr("SEVRO_METRICS_ADDR", ":9090"),
-		PostgresDSN:   os.Getenv("SEVRO_POSTGRES_DSN"),
-		RedisAddr:     envOr("SEVRO_REDIS_ADDR", "localhost:6379"),
-		TemporalHost:  envOr("SEVRO_TEMPORAL_HOSTPORT", "localhost:7233"),
-		AnthropicAPIKey: os.Getenv("SEVRO_ANTHROPIC_API_KEY"),
+		Env:                    Env(envOr("SEVRO_ENV", "dev")),
+		LogLevel:               envOr("SEVRO_LOG_LEVEL", "info"),
+		HTTPAddr:               envOr("SEVRO_HTTP_ADDR", ":8080"),
+		MetricsAddr:            envOr("SEVRO_METRICS_ADDR", ":9090"),
+		PostgresDSN:            os.Getenv("SEVRO_POSTGRES_DSN"),
+		RedisAddr:              envOr("SEVRO_REDIS_ADDR", "localhost:6379"),
+		TemporalHost:           envOr("SEVRO_TEMPORAL_HOSTPORT", "localhost:7233"),
+		AnthropicAPIKey:        os.Getenv("SEVRO_ANTHROPIC_API_KEY"),
 		GitHubAppID:            os.Getenv("SEVRO_GITHUB_APP_ID"),
 		GitHubAppClientID:      os.Getenv("SEVRO_GITHUB_APP_CLIENT_ID"),
 		GitHubAppClientSecret:  os.Getenv("SEVRO_GITHUB_APP_CLIENT_SECRET"),

@@ -88,11 +88,11 @@ const (
 // ExportResult points to the produced export artefact and the
 // cryptographic provenance the caller serves on the verification page.
 type ExportResult struct {
-	URL          string    // S3 presigned URL or local file path
-	SizeBytes    int64
-	SHA256       []byte
-	GeneratedAt  time.Time
-	GeneratedBy  string // backend version that produced the export
+	URL         string // S3 presigned URL or local file path
+	SizeBytes   int64
+	SHA256      []byte
+	GeneratedAt time.Time
+	GeneratedBy string // backend version that produced the export
 }
 
 // EraseRequest carries the inputs to a DSAR erase run.
@@ -105,8 +105,8 @@ type EraseRequest struct {
 
 // EraseResult records what was scheduled for deletion.
 type EraseResult struct {
-	TombstoneID    string
-	PurgeAfter     time.Time
+	TombstoneID     string
+	PurgeAfter      time.Time
 	RecordsAffected int64
 }
 

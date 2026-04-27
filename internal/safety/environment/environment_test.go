@@ -29,15 +29,15 @@ func TestClassify_CustomRuleWins(t *testing.T) {
 
 func TestClassify_ClusterNamePatterns(t *testing.T) {
 	cases := map[string]Environment{
-		"acme-prod":         EnvProd,
+		"acme-prod":          EnvProd,
 		"production-cluster": EnvProd,
-		"prod-eu":           EnvProd,
-		"acme-staging":      EnvStaging,
-		"acme-stg":          EnvStaging,
-		"staging-cluster":   EnvStaging,
-		"acme-dev":          EnvDev,
-		"dev-eu":            EnvDev,
-		"random-name":       EnvUnknown,
+		"prod-eu":            EnvProd,
+		"acme-staging":       EnvStaging,
+		"acme-stg":           EnvStaging,
+		"staging-cluster":    EnvStaging,
+		"acme-dev":           EnvDev,
+		"dev-eu":             EnvDev,
+		"random-name":        EnvUnknown,
 	}
 	for name, want := range cases {
 		got := Classify(name, nil, nil, "ns", nil)

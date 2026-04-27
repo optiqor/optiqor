@@ -115,8 +115,8 @@ func TestClassify_CycleGuard(t *testing.T) {
 	}
 	// Self-cycle: ReplicaSet a → Deployment d → ReplicaSet a (cycle).
 	resolve := resolverFromMap(map[string]OwnerRef{
-		"apps/v1/ReplicaSet/a":  {APIVersion: "apps/v1", Kind: "Deployment", Name: "d", Controller: true},
-		"apps/v1/Deployment/d":  {APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "a", Controller: true},
+		"apps/v1/ReplicaSet/a": {APIVersion: "apps/v1", Kind: "Deployment", Name: "d", Controller: true},
+		"apps/v1/Deployment/d": {APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "a", Controller: true},
 	})
 	got := Classify(w, resolve)
 	if got.Direct || got.Operator != "" {
@@ -144,10 +144,10 @@ func TestClassify_FirstControllerWins(t *testing.T) {
 
 func TestApiGroup(t *testing.T) {
 	cases := map[string]string{
-		"apps/v1":                    "apps",
-		"v1":                         "",
-		"kafka.strimzi.io/v1beta2":   "kafka.strimzi.io",
-		"monitoring.coreos.com/v1":   "monitoring.coreos.com",
+		"apps/v1":                  "apps",
+		"v1":                       "",
+		"kafka.strimzi.io/v1beta2": "kafka.strimzi.io",
+		"monitoring.coreos.com/v1": "monitoring.coreos.com",
 	}
 	for in, want := range cases {
 		if got := apiGroup(in); got != want {

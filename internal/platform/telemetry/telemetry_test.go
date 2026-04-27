@@ -165,10 +165,10 @@ func TestHistogram_RaceSafe(t *testing.T) {
 
 func TestEscapeLabelValue(t *testing.T) {
 	cases := map[string]string{
-		`hello`:        `hello`,
-		`a"b`:          `a\"b`,
-		`a\b`:          `a\\b`,
-		"line\nbreak":  `line\nbreak`,
+		`hello`:       `hello`,
+		`a"b`:         `a\"b`,
+		`a\b`:         `a\\b`,
+		"line\nbreak": `line\nbreak`,
 	}
 	for in, want := range cases {
 		if got := escapeLabelValue(in); got != want {

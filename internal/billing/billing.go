@@ -64,19 +64,19 @@ func (w Window) Validate() error {
 // LineItem is a normalised view of one bill row, regardless of cloud.
 // Concrete sources translate their native shape into LineItems.
 type LineItem struct {
-	ClusterID string
-	WorkloadID string // optional; "" if attribution is below cluster level
-	Resource   string // e.g. "ec2:m5.large", "hetzner:CCX13", "capacity:cpu"
-	UsageQty   float64
-	UnitUSDCents int64 // unit cost in cents; 0 if not priced (Capacity tier)
+	ClusterID     string
+	WorkloadID    string // optional; "" if attribution is below cluster level
+	Resource      string // e.g. "ec2:m5.large", "hetzner:CCX13", "capacity:cpu"
+	UsageQty      float64
+	UnitUSDCents  int64 // unit cost in cents; 0 if not priced (Capacity tier)
 	TotalUSDCents int64
-	Currency   string // ISO 4217; "USD" by default; non-USD only for non-AWS sources
+	Currency      string // ISO 4217; "USD" by default; non-USD only for non-AWS sources
 }
 
 // Result is what a Source returns for a query window.
 type Result struct {
-	Source   string     // implementation name, e.g. "aws-cur"
-	Cloud    Cloud      // empty for Capacity sources
+	Source   string // implementation name, e.g. "aws-cur"
+	Cloud    Cloud  // empty for Capacity sources
 	Tier     Tier
 	Window   Window
 	Items    []LineItem
