@@ -122,9 +122,9 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 > **Backend scope only.** CLI-side parser, cost engine, shareable-URL hashing, and the `--share` upload client all ship in the [sevro repo](https://github.com/lowplane/sevro); see [ROADMAP.md](ROADMAP.md) for the cross-repo view. The backend Phase 2 work is the sandbox **receiver** — the public HTTP endpoint that accepts uploaded analyses, deduplicates them by hash, and renders a stable share URL.
 
-- [ ] `internal/parser` — Helm values + templates parser (server-side; the CLI re-implements this so the binary is single-source, the SaaS reuses for sandbox uploads)
+- [ ] `internal/parser` — Helm values + templates parser. **Values normalisation is reused from `github.com/lowplane/sevro/pkg/parser`** (single source of truth — same `Workload` struct the CLI's detectors run against). This package owns only what the SaaS needs beyond static values: rendered-template parsing, Kustomize overlays, ArgoCD `Application`/Flux `HelmRelease` resolution, and the multi-source bundling for sandbox uploads
 - [ ] `internal/sandbox/handlers` — public sandbox API: `POST /api/v1/share` (accepts `X-Sevro-Hash`-headered upload), `GET /r/{hash}` (HTML render), `GET /api/v1/r/{hash}` (JSON)
-- [ ] `internal/cost` — sandbox-grade rule-based engine v0 (mirrors the CLI's 30 detectors so server-issued Receipts and shareable analyses cite the same finding library)
+- [ ] `internal/cost` — sandbox-grade rule-based engine v0 (thin wrapper around `github.com/lowplane/sevro/pkg/rules`; server-issued Receipts and shareable analyses cite the exact same `DetectorID`s the CLI does — no fork)
 - [ ] Frontend framework decision (Week 3 Day 1) → ADR — Next.js / Remix / Vite+React
 - [ ] `web/` — sandbox UI: paste textbox, results panel, ±40% accuracy banner, share button
 - [ ] Shareable report storage — S3 bucket `sevro-prod-sandbox` already provisioned in Phase 1 Terraform with KMS + 30-day lifecycle + CRR; receiver writes content-addressed objects keyed by the SHA-256 the CLI sends in `X-Sevro-Hash`
@@ -140,7 +140,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 > **Backend scope is the LLM-driven Apply Fix path.** The deterministic 30-detector library is the CLI's responsibility (per the OSS playbook hard rule: no LLM in the CLI); the backend imports/mirrors the same rule definitions so server-issued recommendations cite the exact same detector IDs.
 
-- [ ] **30 detectors mirrored server-side** — the canonical implementations live in the CLI (`github.com/lowplane/sevro/internal/rules`). Backend imports the catalogue for SaaS analysis runs; new detectors land in CLI first, backend follows automatically via vendored module + golden parity tests
+- [x] **30 detectors mirrored server-side** — canonical implementations live in the CLI's public `pkg/rules` library and are imported directly via `go.mod` (`github.com/lowplane/sevro/pkg/rules` + `github.com/lowplane/sevro/pkg/parser`). No fork, no duplication — backend's `internal/cost` calls `rules.Run(workloads, rules.All())` against the same struct types the CLI emits. New detectors land in the CLI's `pkg/rules` first; a `go get -u github.com/lowplane/sevro` in the backend picks them up automatically. Golden parity tests in `tests/integration/cli_parity_test.go` assert the CLI binary and the backend produce the same `Finding` set for the canonical fixtures
   - Source: 15 cost + 15 security detectors, CIS Kubernetes Benchmark / NSA hardening guide aligned (see [ROADMAP.md](ROADMAP.md) Phase 3 detector tables)
 - [ ] `internal/confidence` — Low/Med/High banding (server-side helper that the LLM augmentation layer down-ranks based on validator-rejection signals; CLI has the qualitative-only equivalent)
 - [ ] `internal/agent/llm` — Anthropic SDK wrapper with prompt caching (50 % hit-rate target Year 1)
