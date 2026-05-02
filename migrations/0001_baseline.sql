@@ -1,7 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 --
--- Baseline schema for Sevro.
+-- Baseline schema for Optiqor.
 --
 -- Models the four-level multi-cluster hierarchy that drives every
 -- domain query and the audit / receipts surface. The schema is
@@ -34,11 +34,11 @@ CREATE EXTENSION IF NOT EXISTS citext;
 -- absent so local goose runs work too.
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sevro_app') THEN
-        CREATE ROLE sevro_app NOLOGIN;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'optiqor_app') THEN
+        CREATE ROLE optiqor_app NOLOGIN;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sevro_migrator') THEN
-        CREATE ROLE sevro_migrator NOLOGIN BYPASSRLS;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'optiqor_migrator') THEN
+        CREATE ROLE optiqor_migrator NOLOGIN BYPASSRLS;
     END IF;
 END
 $$;
@@ -301,12 +301,12 @@ CREATE POLICY tenant_isolation ON audit_log
 -- Read-only-by-default insert protection on audit_log: rows can be
 -- inserted but not updated or deleted by the app role.
 REVOKE UPDATE, DELETE ON audit_log FROM PUBLIC;
-GRANT INSERT, SELECT ON audit_log TO sevro_app;
+GRANT INSERT, SELECT ON audit_log TO optiqor_app;
 
 -- App role only sees what RLS allows.
-GRANT USAGE ON SCHEMA public TO sevro_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO sevro_app;
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO sevro_app;
+GRANT USAGE ON SCHEMA public TO optiqor_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO optiqor_app;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO optiqor_app;
 
 -- +goose StatementEnd
 
@@ -324,6 +324,6 @@ DROP TABLE IF EXISTS clusters                CASCADE;
 DROP TABLE IF EXISTS workspaces              CASCADE;
 DROP TABLE IF EXISTS tenants                 CASCADE;
 
-DROP ROLE IF EXISTS sevro_app;
-DROP ROLE IF EXISTS sevro_migrator;
+DROP ROLE IF EXISTS optiqor_app;
+DROP ROLE IF EXISTS optiqor_migrator;
 -- +goose StatementEnd

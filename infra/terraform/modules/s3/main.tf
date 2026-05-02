@@ -1,4 +1,4 @@
-# S3 module — Sevro buckets with KMS encryption, versioning, lifecycle,
+# S3 module — Optiqor buckets with KMS encryption, versioning, lifecycle,
 # public-access block, and Cross-Region Replication for the
 # Receipts and sandbox buckets (DR baseline).
 

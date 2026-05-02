@@ -1,4 +1,4 @@
-# kube-prometheus-stack values for the Sevro observability namespace.
+# kube-prometheus-stack values for the Optiqor observability namespace.
 # Tuned for ~3-engineer team SLOs in Phase 1; storage is reasonable but
 # not aggressive — ramp at the first $1M-ARR milestone.
 
@@ -23,11 +23,11 @@ prometheus:
     podMonitorSelectorNilUsesHelmValues: false
     ruleSelectorNilUsesHelmValues: false
     additionalScrapeConfigs:
-      - job_name: sevro-api
+      - job_name: optiqor-api
         kubernetes_sd_configs:
           - role: pod
             namespaces:
-              names: [sevro-system]
+              names: [optiqor-system]
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
             action: keep
@@ -35,11 +35,11 @@ prometheus:
           - source_labels: [__meta_kubernetes_pod_container_port_number]
             action: keep
             regex: "9090"
-      - job_name: sevro-worker
+      - job_name: optiqor-worker
         kubernetes_sd_configs:
           - role: pod
             namespaces:
-              names: [sevro-system]
+              names: [optiqor-system]
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
             action: keep

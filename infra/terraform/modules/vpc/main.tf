@@ -89,7 +89,7 @@ resource "aws_flow_log" "this" {
 }
 
 resource "aws_cloudwatch_log_group" "flow" {
-  name              = "/sevro/vpc/${var.name}/flow"
+  name              = "/optiqor/vpc/${var.name}/flow"
   retention_in_days = 90
 }
 

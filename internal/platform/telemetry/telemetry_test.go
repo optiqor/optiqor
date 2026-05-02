@@ -13,7 +13,7 @@ import (
 
 func TestCounter_Increments(t *testing.T) {
 	r := NewRegistry()
-	c := r.NewCounter("sevro_requests_total", "total requests", map[string]string{"service": "api"})
+	c := r.NewCounter("optiqor_requests_total", "total requests", map[string]string{"service": "api"})
 	c.Inc()
 	c.Inc()
 	c.Add(3.5)
@@ -37,7 +37,7 @@ func TestCounter_RegisterReturnsExisting(t *testing.T) {
 
 func TestHistogram_BucketsAndOverflow(t *testing.T) {
 	r := NewRegistry()
-	h := r.NewHistogram("sevro_latency_seconds", "request latency", nil, []float64{0.1, 0.5, 1, 2, 5})
+	h := r.NewHistogram("optiqor_latency_seconds", "request latency", nil, []float64{0.1, 0.5, 1, 2, 5})
 	for _, v := range []float64{0.05, 0.4, 0.6, 1.5, 6} {
 		h.Observe(v)
 	}
@@ -70,10 +70,10 @@ func TestHistogram_NonAscendingPanics(t *testing.T) {
 
 func TestRegistry_PrometheusText(t *testing.T) {
 	r := NewRegistry()
-	c := r.NewCounter("sevro_requests_total", "total requests", map[string]string{"method": "GET"})
+	c := r.NewCounter("optiqor_requests_total", "total requests", map[string]string{"method": "GET"})
 	c.Add(7)
 
-	h := r.NewHistogram("sevro_latency_seconds", "request latency", nil, []float64{0.1, 1})
+	h := r.NewHistogram("optiqor_latency_seconds", "request latency", nil, []float64{0.1, 1})
 	h.Observe(0.05)
 	h.Observe(2)
 
@@ -83,14 +83,14 @@ func TestRegistry_PrometheusText(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		`# HELP sevro_requests_total total requests`,
-		`# TYPE sevro_requests_total counter`,
-		`sevro_requests_total{method="GET"} 7`,
-		`# TYPE sevro_latency_seconds histogram`,
-		`sevro_latency_seconds_bucket{le="0.1"} 1`,
-		`sevro_latency_seconds_bucket{le="+Inf"}`,
-		`sevro_latency_seconds_sum 2.05`,
-		`sevro_latency_seconds_count 2`,
+		`# HELP optiqor_requests_total total requests`,
+		`# TYPE optiqor_requests_total counter`,
+		`optiqor_requests_total{method="GET"} 7`,
+		`# TYPE optiqor_latency_seconds histogram`,
+		`optiqor_latency_seconds_bucket{le="0.1"} 1`,
+		`optiqor_latency_seconds_bucket{le="+Inf"}`,
+		`optiqor_latency_seconds_sum 2.05`,
+		`optiqor_latency_seconds_count 2`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)

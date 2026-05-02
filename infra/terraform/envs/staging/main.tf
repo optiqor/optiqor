@@ -10,10 +10,10 @@ terraform {
     }
   }
   backend "s3" {
-    bucket         = "sevro-tfstate-staging"
+    bucket         = "optiqor-tfstate-staging"
     key            = "envs/staging/terraform.tfstate"
     region         = "us-east-2"
-    dynamodb_table = "sevro-tfstate-staging-lock"
+    dynamodb_table = "optiqor-tfstate-staging-lock"
     encrypt        = true
   }
 }
@@ -22,7 +22,7 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Project     = "sevro"
+      Project     = "optiqor"
       Environment = "staging"
       Tenant      = "shared"
       ManagedBy   = "terraform"
@@ -32,20 +32,20 @@ provider "aws" {
 
 module "kms" {
   source       = "../../modules/kms"
-  name         = "sevro-staging"
+  name         = "optiqor-staging"
   multi_region = false
 }
 
 module "vpc" {
   source = "../../modules/vpc"
-  name   = "sevro-staging"
+  name   = "optiqor-staging"
   cidr   = "10.20.0.0/16"
   azs    = ["us-east-2a", "us-east-2b", "us-east-2c"]
 }
 
 module "eks" {
   source             = "../../modules/eks"
-  name               = "sevro-staging"
+  name               = "optiqor-staging"
   kubernetes_version = "1.31"
   subnet_ids         = module.vpc.private_subnet_ids
   kms_key_arn        = module.kms.data_key_arn
@@ -54,7 +54,7 @@ module "eks" {
 
 module "rds" {
   source                   = "../../modules/rds-postgres"
-  name                     = "sevro-staging"
+  name                     = "optiqor-staging"
   vpc_id                   = module.vpc.vpc_id
   subnet_ids               = module.vpc.db_subnet_ids
   allow_security_group_ids = []
@@ -67,7 +67,7 @@ module "rds" {
 
 module "redis" {
   source                   = "../../modules/elasticache"
-  name                     = "sevro-staging"
+  name                     = "optiqor-staging"
   vpc_id                   = module.vpc.vpc_id
   subnet_ids               = module.vpc.private_subnet_ids
   allow_security_group_ids = []
@@ -77,22 +77,22 @@ module "redis" {
 
 module "s3_receipts" {
   source                       = "../../modules/s3"
-  name                         = "sevro-staging-receipts"
+  name                         = "optiqor-staging-receipts"
   kms_key_arn                  = module.kms.data_key_arn
   expire_noncurrent_after_days = 30
 }
 
 module "s3_sandbox" {
   source                       = "../../modules/s3"
-  name                         = "sevro-staging-sandbox"
+  name                         = "optiqor-staging-sandbox"
   kms_key_arn                  = module.kms.data_key_arn
   expire_noncurrent_after_days = 7
 }
 
 module "iam" {
   source                = "../../modules/iam"
-  name                  = "sevro-staging"
-  github_repos          = ["lowplane/backend"]
+  name                  = "optiqor-staging"
+  github_repos          = ["optiqor/backend"]
   eks_oidc_provider_arn = module.eks.oidc_provider_arn
   eks_oidc_provider_url = module.eks.oidc_provider_url
 }

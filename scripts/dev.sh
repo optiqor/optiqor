@@ -17,7 +17,7 @@ echo "==> bringing up local stack"
 docker compose up -d
 
 echo "==> waiting for postgres to be healthy"
-until docker compose exec -T postgres pg_isready -U sevro -d sevro >/dev/null 2>&1; do
+until docker compose exec -T postgres pg_isready -U optiqor -d optiqor >/dev/null 2>&1; do
   sleep 1
 done
 

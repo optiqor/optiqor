@@ -1,4 +1,4 @@
-// Command worker runs the Sevro Temporal worker.
+// Command worker runs the Optiqor Temporal worker.
 //
 // Workflows: PR analysis, Apply Fix generation, Receipt issuance,
 // Auto-Rollback monitoring, Cost Spike detection. Phase 1 wires
@@ -16,10 +16,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/lowplane/backend/internal/platform/config"
-	"github.com/lowplane/backend/internal/platform/logging"
-	"github.com/lowplane/backend/internal/worker"
-	"github.com/lowplane/backend/internal/worker/workflows"
+	"github.com/optiqor/backend/internal/platform/config"
+	"github.com/optiqor/backend/internal/platform/logging"
+	"github.com/optiqor/backend/internal/worker"
+	"github.com/optiqor/backend/internal/worker/workflows"
 )
 
 var version = "dev"

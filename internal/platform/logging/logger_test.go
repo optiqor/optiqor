@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 // decode parses a single JSON log line into a map.

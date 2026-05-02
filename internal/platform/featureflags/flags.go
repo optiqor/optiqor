@@ -12,7 +12,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 // Provider is what every feature-flag backend implements. The

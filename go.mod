@@ -1,4 +1,4 @@
-module github.com/lowplane/backend
+module github.com/optiqor/backend
 
 go 1.24
 

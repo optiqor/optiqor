@@ -18,7 +18,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/lowplane/backend/internal/parser/gitops"
+	"github.com/optiqor/backend/internal/parser/gitops"
 )
 
 // SupportedAPIVersions lists the ArgoCD API versions this reader

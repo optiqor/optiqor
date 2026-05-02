@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 func TestTenantBindArgs_RequiresTenant(t *testing.T) {

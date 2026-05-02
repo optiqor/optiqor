@@ -13,7 +13,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 // Field names emitted on every record. Stable so log indexing in Loki

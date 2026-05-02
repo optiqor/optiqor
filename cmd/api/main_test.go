@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lowplane/backend/internal/platform/healthz"
-	"github.com/lowplane/backend/internal/platform/telemetry"
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/platform/healthz"
+	"github.com/optiqor/backend/internal/platform/telemetry"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 // silentLogger is a slog logger that drops everything; used in every
@@ -199,8 +199,8 @@ func TestGitHubWebhook_DevModeAcceptsUnsigned(t *testing.T) {
 
 func TestHeaderTenantExtractor_Valid(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
-	req.Header.Set("X-Sevro-Tenant", "tenant-1")
-	req.Header.Set("X-Sevro-Workspace", "ws-1")
+	req.Header.Set("X-Optiqor-Tenant", "tenant-1")
+	req.Header.Set("X-Optiqor-Workspace", "ws-1")
 	t1, err := HeaderTenantExtractor(req)
 	if err != nil {
 		t.Fatalf("expected ok, got %v", err)
@@ -231,7 +231,7 @@ func TestRequireTenant_Allows(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
-	req.Header.Set("X-Sevro-Tenant", "t1")
+	req.Header.Set("X-Optiqor-Tenant", "t1")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if !called {
@@ -256,7 +256,7 @@ func TestRequireTenant_Rejects(t *testing.T) {
 
 func TestMetrics_ExposesRegistry(t *testing.T) {
 	reg := telemetry.NewRegistry()
-	c := reg.NewCounter("sevro_test_total", "test counter", nil)
+	c := reg.NewCounter("optiqor_test_total", "test counter", nil)
 	c.Add(7)
 
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, reg)
@@ -266,7 +266,7 @@ func TestMetrics_ExposesRegistry(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "sevro_test_total 7") {
+	if !strings.Contains(rec.Body.String(), "optiqor_test_total 7") {
 		t.Errorf("metrics body missing counter:\n%s", rec.Body.String())
 	}
 }
@@ -306,8 +306,8 @@ func TestPanicRecovery_PassesThroughWhenNoPanic(t *testing.T) {
 
 func TestAccessLog_RecordsCounterAndLatency(t *testing.T) {
 	reg := telemetry.NewRegistry()
-	requests := reg.NewCounter("sevro_http_requests_total", "", nil)
-	latency := reg.NewHistogram("sevro_http_request_duration_seconds", "", nil, []float64{0.1, 1})
+	requests := reg.NewCounter("optiqor_http_requests_total", "", nil)
+	latency := reg.NewHistogram("optiqor_http_request_duration_seconds", "", nil, []float64{0.1, 1})
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

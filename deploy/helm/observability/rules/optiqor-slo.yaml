@@ -1,4 +1,4 @@
-# Sevro SLO recording rules + alerts.
+# Optiqor SLO recording rules + alerts.
 #
 # These materialise the targets committed in backend/todo.md and the
 # strategy doc amendments so dashboards and PagerDuty integration both
@@ -12,68 +12,68 @@
 #   - Apply Fix success rate: > 85%
 
 groups:
-  - name: sevro_slo_recordings
+  - name: optiqor_slo_recordings
     interval: 30s
     rules:
       # API availability — fraction of non-5xx responses.
-      - record: sevro:api_availability:5m
+      - record: optiqor:api_availability:5m
         expr: |
           1 - (
-            sum(rate(sevro_http_requests_total{status=~"5.."}[5m]))
+            sum(rate(optiqor_http_requests_total{status=~"5.."}[5m]))
             /
-            sum(rate(sevro_http_requests_total[5m]))
+            sum(rate(optiqor_http_requests_total[5m]))
           )
 
       # API request latency — p95 over a rolling 5-minute window.
-      - record: sevro:api_request_duration_seconds:p95:5m
+      - record: optiqor:api_request_duration_seconds:p95:5m
         expr: |
           histogram_quantile(0.95,
-            sum by (le) (rate(sevro_http_request_duration_seconds_bucket[5m]))
+            sum by (le) (rate(optiqor_http_request_duration_seconds_bucket[5m]))
           )
 
       # PR-comment-pipeline latency — p95 across the whole flow.
-      - record: sevro:pr_comment_latency_seconds:p95:5m
+      - record: optiqor:pr_comment_latency_seconds:p95:5m
         expr: |
           histogram_quantile(0.95,
-            sum by (le) (rate(sevro_pr_comment_duration_seconds_bucket[5m]))
+            sum by (le) (rate(optiqor_pr_comment_duration_seconds_bucket[5m]))
           )
 
       # Sandbox latency — p95.
-      - record: sevro:sandbox_duration_seconds:p95:5m
+      - record: optiqor:sandbox_duration_seconds:p95:5m
         expr: |
           histogram_quantile(0.95,
-            sum by (le) (rate(sevro_sandbox_duration_seconds_bucket[5m]))
+            sum by (le) (rate(optiqor_sandbox_duration_seconds_bucket[5m]))
           )
 
       # LLM cost per PR — running 1h average.
-      - record: sevro:llm_cost_per_pr_usd:1h
+      - record: optiqor:llm_cost_per_pr_usd:1h
         expr: |
-          sum(increase(sevro_llm_cost_usd_total[1h]))
+          sum(increase(optiqor_llm_cost_usd_total[1h]))
           /
-          sum(increase(sevro_pr_analyzed_total[1h]))
+          sum(increase(optiqor_pr_analyzed_total[1h]))
 
       # Apply Fix success — fraction not auto-rolled-back within 7d.
-      - record: sevro:apply_fix_success_rate:7d
+      - record: optiqor:apply_fix_success_rate:7d
         expr: |
           1 - (
-            sum(increase(sevro_apply_fix_rollback_total[7d]))
+            sum(increase(optiqor_apply_fix_rollback_total[7d]))
             /
-            sum(increase(sevro_apply_fix_merged_total[7d]))
+            sum(increase(optiqor_apply_fix_merged_total[7d]))
           )
 
-  - name: sevro_slo_alerts
+  - name: optiqor_slo_alerts
     rules:
-      - alert: SevroAPIAvailabilityBelowSLO
-        expr: sevro:api_availability:5m < 0.995
+      - alert: OptiqorAPIAvailabilityBelowSLO
+        expr: optiqor:api_availability:5m < 0.995
         for: 10m
         labels:
           severity: critical
           slo: api-availability
         annotations:
-          summary: "Sevro API availability {{ $value | humanizePercentage }} (SLO 99.5%)"
+          summary: "Optiqor API availability {{ $value | humanizePercentage }} (SLO 99.5%)"
 
-      - alert: SevroPRCommentLatencyTooHigh
-        expr: sevro:pr_comment_latency_seconds:p95:5m > 45
+      - alert: OptiqorPRCommentLatencyTooHigh
+        expr: optiqor:pr_comment_latency_seconds:p95:5m > 45
         for: 10m
         labels:
           severity: warning
@@ -81,8 +81,8 @@ groups:
         annotations:
           summary: "PR comment p95 {{ $value }}s exceeds 45s target"
 
-      - alert: SevroSandboxLatencyTooHigh
-        expr: sevro:sandbox_duration_seconds:p95:5m > 3
+      - alert: OptiqorSandboxLatencyTooHigh
+        expr: optiqor:sandbox_duration_seconds:p95:5m > 3
         for: 5m
         labels:
           severity: warning
@@ -90,8 +90,8 @@ groups:
         annotations:
           summary: "Sandbox p95 {{ $value }}s exceeds 3s target"
 
-      - alert: SevroLLMCostPerPRTooHigh
-        expr: sevro:llm_cost_per_pr_usd:1h > 0.40
+      - alert: OptiqorLLMCostPerPRTooHigh
+        expr: optiqor:llm_cost_per_pr_usd:1h > 0.40
         for: 30m
         labels:
           severity: warning
@@ -99,8 +99,8 @@ groups:
         annotations:
           summary: "Cost/PR {{ $value | printf \"%.2f\" }} USD exceeds $0.40 target"
 
-      - alert: SevroApplyFixSuccessTooLow
-        expr: sevro:apply_fix_success_rate:7d < 0.85
+      - alert: OptiqorApplyFixSuccessTooLow
+        expr: optiqor:apply_fix_success_rate:7d < 0.85
         for: 1h
         labels:
           severity: critical

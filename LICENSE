@@ -1,11 +1,11 @@
-Copyright (c) 2026 Sevro, Inc.
+Copyright (c) 2026 Optiqor, Inc.
 
 All rights reserved.
 
 This source code and accompanying documentation are the proprietary and
-confidential information of Sevro, Inc. Unauthorized copying, modification,
+confidential information of Optiqor, Inc. Unauthorized copying, modification,
 distribution, or use of this software, via any medium, is strictly prohibited
-without the express written consent of Sevro, Inc.
+without the express written consent of Optiqor, Inc.
 
 Exception: the in-cluster agent located at `cmd/agent/` and any code in
 `internal/` packages that it imports is licensed under the Apache License,

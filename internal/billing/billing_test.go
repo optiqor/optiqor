@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 func TestWindow_Validate(t *testing.T) {

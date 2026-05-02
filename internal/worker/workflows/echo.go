@@ -1,4 +1,4 @@
-// Package workflows holds the registered Sevro workflows. Phase 1
+// Package workflows holds the registered Optiqor workflows. Phase 1
 // ships an Echo workflow that exercises the dispatcher end-to-end so
 // the cmd/worker boot path is observable in tests and during local
 // `make dev`. Real workflows (PR analysis, Apply Fix, Receipt
@@ -10,8 +10,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/lowplane/backend/internal/tenancy"
-	"github.com/lowplane/backend/internal/worker"
+	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/worker"
 )
 
 // EchoName is the registered workflow name; stable wire format.

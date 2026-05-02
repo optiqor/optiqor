@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 // ErrEmptyTenant is returned when a Keyspace is built with no tenant ID.

@@ -1,4 +1,4 @@
-// Package gdpr implements the legal-baseline obligations Sevro takes
+// Package gdpr implements the legal-baseline obligations Optiqor takes
 // on for any EU customer:
 //
 //   - Data Subject Access Requests (DSAR): export and erase
@@ -15,7 +15,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 // Retention windows are committed in todo.md production-readiness

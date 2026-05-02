@@ -1,20 +1,20 @@
 # Default owner: founders, until team grows.
-*                                  @sevro/founders
+*                                  @optiqor/founders
 
 # Domain ownership (fill in as team grows)
-/internal/agent/                   @sevro/founders
-/internal/cost/                    @sevro/founders
-/internal/prwriter/                @sevro/founders
-/internal/receipts/                @sevro/founders
-/internal/tenancy/                 @sevro/founders
-/internal/platform/                @sevro/founders
+/internal/agent/                   @optiqor/founders
+/internal/cost/                    @optiqor/founders
+/internal/prwriter/                @optiqor/founders
+/internal/receipts/                @optiqor/founders
+/internal/tenancy/                 @optiqor/founders
+/internal/platform/                @optiqor/founders
 
 # Infra
-/infra/terraform/                  @sevro/founders
-/deploy/                           @sevro/founders
-/.github/                          @sevro/founders
+/infra/terraform/                  @optiqor/founders
+/deploy/                           @optiqor/founders
+/.github/                          @optiqor/founders
 
 # Security-sensitive
-/migrations/                       @sevro/founders
-*.tf                               @sevro/founders
-SECURITY.md                        @sevro/founders
+/migrations/                       @optiqor/founders
+*.tf                               @optiqor/founders
+SECURITY.md                        @optiqor/founders

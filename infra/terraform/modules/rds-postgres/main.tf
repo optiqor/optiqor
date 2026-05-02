@@ -19,7 +19,7 @@ resource "aws_db_subnet_group" "this" {
 
 resource "aws_security_group" "this" {
   name        = "${var.name}-db"
-  description = "Sevro Postgres ingress"
+  description = "Optiqor Postgres ingress"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -66,8 +66,8 @@ resource "aws_db_instance" "this" {
   instance_class    = var.instance_class
   allocated_storage = var.allocated_storage_gb
 
-  db_name           = "sevro"
-  username          = "sevro_migrator"
+  db_name           = "optiqor"
+  username          = "optiqor_migrator"
   manage_master_user_password = true
   master_user_secret_kms_key_id = var.kms_key_arn
 

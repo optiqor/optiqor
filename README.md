@@ -1,6 +1,6 @@
 # backend
 
-Sevro backend monorepo. Go modular monolith producing three binaries from `cmd/`.
+Optiqor backend monorepo. Go modular monolith producing three binaries from `cmd/`.
 
 ## Binaries
 
@@ -47,4 +47,4 @@ See [CLAUDE.md](CLAUDE.md) for layering rules, multi-tenancy invariants, and tes
 
 ## License
 
-Proprietary. See [LICENSE](LICENSE). The in-cluster agent (`cmd/agent`) is the **exception** — it ships under Apache 2.0 from Sevro, because regulated customers will not run closed-source binaries inside production clusters. See [LICENSE-agent](LICENSE-agent).
+Proprietary. See [LICENSE](LICENSE). The in-cluster agent (`cmd/agent`) is the **exception** — it ships under Apache 2.0 from Optiqor, because regulated customers will not run closed-source binaries inside production clusters. See [LICENSE-agent](LICENSE-agent).

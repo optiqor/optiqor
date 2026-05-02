@@ -1,28 +1,28 @@
 services:
   postgres:
     image: timescale/timescaledb:latest-pg16
-    container_name: sevro-postgres
+    container_name: optiqor-postgres
     environment:
-      POSTGRES_USER: sevro
-      POSTGRES_PASSWORD: sevro
-      POSTGRES_DB: sevro
+      POSTGRES_USER: optiqor
+      POSTGRES_PASSWORD: optiqor
+      POSTGRES_DB: optiqor
     ports:
       - "5432:5432"
     volumes:
-      - sevro-postgres-data:/var/lib/postgresql/data
+      - optiqor-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sevro -d sevro"]
+      test: ["CMD-SHELL", "pg_isready -U optiqor -d optiqor"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: sevro-redis
+    container_name: optiqor-redis
     ports:
       - "6379:6379"
     volumes:
-      - sevro-redis-data:/data
+      - optiqor-redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -31,22 +31,22 @@ services:
 
   temporal:
     image: temporalio/auto-setup:1.25
-    container_name: sevro-temporal
+    container_name: optiqor-temporal
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DB: postgres12
       DB_PORT: 5432
-      POSTGRES_USER: sevro
-      POSTGRES_PWD: sevro
+      POSTGRES_USER: optiqor
+      POSTGRES_PWD: optiqor
       POSTGRES_SEEDS: postgres
     ports:
       - "7233:7233"
 
   temporal-ui:
     image: temporalio/ui:2.31.2
-    container_name: sevro-temporal-ui
+    container_name: optiqor-temporal-ui
     depends_on:
       - temporal
     environment:
@@ -57,7 +57,7 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.108.0
-    container_name: sevro-otel-collector
+    container_name: optiqor-otel-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./scripts/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -66,5 +66,5 @@ services:
       - "4318:4318"   # OTLP HTTP
 
 volumes:
-  sevro-postgres-data:
-  sevro-redis-data:
+  optiqor-postgres-data:
+  optiqor-redis-data:

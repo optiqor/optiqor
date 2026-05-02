@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CI guard: every env Terraform file must declare default_tags with
 # Project, Environment, and Tenant keys, so AWS resources are
-# unambiguously attributed to Sevro and cost-attributable per tenant.
+# unambiguously attributed to Optiqor and cost-attributable per tenant.
 #
 # Modules themselves do NOT declare provider blocks; they inherit
 # default_tags from the env they are instantiated by. We therefore

@@ -84,10 +84,10 @@ func TestBaseline_StableWorkloadIdentity(t *testing.T) {
 
 func TestBaseline_RolesAreSeparate(t *testing.T) {
 	sql := loadBaseline(t)
-	if !strings.Contains(sql, "CREATE ROLE sevro_app") {
-		t.Error("missing sevro_app role")
+	if !strings.Contains(sql, "CREATE ROLE optiqor_app") {
+		t.Error("missing optiqor_app role")
 	}
-	if !strings.Contains(sql, "CREATE ROLE sevro_migrator NOLOGIN BYPASSRLS") {
+	if !strings.Contains(sql, "CREATE ROLE optiqor_migrator NOLOGIN BYPASSRLS") {
 		t.Error("migrator role must BYPASSRLS")
 	}
 }

@@ -1,4 +1,4 @@
-// Package telemetry provides metrics and tracing primitives for Sevro.
+// Package telemetry provides metrics and tracing primitives for Optiqor.
 //
 // Phase 1 ships a minimal in-house Prometheus text-format exposition
 // (counters + histograms only) and a no-op OpenTelemetry tracer

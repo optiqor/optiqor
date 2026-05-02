@@ -4,7 +4,7 @@
 // adapter swaps in at Phase 3 (cmd/worker registers a Dispatcher,
 // nothing else changes).
 //
-// Per-tenant task queues are how Sevro enforces tenant isolation at
+// Per-tenant task queues are how Optiqor enforces tenant isolation at
 // the workflow layer — see CLAUDE.md "Multi-tenancy is non-negotiable"
 // and todo.md production-readiness gap #3 (multi-cluster + team
 // hierarchy).
@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 // QueueClass differentiates workflow priorities. Two classes are

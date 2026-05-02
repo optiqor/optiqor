@@ -10,7 +10,7 @@ import (
 // ErrorReporter sends panics and unhandled errors to a remote sink
 // (Sentry in production). Phase 1 ships a no-op implementation; the
 // real getsentry/sentry-go adapter swaps in via SetReporter() at boot
-// once SEVRO_SENTRY_DSN is non-empty.
+// once OPTIQOR_SENTRY_DSN is non-empty.
 //
 // The contract is intentionally narrow so domain code only ever
 // touches Capture and Flush; the adapter handles request enrichment,

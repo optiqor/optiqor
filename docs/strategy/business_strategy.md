@@ -1,4 +1,4 @@
-# Sevro — Business Strategy (Kubernetes-First)
+# Optiqor — Business Strategy (Kubernetes-First)
 
 > **A defensible path from Kubernetes beachhead to $500M+ ARR cost-and-security PR platform.**
 
@@ -53,13 +53,13 @@
 
 ## 1. Executive Summary
 
-Sevro is not a remediation product. It's the **Kubernetes Control Plane for Cost and Safety** — the gatekeeper between commit and cluster that every K8s change flows through. Kubecost and OpenCost live in the cluster dashboard. Cast AI autopilots clusters as a black box. Infracost parses Terraform, not Kubernetes. Kubecost attempted the PR-layer category in 2023 with a cost-prediction GitHub Action — the repo has 31 stars and hasn't been touched in three years, proving the category is hard, not occupied. We're building the platform that defines it.
+Optiqor is not a remediation product. It's the **Kubernetes Control Plane for Cost and Safety** — the gatekeeper between commit and cluster that every K8s change flows through. Kubecost and OpenCost live in the cluster dashboard. Cast AI autopilots clusters as a black box. Infracost parses Terraform, not Kubernetes. Kubecost attempted the PR-layer category in 2023 with a cost-prediction GitHub Action — the repo has 31 stars and hasn't been touched in three years, proving the category is hard, not occupied. We're building the platform that defines it.
 
-- **Positioning:** "Kubecost showed you the price. Sevro is the gate every K8s change flows through — cost, security, compliance, receipts, rollback."
+- **Positioning:** "Kubecost showed you the price. Optiqor is the gate every K8s change flows through — cost, security, compliance, receipts, rollback."
 - **Beachhead:** AWS EKS + GitHub + Helm/Kustomize + ArgoCD — ~6,000 target companies globally in Year 1, expanding to ~30,000 K8s-GitOps orgs by Year 3
 - **Trust contract:** Auto-Rollback Guarantee + verified Receipts + honest Confidence bands + mission-preserving governance — the first working K8s remediation platform that earns enterprise autopilot
 - **Platform play:** API, Detector SDK, Apply Fix Marketplace. Integration surface for Wiz, Datadog, PagerDuty, Kubecost, cloud marketplaces
-- **Open-source discipline:** One public repo (`github.com/sevro/agent`, Apache 2.0). Everything else commercial. The agent earns us the enterprise market (source-auditable requirement); the platform stays closed to protect the moat. Target ratio: ~10% open, 90% commercial — closer to Datadog and Stripe than HashiCorp.
+- **Open-source discipline:** One public repo (`github.com/optiqor/agent`, Apache 2.0). Everything else commercial. The agent earns us the enterprise market (source-auditable requirement); the platform stays closed to protect the moat. Target ratio: ~10% open, 90% commercial — closer to Datadog and Stripe than HashiCorp.
 - **Moat:** Cross-customer anonymized data (unfakeable), receipt reputation (slow to earn), CNCF community presence (compounds), 5+ year integration lock-in with every major K8s tool
 - **Market:** ~$180M K8s-PR SAM today, ~$1.2B full-cloud SAM by Year 3 as we expand outward; TAM is $3B+ at Year 5 as category expands
 - **Pricing:** Based on monitored K8s monthly spend, not developers. Team from $500/mo, Team+ from $3,500/mo, Enterprise $100K/yr base + savings-share
@@ -166,13 +166,13 @@ The window is open. 18–24 months to claim the category before Infracost or Cas
 - Install in 2 clicks via Helm chart + GitHub App
 - See Apply Fix PRs on every overprovisioned service within 24 hours
 - Confidence Score on every change grounded in 30 days of Prometheus data
-- Never need to log into another dashboard — Sevro lives in the PR
+- Never need to log into another dashboard — Optiqor lives in the PR
 - Earn public recognition via Engineer Impact score + receipts
 
 ### 4.2 For Heads of Platform (Buyer)
 - K8s bill trending down measurably each quarter
 - Auditable trail of every cost-related change across clusters
-- Sevro Score benchmarks the team against peer companies
+- Optiqor Score benchmarks the team against peer companies
 - Auto-Rollback Guarantee makes delegation to the AI safe
 
 ### 4.3 For CFOs and FinOps
@@ -193,11 +193,11 @@ The window is open. 18–24 months to claim the category before Infracost or Cas
 
 ### 5.1 The Pricing Axis: K8s Spend, Not Developers or Clusters
 
-**Sevro does not charge per developer.** Platform teams buy infrastructure tools; individual developers don't. Per-dev pricing (Infracost's model) fits IDE tools that developers open daily. Sevro lives in CI/CD — developers never "log in." The buyer is always the platform lead.
+**Optiqor does not charge per developer.** Platform teams buy infrastructure tools; individual developers don't. Per-dev pricing (Infracost's model) fits IDE tools that developers open daily. Optiqor lives in CI/CD — developers never "log in." The buyer is always the platform lead.
 
-**Sevro does not charge pure per-cluster.** Cast AI charges $1,000/month + $5/CPU and customers call it a "savings tax that compounds." Per-cluster creates perverse incentives (merge clusters to avoid fees, monitor fewer clusters than needed). It punishes fast-moving teams that run many small environments.
+**Optiqor does not charge pure per-cluster.** Cast AI charges $1,000/month + $5/CPU and customers call it a "savings tax that compounds." Per-cluster creates perverse incentives (merge clusters to avoid fees, monitor fewer clusters than needed). It punishes fast-moving teams that run many small environments.
 
-**Sevro charges based on monitored Kubernetes monthly spend.** This is the axis that actually scales with customer value. A customer spending $10K/month on K8s has at most ~$3-5K/month of savings opportunity. A customer spending $500K/month has ~$150-250K/month opportunity. Same team size, same cluster count, very different value. Pricing on spend aligns our fee with their opportunity.
+**Optiqor charges based on monitored Kubernetes monthly spend.** This is the axis that actually scales with customer value. A customer spending $10K/month on K8s has at most ~$3-5K/month of savings opportunity. A customer spending $500K/month has ~$150-250K/month opportunity. Same team size, same cluster count, very different value. Pricing on spend aligns our fee with their opportunity.
 
 ### 5.2 Four-Tier Model
 
@@ -216,7 +216,7 @@ The window is open. 18–24 months to claim the category before Infracost or Cas
 | $20K – $50K | $1,200 | 2.4% |
 | $50K – $100K | $2,500 | 2.5% |
 
-Typical K8s waste is 30–50%. A customer saving even 15% of spend gets 6× value on Sevro. CFO math is trivial.
+Typical K8s waste is 30–50%. A customer saving even 15% of spend gets 6× value on Optiqor. CFO math is trivial.
 
 ### 5.4 Team+ Tier — K8s Spend Bands
 
@@ -271,8 +271,8 @@ ACV is higher than the prior per-developer model because K8s-spend-based pricing
 ### 6.1 The Motion — Multi-Channel PLG, Not Conference-Dependent
 
 **Core funnel:**
-1. Platform engineer discovers Sevro via one of six channels (sandbox, CLI, HN, GitHub Marketplace, SEO, Twitter/LinkedIn, KubeCon)
-2. **Sandbox mode** — pastes a Helm chart on sevro.dev, sees Apply Fix preview in 3 minutes (no signup)
+1. Platform engineer discovers Optiqor via one of six channels (sandbox, CLI, HN, GitHub Marketplace, SEO, Twitter/LinkedIn, KubeCon)
+2. **Sandbox mode** — pastes a Helm chart on optiqor.dev, sees Apply Fix preview in 3 minutes (no signup)
 3. **Installs GitHub App** on a test repo — first PR comment within 10 minutes of install
 4. **Installs cluster agent** via Helm — Prometheus-grounded Confidence unlocks
 5. First real Apply Fix PR lands within 24–48 hours on a real overprovisioning case
@@ -284,8 +284,8 @@ ACV is higher than the prior per-developer model because K8s-spend-based pricing
 ### 6.2 Launch Plan
 
 **Months 0–3 — Foundation**
-- Build sandbox mode (`sevro.dev/sandbox`)
-- Build and publish CLI (`npx @sevro/cli`)
+- Build sandbox mode (`optiqor.dev/sandbox`)
+- Build and publish CLI (`npx @optiqor/cli`)
 - Hand-pick 5 design partners from founder network
 - Ship Apply Fix end-to-end on design partner's real Helm charts
 - First verified Receipt delivered
@@ -305,7 +305,7 @@ ACV is higher than the prior per-developer model because K8s-spend-based pricing
 
 **Months 9–12 — Scale & Enterprise Pilots**
 - KubeCon US, PlatformCon, FinOps X
-- Launch Sevro Community (Discord)
+- Launch Optiqor Community (Discord)
 - First "State of Kubernetes Efficiency" report
 - Target: 300 paying teams, $3M ARR, 5 enterprise pilots
 
@@ -313,13 +313,13 @@ ACV is higher than the prior per-developer model because K8s-spend-based pricing
 - First Head of Sales hire (Month 13)
 - SOC 2 Type 1 certified (Month 15)
 - 5 enterprise logos at $100K–$250K ACV
-- First "Sevro Score" quarterly reports reaching CTOs
+- First "Optiqor Score" quarterly reports reaching CTOs
 
 ### 6.3 Six Distribution Channels (Diversification)
 
-Previous drafts treated KubeCon + CNCF as the primary GTM channel. That's a bet on one vector that runs three times per year with 6–9 month lead times. If KubeCon underperforms, we lose 60% of pipeline. Sevro distributes through **six channels in parallel**. No single channel accounts for more than 25% of signups by Month 12.
+Previous drafts treated KubeCon + CNCF as the primary GTM channel. That's a bet on one vector that runs three times per year with 6–9 month lead times. If KubeCon underperforms, we lose 60% of pipeline. Optiqor distributes through **six channels in parallel**. No single channel accounts for more than 25% of signups by Month 12.
 
-**Channel 1: Sandbox + CLI (Week 1)** — viral self-serve. `sevro.dev/sandbox` takes any Helm values.yaml and produces a preview in 3 minutes, shareable via `sevro.dev/r/<hash>`. The `npx @sevro/cli` CLI is one line to run. Target: 5,000 sandbox uses/month by Month 6.
+**Channel 1: Sandbox + CLI (Week 1)** — viral self-serve. `optiqor.dev/sandbox` takes any Helm values.yaml and produces a preview in 3 minutes, shareable via `optiqor.dev/r/<hash>`. The `npx @optiqor/cli` CLI is one line to run. Target: 5,000 sandbox uses/month by Month 6.
 
 **Channel 2: "Show HN" launch (Month 3)** — single high-stakes post once sandbox + CLI + 3 Receipts are live. Two engineers answering every comment for 48 hours. Dev-tool HN launches historically deliver 1,000–5,000 signups in 72 hours.
 
@@ -332,7 +332,7 @@ Previous drafts treated KubeCon + CNCF as the primary GTM channel. That's a bet 
 **Channel 6: KubeCon + CNCF community (Month 6 onward)** — still important, still real, but one of six. $150K/year conference budget. Target: 3 talks accepted per year, 500 booth conversations per KubeCon.
 
 **Distribution moats in parallel:**
-- **Sevro Community (Discord/Slack)** — free-tier users get access, peer-to-peer help. Once 1,000+ active, switching costs extend beyond features.
+- **Optiqor Community (Discord/Slack)** — free-tier users get access, peer-to-peer help. Once 1,000+ active, switching costs extend beyond features.
 - **"State of Kubernetes Efficiency" annual report** — anonymized customer data, press-cited, becomes reference document. Competitors can't replicate without customer base.
 - **Public Helm Chart Efficiency Rankings** — rate popular charts (ingress-nginx, postgresql). Chart maintainers care. SEO gold.
 - **Operator + investor endorsements** — Kelsey Hightower-style endorsement beats any marketing.
@@ -346,7 +346,7 @@ Every piece is engineered for two things: teaching platform engineers, and earni
 - **State of Kubernetes Efficiency** — annual report with anonymized customer benchmarks
 - **Platform Engineering Guides** — practical playbooks on requests/limits, HPA tuning, PDBs
 - **Customer Stories** — real platform leads, real dollar figures, real Helm diffs
-- **Kubecon vs Sevro** comparison posts — direct SEO for people comparison shopping
+- **Kubecon vs Optiqor** comparison posts — direct SEO for people comparison shopping
 
 ---
 
@@ -425,7 +425,7 @@ AWS EKS only. Helm + Kustomize only. ArgoCD read-only. Cost-first with basic sec
 - Carbon-per-PR (EU CSRD compliance)
 - Shadow Mode (non-GitOps → GitOps migration)
 - SaaS cost detectors (Snowflake, Datadog, Databricks)
-- Sevro Marketplace (community-built detectors)
+- Optiqor Marketplace (community-built detectors)
 
 ### 7.5 Explicitly NOT in Year 1
 
@@ -450,7 +450,7 @@ The underlying scoring is rule-based and weighted:
 | No SLO burn-rate alarms in last 30 days | 0.15 | Prometheus alerts |
 | HPA would not trigger at proposed requests under observed load | 0.15 | HPA config + metrics |
 | No critical-path dependencies (from service graph) | 0.10 | In-cluster topology |
-| Change matches a vetted safe pattern (Sevro pattern library) | 0.10 | Internal curated library |
+| Change matches a vetted safe pattern (Optiqor pattern library) | 0.10 | Internal curated library |
 
 Internal raw scores map to customer-facing bands: **Low** (< 0.65), **Medium** (0.65–0.85), **High** (≥ 0.85). Only High produces an auto-opened PR. Medium queues for human review. Low is logged for learning but never acted on.
 
@@ -479,7 +479,7 @@ The Kubernetes cost space has clear incumbents on the cluster-side. The PR-layer
 
 ### 8.2 The Wedge Is Real And Empty
 
-Sevro is the first working Kubernetes PR remediation platform. To be specific about what "first" means:
+Optiqor is the first working Kubernetes PR remediation platform. To be specific about what "first" means:
 - First Helm values.yaml-aware Apply Fix
 - First Prometheus-grounded Confidence Score on Kubernetes PRs
 - First cryptographically signed Receipt verifying K8s savings against real cloud bills
@@ -491,30 +491,30 @@ Kubecost attempted the basic cost-comment version of this category in 2023 and l
 ### 8.3 How We Win Against Each
 
 **vs Kubecost (most critical)**
-*"Kubecost's Action tells you the price. Sevro writes the fix, verifies the savings, and catches regressions."* Kubecost is the best-in-class dashboard plus a cost-prediction Action. We are the remediation + verification layer. A platform team running Kubecost + Sevro is better served than one running either alone. **Critical action item: approach Kubecost (IBM) leadership in Month 3 to explore a formal partnership where their Action provides cost data and ours provides Apply Fix. If they're willing to partner, it's our biggest unlock. If they plan to compete, we learn that now and move faster.**
+*"Kubecost's Action tells you the price. Optiqor writes the fix, verifies the savings, and catches regressions."* Kubecost is the best-in-class dashboard plus a cost-prediction Action. We are the remediation + verification layer. A platform team running Kubecost + Optiqor is better served than one running either alone. **Critical action item: approach Kubecost (IBM) leadership in Month 3 to explore a formal partnership where their Action provides cost data and ours provides Apply Fix. If they're willing to partner, it's our biggest unlock. If they plan to compete, we learn that now and move faster.**
 
 **vs Cast AI**
-*"We're what platform teams choose when they've been burned by Cast AI's black box."* Cast AI takes over clusters autonomously. Platform engineers want auditability. Every Sevro change is a reviewable PR with a Confidence Score. We don't compete on automation depth; we compete on transparency.
+*"We're what platform teams choose when they've been burned by Cast AI's black box."* Cast AI takes over clusters autonomously. Platform engineers want auditability. Every Optiqor change is a reviewable PR with a Confidence Score. We don't compete on automation depth; we compete on transparency.
 
 **vs ScaleOps / Sedai**
-Same framing as Cast AI — ML-powered autopilots that live in the cluster. We live in the PR with human-in-the-loop review. Different product categories; both can coexist in a customer (ScaleOps for non-critical, Sevro for change-reviewed workloads).
+Same framing as Cast AI — ML-powered autopilots that live in the cluster. We live in the PR with human-in-the-loop review. Different product categories; both can coexist in a customer (ScaleOps for non-critical, Optiqor for change-reviewed workloads).
 
 **vs Infracost**
-*"Infracost handles your Terraform. Sevro handles your Kubernetes."* No overlap in Year 1. In Year 2, when we expand into Terraform for K8s-adjacent resources, we differentiate on verified Receipts, Auto-Rollback, and cluster-connected analysis (Infracost explicitly does NOT connect to cloud accounts).
+*"Infracost handles your Terraform. Optiqor handles your Kubernetes."* No overlap in Year 1. In Year 2, when we expand into Terraform for K8s-adjacent resources, we differentiate on verified Receipts, Auto-Rollback, and cluster-connected analysis (Infracost explicitly does NOT connect to cloud accounts).
 
 **vs Wiz / Snyk / Kubescape**
 *"They find. We fix."* Security detection is crowded and mature. We don't try to match their rule breadth. We take their findings (or our top-5 native detections) and ship the PR that fixes them.
 
 **vs Datree / OPA / Kyverno**
-Policy-as-code is admission-time enforcement. We're PR-time analysis + remediation. Complementary, not competitive. Customers using Kyverno + Sevro get the best of both: admission-time blocking + merge-time fixing. Year 2: read existing Kyverno policies to avoid proposing fixes that would violate them.
+Policy-as-code is admission-time enforcement. We're PR-time analysis + remediation. Complementary, not competitive. Customers using Kyverno + Optiqor get the best of both: admission-time blocking + merge-time fixing. Year 2: read existing Kyverno policies to avoid proposing fixes that would violate them.
 
 ### 8.4 Defensive Moats
 
 1. **Prometheus-grounded Confidence Score.** Our scores use real cluster usage data. Competitors scoring PRs without cluster access cannot match this. Data moat compounds monthly.
 2. **Auto-Rollback Guarantee.** Requires continuous cluster monitoring plus signal analysis plus incident integration. Not a feature — an architecture. Hard to retrofit.
 3. **Receipt moat.** Verified savings against real cloud billing data. Competitors who don't have cloud access cannot issue receipts. Trust compounds with every signed receipt.
-4. **Platform-engineer brand.** Once a platform team loves Sevro, switching is emotionally expensive. See: Vercel, Linear, Tailscale, HashiCorp's early days.
-5. **ArgoCD integration depth.** Every customer's ArgoCD workflow becomes instrumented by Sevro. Deep integration is sticky.
+4. **Platform-engineer brand.** Once a platform team loves Optiqor, switching is emotionally expensive. See: Vercel, Linear, Tailscale, HashiCorp's early days.
+5. **ArgoCD integration depth.** Every customer's ArgoCD workflow becomes instrumented by Optiqor. Deep integration is sticky.
 6. **LLM fine-tunes on Helm values diffs.** By Year 2 we train small models on merged PR outcomes. For common patterns, our proprietary models beat general-purpose Sonnet/GPT on Helm generation at lower cost.
 
 ### 8.5 Why We Win — The Unfair Advantage
@@ -761,7 +761,7 @@ Cast AI has $500M+ ARR and huge engineering. ScaleOps ranks first in independent
 - *Mitigation:* speed — 300+ paying K8s teams and Auto-Rollback shipped before they could credibly pivot.
 
 **3. A bad Apply Fix causes an OOMKilled production outage.**
-A single public incident ("Sevro rightsizing crashed our payment service") would be catastrophic.
+A single public incident ("Optiqor rightsizing crashed our payment service") would be catastrophic.
 - *Mitigation (product):* 40% headroom minimum on all recommendations. Never auto-open PRs with Confidence below High band. StatefulSets excluded from auto-Apply-Fix entirely in Year 1. Operator-managed workloads skipped with clear explanation.
 - *Mitigation (trust):* Auto-Rollback Guarantee catches the breach within 5 minutes and notifies on-call.
 - *Mitigation (legal):* Enterprise contracts include capped financial remedy ($100K or 1 month fees). Cyber liability insurance ($5M coverage) from Month 6.
@@ -780,7 +780,7 @@ They have brand, SOC 2, and 3,000+ customers. Helm parsing is a real engineering
 Installing a third-party agent in regulated clusters can require 3-month security reviews. This is a meaningful blocker for financial services, healthcare, and regulated-industry customers.
 - *Mitigation (product):* offer a "no-agent mode" in Year 1 that works via external kubeconfig access only — slower data, less rich signals, but zero in-cluster footprint.
 - *Mitigation (documentation):* publish agent resource footprint, signed container images (Sigstore), complete source-available auditability, SBOMs.
-- *Mitigation (enterprise):* Year 2 "customer-hosted" deployment mode where Sevro runs inside the customer VPC.
+- *Mitigation (enterprise):* Year 2 "customer-hosted" deployment mode where Optiqor runs inside the customer VPC.
 - *Mitigation (pricing):* no-agent tier available at Team+ price point so enterprise-cautious customers can still buy without full trust upfront.
 
 **7. Kubecost (IBM) revives or replaces their abandoned Action.**
@@ -789,7 +789,7 @@ Their `cost-prediction-action` has been dormant at v0.1.1 since April 2023 (31 s
 - *Mitigation:* explore a Kubecost partnership where their cost-allocation engine feeds our Apply Fix — removes their motivation to compete.
 - *Mitigation:* moats that require architectural commitment, not just engineering time (cluster-connected Confidence, signed Receipts, Auto-Rollback Guarantee).
 
-**8. Security breach of Sevro exposes customer cluster data.**
+**8. Security breach of Optiqor exposes customer cluster data.**
 - *Mitigation:* zero-trust architecture, per-customer encryption keys, no stored credentials (STS + ServiceAccount tokens only), SOC 2 Type 2 by Month 21.
 
 **9. Regulatory risk — GDPR, EU data residency.**
@@ -819,7 +819,7 @@ K8s manifests and Prometheus labels can contain PII. EU customers require data r
 - Close pre-seed commitments
 - Ship "Hello World" GitHub App + in-cluster ServiceAccount proof-of-concept
 - Core engineering infra: CI/CD, observability, on-call
-- Dogfood from Day 1: run Sevro on the company's own EKS cluster
+- Dogfood from Day 1: run Optiqor on the company's own EKS cluster
 
 ### 13.2 Days 31–60 — Product v0.1
 - Helm values.yaml parser (common templating patterns)
@@ -839,7 +839,7 @@ K8s manifests and Prometheus labels can contain PII. EU customers require data r
 - Record first demo video for fundraising
 
 ### 13.4 Success Criteria (Day 90)
-- 3 design partners actively using Sevro with Apply Fix on real Helm PRs
+- 3 design partners actively using Optiqor with Apply Fix on real Helm PRs
 - First verified Receipt ($500+/mo confirmed against real AWS bill)
 - Apply Fix flow works end-to-end without manual intervention
 - Confidence Score displayed on every PR with real Prometheus supporting data
@@ -851,17 +851,17 @@ K8s manifests and Prometheus labels can contain PII. EU customers require data r
 
 ## 14. Open-Source Discipline — What We Open, What We Protect
 
-Open source is a tool, not a religion. Every public repository is a business decision with a cost and an expected return. This section lays out exactly what Sevro makes public, what stays private, and the business reasoning behind each choice.
+Open source is a tool, not a religion. Every public repository is a business decision with a cost and an expected return. This section lays out exactly what Optiqor makes public, what stays private, and the business reasoning behind each choice.
 
 **The governing principle:** open-source only what earns us something specific (credibility, enterprise trust, community leverage) AND does not erode our competitive moat. Everything else stays private.
 
 ### 14.1 What We Make Public — With Business Rationale
 
-**Year 1: One public repository.** `github.com/sevro/agent` — Apache 2.0.
+**Year 1: One public repository.** `github.com/optiqor/agent` — Apache 2.0.
 
 | What | License | Business Reason |
 |------|---------|-----------------|
-| **In-cluster agent** (Go binary + Helm chart + RBAC manifests) | Apache 2.0 | **Unlocks enterprise deals.** Regulated industries (finance, healthcare, government) will not install closed-source binaries in production clusters. Our competitive analysis shows 30-40% of target enterprise customers require source-auditable agents. This single decision unlocks $10M+ in Year-2 enterprise ARR. Also gives CNCF community a concrete "Sevro is one of us" signal. |
+| **In-cluster agent** (Go binary + Helm chart + RBAC manifests) | Apache 2.0 | **Unlocks enterprise deals.** Regulated industries (finance, healthcare, government) will not install closed-source binaries in production clusters. Our competitive analysis shows 30-40% of target enterprise customers require source-auditable agents. This single decision unlocks $10M+ in Year-2 enterprise ARR. Also gives CNCF community a concrete "Optiqor is one of us" signal. |
 
 **That's it for Year 1.** Not the parser. Not the CLI. Not the Confidence Score rules. Not the detector definitions. One repository, one carefully scoped artifact.
 
@@ -869,7 +869,7 @@ Open source is a tool, not a religion. Every public repository is a business dec
 
 | What | License | Business Reason (and trigger condition) |
 |------|---------|-----------------------------------------|
-| **Helm parser** (submitted to CNCF Sandbox as `Sevro-helm-parser`) | Apache 2.0 | **Only if** we've accumulated >50 chart-specific bug reports we can't keep up with, AND a motivated external contributor appears. CNCF Sandbox submission is a massive credibility signal, but only worth it if the maintenance burden is truly shared. |
+| **Helm parser** (submitted to CNCF Sandbox as `Optiqor-helm-parser`) | Apache 2.0 | **Only if** we've accumulated >50 chart-specific bug reports we can't keep up with, AND a motivated external contributor appears. CNCF Sandbox submission is a massive credibility signal, but only worth it if the maintenance burden is truly shared. |
 | **Cost Prediction schema & methodology** (published as docs + reference implementation) | Apache 2.0 | **Only if** regulatory pressure (CSRD, FinOps Foundation standards) requires auditable methodology. Opens our math to scrutiny without opening our code. Trust win for enterprise. |
 
 **Never open-sourced (explicit list):**
@@ -885,7 +885,7 @@ Open source is a tool, not a religion. Every public repository is a business dec
 | Apply Fix Template Marketplace engine (Year 3) | **Curation is the product.** Patterns are community-contributed; the curation, quality scoring, and distribution platform is ours. |
 | All cross-customer data pipelines and aggregation logic | **The biggest moat.** Differential privacy, benchmark computation, anonymization. This is the Datadog-style compounding moat. Cannot be open. |
 | All LLM prompts, prompt templates, prompt caching strategies | **Prompt engineering is not a durable moat generally, BUT published prompts accelerate competitors by 3-6 months.** We don't volunteer the shortcut. |
-| All training data and fine-tuned model weights (Year 2+) | **Data advantage.** 50K+ merged Sevro PRs with verified outcomes = our proprietary training set. |
+| All training data and fine-tuned model weights (Year 2+) | **Data advantage.** 50K+ merged Optiqor PRs with verified outcomes = our proprietary training set. |
 | SaaS backend (API, dashboards, billing, multi-tenancy, auth) | **This is the service.** Competitors can't replicate operational reliability. |
 
 ### 14.2 Why "One Public Repo" Is The Right Answer
@@ -939,9 +939,9 @@ Signed NDA mandatory for all hires. IP assignment clauses in every contract. Tra
 
 ### 14.5 Public Communication Rules
 
-When asked publicly (at KubeCon, on podcasts, in investor meetings, in sales calls) whether Sevro is open source, the team gives a consistent answer:
+When asked publicly (at KubeCon, on podcasts, in investor meetings, in sales calls) whether Optiqor is open source, the team gives a consistent answer:
 
-> *"The cluster agent is open source under Apache 2.0 — it's what runs in your cluster and we believe you have the right to audit anything running in production. The Sevro platform itself is a commercial SaaS; that's what we charge for. We think this is the same split HashiCorp uses with Terraform Cloud and Kubecost uses with OpenCost — open where it matters for trust, commercial where it matters for business."*
+> *"The cluster agent is open source under Apache 2.0 — it's what runs in your cluster and we believe you have the right to audit anything running in production. The Optiqor platform itself is a commercial SaaS; that's what we charge for. We think this is the same split HashiCorp uses with Terraform Cloud and Kubecost uses with OpenCost — open where it matters for trust, commercial where it matters for business."*
 
 Confident, principled, clear. No apology for the commercial parts. No promises we don't intend to keep.
 
@@ -986,28 +986,28 @@ Products get acquired. Platforms define industries. The distinction matters beca
 
 We build these in Year 1 (even if closed) so they're battle-tested when we open them in Year 2. Every architectural decision in `technical_implementation.md` assumes these will be public APIs eventually.
 
-**Primitive 1: Sevro API (private Year 1, public Year 2)**
-Every action Sevro takes — open a PR, score confidence, compute cost delta, issue a receipt, trigger rollback — has an internal API call behind it. In Year 2 we expose these with rate limits, API keys, and SDKs in Go, TypeScript, and Python. Customers build internal dashboards on our API. Partners build integrations. Consultants build white-label tools.
+**Primitive 1: Optiqor API (private Year 1, public Year 2)**
+Every action Optiqor takes — open a PR, score confidence, compute cost delta, issue a receipt, trigger rollback — has an internal API call behind it. In Year 2 we expose these with rate limits, API keys, and SDKs in Go, TypeScript, and Python. Customers build internal dashboards on our API. Partners build integrations. Consultants build white-label tools.
 
 **Primitive 2: Detector SDK (public Year 2)**
-External security researchers, FinOps consultants, platform teams, and customers write custom detectors that plug into Sevro. A detector is a Go module that implements `Detect(workload) → []Finding`. Sevro runs community detectors alongside built-in ones. Good detectors get featured. Great detectors become built-in.
+External security researchers, FinOps consultants, platform teams, and customers write custom detectors that plug into Optiqor. A detector is a Go module that implements `Detect(workload) → []Finding`. Optiqor runs community detectors alongside built-in ones. Good detectors get featured. Great detectors become built-in.
 
 **Primitive 3: Apply Fix Template Marketplace (public Year 3)**
-Community-contributed fix patterns for common K8s waste. *"ingress-nginx rightsizing for medium-traffic services"* becomes a one-click template. Contributors get attribution. Downloaders get vetted patterns. Sevro curates quality. This is the GitHub Actions Marketplace model applied to K8s remediation.
+Community-contributed fix patterns for common K8s waste. *"ingress-nginx rightsizing for medium-traffic services"* becomes a one-click template. Contributors get attribution. Downloaders get vetted patterns. Optiqor curates quality. This is the GitHub Actions Marketplace model applied to K8s remediation.
 
 ### 15.2 Partnership Program (Year 2 Launch)
 
-The partnership program makes Sevro indispensable by routing other tools' value through us:
+The partnership program makes Optiqor indispensable by routing other tools' value through us:
 
-| Partner | What they send Sevro | What Sevro sends them |
+| Partner | What they send Optiqor | What Optiqor sends them |
 |---------|--------------------------|---------------------------|
 | **Wiz / Snyk / Aqua** | K8s security findings | Apply Fix PRs that close the findings |
 | **Datadog / New Relic / Grafana** | SLO breach signals | Auto-Rollback triggers correlated to their alerts |
 | **PagerDuty / Opsgenie** | Incident context | Rollback-to-incident correlation data |
 | **Kubecost / OpenCost** | Cost-allocation data | PR-time cost analysis powered by their attribution |
-| **AWS / GCP / Azure Marketplaces** | Billing integration, marketplace listing | Native deploy of Sevro via cloud marketplace |
+| **AWS / GCP / Azure Marketplaces** | Billing integration, marketplace listing | Native deploy of Optiqor via cloud marketplace |
 
-Each partnership either (a) makes Sevro the remediation surface for their findings — which makes us the stickier product — or (b) removes their incentive to compete because they're getting distribution through us.
+Each partnership either (a) makes Optiqor the remediation surface for their findings — which makes us the stickier product — or (b) removes their incentive to compete because they're getting distribution through us.
 
 **Program mechanics:**
 - **Technical integration support** from our Partner Engineer (Month 18 hire)
@@ -1016,25 +1016,25 @@ Each partnership either (a) makes Sevro the remediation surface for their findin
 - **Revenue share** for deals originated through partner motion
 - **Certification program** for consulting partners by Year 3
 
-### 15.3 API Ecosystem — What Gets Built On Sevro
+### 15.3 API Ecosystem — What Gets Built On Optiqor
 
 Once the API is public, these are the kinds of integrations that emerge organically — each one deepens our moat:
 
-- **Internal platform portals** at large enterprises that pull Sevro data into custom dashboards
-- **FinOps consulting tools** that use Sevro as their delivery mechanism
-- **CI/CD plugins** (Circle, GitLab, Jenkins) that run Sevro checks before merge
-- **Backstage plugins** exposing Sevro Score and receipts in the developer portal
-- **Terraform providers** managing Sevro configuration as code
+- **Internal platform portals** at large enterprises that pull Optiqor data into custom dashboards
+- **FinOps consulting tools** that use Optiqor as their delivery mechanism
+- **CI/CD plugins** (Circle, GitLab, Jenkins) that run Optiqor checks before merge
+- **Backstage plugins** exposing Optiqor Score and receipts in the developer portal
+- **Terraform providers** managing Optiqor configuration as code
 - **Slack / Teams bots** beyond our own digest
 - **Custom detectors for industry-specific compliance** (HIPAA, PCI, FedRAMP)
 
-Every one of these = another reason a customer doesn't leave Sevro. Platform dependencies compound. Single-product dependencies erode.
+Every one of these = another reason a customer doesn't leave Optiqor. Platform dependencies compound. Single-product dependencies erode.
 
-### 15.4 "Built on Sevro" Badge
+### 15.4 "Built on Optiqor" Badge
 
-Year 3: we launch the formal "Built on Sevro" certification for third-party tools. Earning the badge requires:
+Year 3: we launch the formal "Built on Optiqor" certification for third-party tools. Earning the badge requires:
 - API integration passing our conformance tests
-- Documented Sevro data usage with customer consent
+- Documented Optiqor data usage with customer consent
 - Listed in our integration directory
 - Co-marketing commitment
 
@@ -1044,20 +1044,20 @@ This is the CNCF "sandbox project" model applied to our partner ecosystem. It co
 
 ## 16. Mission Preservation — Building to Last, Not to Flip
 
-At some point, Sevro will be courted by Datadog ($50B+), GitHub/Microsoft, HashiCorp/IBM, Palo Alto Networks, or a sovereign fund. The right strategy depends on the founders' answer to one question: **do you want to be acquired into a feature, or define an industry?**
+At some point, Optiqor will be courted by Datadog ($50B+), GitHub/Microsoft, HashiCorp/IBM, Palo Alto Networks, or a sovereign fund. The right strategy depends on the founders' answer to one question: **do you want to be acquired into a feature, or define an industry?**
 
 This section exists because investors and future hires will ask. Having an explicit answer protects the mission.
 
 ### 16.1 Three Inflection Points Where Mission Preservation Matters
 
 **Inflection 1: Seed → Series A ($1.5M → $15M)**
-Signal: successful seed close, early traction. Risk: strategic early acquirer offers $50-80M. Decision rule: **reject below $200M**. At seed stage, Sevro is worth more as a category-defining company than as a bolt-on to an incumbent.
+Signal: successful seed close, early traction. Risk: strategic early acquirer offers $50-80M. Decision rule: **reject below $200M**. At seed stage, Optiqor is worth more as a category-defining company than as a bolt-on to an incumbent.
 
 **Inflection 2: Series A → Series B ($15M → $50M)**
 Signal: $10M+ ARR, 200+ customers. Risk: Datadog or Wiz offers $300-500M. Decision rule: **reject below $1B**. At this stage we've proven category definition; an acquisition makes us a feature inside someone else's roadmap. Unless the offer is life-changing for founders AND mission-preserving (rare), decline.
 
 **Inflection 3: Series C+ ($50M+ raised)**
-Signal: $50M+ ARR, 2,000+ customers, category leadership clear. Risk: a sovereign fund, Palo Alto, or IBM offers $3-5B. Decision rule: **case-by-case, but default to IPO path**. At this scale, public markets typically value Sevro at multiples that beat strategic acquirers. IPO preserves mission AND maximizes outcome.
+Signal: $50M+ ARR, 2,000+ customers, category leadership clear. Risk: a sovereign fund, Palo Alto, or IBM offers $3-5B. Decision rule: **case-by-case, but default to IPO path**. At this scale, public markets typically value Optiqor at multiples that beat strategic acquirers. IPO preserves mission AND maximizes outcome.
 
 ### 16.2 Founder Equity Targets (Mission-Preservation Floors)
 
@@ -1083,13 +1083,13 @@ Some acquirers preserve mission. Others kill it. Our explicit list:
 
 | Acquirer | If Acquired, What Happens | Position |
 |----------|---------------------------|----------|
-| **Datadog** | Sevro becomes a K8s feature in their platform, non-Datadog customers lose access within 2 years | ⚠️ Decline at any reasonable price |
-| **Cisco / AppDynamics / Splunk** | Sevro sunset within 3 years; enterprise-only | ⛔ Decline |
-| **Microsoft / GitHub** | Could work if Sevro stays independent inside (Mojaloop / Copilot model) | 🟢 Possible at IPO-equivalent valuation |
+| **Datadog** | Optiqor becomes a K8s feature in their platform, non-Datadog customers lose access within 2 years | ⚠️ Decline at any reasonable price |
+| **Cisco / AppDynamics / Splunk** | Optiqor sunset within 3 years; enterprise-only | ⛔ Decline |
+| **Microsoft / GitHub** | Could work if Optiqor stays independent inside (Mojaloop / Copilot model) | 🟢 Possible at IPO-equivalent valuation |
 | **Palo Alto Networks** | Security-only positioning; cost story dies | ⛔ Decline |
 | **IBM** (Kubecost's parent) | Direct category collapse; mission extinguished | ⛔ Decline at any price |
 | **HashiCorp** (now IBM) | Same | ⛔ Decline |
-| **Google Cloud** | Could work if Sevro stays multi-cloud (rare in Google acquisitions) | 🟡 Conditional |
+| **Google Cloud** | Could work if Optiqor stays multi-cloud (rare in Google acquisitions) | 🟡 Conditional |
 | **AWS** | Better: they've kept MongoDB-competitor acquisitions relatively independent | 🟡 Conditional |
 
 ### 16.4 The IPO Path
@@ -1136,27 +1136,27 @@ In 3 years, LLMs will be cheaper, better, and table stakes. Every DevOps startup
 
 ### 17.2 What Compounds (Invest Heavily In These)
 
-**✅ Customer data moat (strongest).** Five years of anonymized cross-customer Helm chart outcomes, verified receipts, Auto-Rollback false-positive feedback. A competitor entering in 2028 cannot replicate this. Every merged Sevro PR deepens this moat permanently. **This is the Datadog moat, the Stripe moat, the MongoDB moat.**
+**✅ Customer data moat (strongest).** Five years of anonymized cross-customer Helm chart outcomes, verified receipts, Auto-Rollback false-positive feedback. A competitor entering in 2028 cannot replicate this. Every merged Optiqor PR deepens this moat permanently. **This is the Datadog moat, the Stripe moat, the MongoDB moat.**
 
-**✅ Trust brand (slow to build, slow to lose).** After 5 years of signed Receipts with verifiable accuracy, after thousands of Auto-Rollback events correctly detected, Sevro has the trust reputation that Cast AI spent 5 years failing to earn. New entrants can't shortcut trust.
+**✅ Trust brand (slow to build, slow to lose).** After 5 years of signed Receipts with verifiable accuracy, after thousands of Auto-Rollback events correctly detected, Optiqor has the trust reputation that Cast AI spent 5 years failing to earn. New entrants can't shortcut trust.
 
-**✅ Distribution advantage.** 50K+ newsletter subscribers, 5K+ Discord community, 4-person DevRel team, annual Sevro Summit, CNCF maintainers on staff — these are hard to fake and hard to build quickly.
+**✅ Distribution advantage.** 50K+ newsletter subscribers, 5K+ Discord community, 4-person DevRel team, annual Optiqor Summit, CNCF maintainers on staff — these are hard to fake and hard to build quickly.
 
-**✅ Integration depth.** Once Wiz, Datadog, PagerDuty, Kubecost, and every major K8s tool integrate with Sevro, switching us out = disconnecting from all of them. Year 3: ~20 major integrations. Year 5: 100+. Exit cost for customer grows exponentially.
+**✅ Integration depth.** Once Wiz, Datadog, PagerDuty, Kubecost, and every major K8s tool integrate with Optiqor, switching us out = disconnecting from all of them. Year 3: ~20 major integrations. Year 5: 100+. Exit cost for customer grows exponentially.
 
 **✅ Compliance certifications.** SOC 2 Type 2 (Month 21), FedRAMP Moderate (Year 3), HIPAA BAA (Year 2), ISO 27001, PCI-DSS. Each certification unlocks a customer segment competitors can't reach without 18+ months of audit work.
 
-**✅ Regulatory moat (Year 3+).** As K8s cost and security reporting becomes regulated (CSRD carbon reporting, enterprise FinOps governance), Sevro is the verification-ready tool. New entrants face regulatory lead time we've already paid.
+**✅ Regulatory moat (Year 3+).** As K8s cost and security reporting becomes regulated (CSRD carbon reporting, enterprise FinOps governance), Optiqor is the verification-ready tool. New entrants face regulatory lead time we've already paid.
 
 ### 17.3 The 2028 Competitive Test
 
-If commoditization hits in 2028 and every startup ships "AI K8s rightsizing," the question becomes: **why Sevro specifically?**
+If commoditization hits in 2028 and every startup ships "AI K8s rightsizing," the question becomes: **why Optiqor specifically?**
 
 Answer framework:
 1. "Because we've been doing this longer than anyone." (Trust + data moat)
 2. "Because our data — 5 years of cross-customer receipts — produces better fixes than theirs." (Data moat)
 3. "Because every K8s tool you use already routes through us." (Integration depth)
-4. "Because your auditor accepts Sevro Receipts." (Compliance + regulatory)
+4. "Because your auditor accepts Optiqor Receipts." (Compliance + regulatory)
 5. "Because switching off means disconnecting from your Wiz, Datadog, and PagerDuty workflows." (Integration lock-in)
 
 None of these are features. All of them are compounding advantages. A new entrant with a better product still faces all five simultaneously.
@@ -1185,7 +1185,7 @@ Every engineering hour asks: does this compound, or does this erode? Compound wo
 
 Section 11's projections (pre-recalibration) ($95M Year-3 base, $527M Year-5 base) are calibrated for "build a good company." For "dominate Kubernetes," these numbers should be the floor, not the ceiling.
 
-Domination requires meaningful market penetration. The TAM test: CNCF survey identifies ~30,000 organizations running K8s in production with GitOps workflows. To dominate, Sevro needs:
+Domination requires meaningful market penetration. The TAM test: CNCF survey identifies ~30,000 organizations running K8s in production with GitOps workflows. To dominate, Optiqor needs:
 
 - **Year 3: 25%+ penetration** = 7,500+ paying customers (vs. prior base case of 2,500)
 - **Year 5: 40%+ penetration** = 12,000+ paying customers (vs. prior base case of 8,500)
@@ -1224,7 +1224,7 @@ A domination trajectory is not achievable on a Seed → Series A → small Serie
 **DevRel investment (revised):**
 - 4-person team by Month 18 (was 1 DA)
 - $800K/year DevRel budget by Month 18
-- Annual Sevro Summit budget ($2M by Year 3)
+- Annual Optiqor Summit budget ($2M by Year 3)
 - CNCF Platinum membership Year 3 ($150K/year)
 
 **GTM investment (revised):**

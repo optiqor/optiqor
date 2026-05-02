@@ -11,10 +11,10 @@ terraform {
     }
   }
   backend "s3" {
-    bucket         = "sevro-tfstate-prod"
+    bucket         = "optiqor-tfstate-prod"
     key            = "prod/terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "sevro-tfstate-prod-lock"
+    dynamodb_table = "optiqor-tfstate-prod-lock"
     encrypt        = true
   }
 }
@@ -23,7 +23,7 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Project     = "sevro"
+      Project     = "optiqor"
       Environment = "prod"
       Tenant      = "shared"
       ManagedBy   = "terraform"
@@ -38,7 +38,7 @@ provider "aws" {
   region = "us-east-2"
   default_tags {
     tags = {
-      Project     = "sevro"
+      Project     = "optiqor"
       Environment = "prod"
       Tenant      = "shared"
       ManagedBy   = "terraform"
@@ -49,20 +49,20 @@ provider "aws" {
 
 module "kms" {
   source       = "../../modules/kms"
-  name         = "sevro-prod"
+  name         = "optiqor-prod"
   multi_region = true
 }
 
 module "vpc" {
   source = "../../modules/vpc"
-  name   = "sevro-prod"
+  name   = "optiqor-prod"
   cidr   = "10.0.0.0/16"
   azs    = ["us-east-1a", "us-east-1b", "us-east-1c"]
 }
 
 module "eks" {
   source             = "../../modules/eks"
-  name               = "sevro-prod"
+  name               = "optiqor-prod"
   kubernetes_version = "1.31"
   subnet_ids         = module.vpc.private_subnet_ids
   kms_key_arn        = module.kms.data_key_arn
@@ -71,7 +71,7 @@ module "eks" {
 
 module "rds" {
   source                   = "../../modules/rds-postgres"
-  name                     = "sevro-prod"
+  name                     = "optiqor-prod"
   vpc_id                   = module.vpc.vpc_id
   subnet_ids               = module.vpc.db_subnet_ids
   allow_security_group_ids = []
@@ -84,7 +84,7 @@ module "rds" {
 
 module "redis" {
   source                   = "../../modules/elasticache"
-  name                     = "sevro-prod"
+  name                     = "optiqor-prod"
   vpc_id                   = module.vpc.vpc_id
   subnet_ids               = module.vpc.private_subnet_ids
   allow_security_group_ids = []
@@ -96,31 +96,31 @@ module "redis" {
 # by the gdpr package) + CRR to us-east-2 for DR.
 module "s3_receipts" {
   source                             = "../../modules/s3"
-  name                               = "sevro-prod-receipts"
+  name                               = "optiqor-prod-receipts"
   kms_key_arn                        = module.kms.data_key_arn
   expire_noncurrent_after_days       = 0
-  replication_destination_bucket_arn = "arn:aws:s3:::sevro-prod-receipts-dr"
+  replication_destination_bucket_arn = "arn:aws:s3:::optiqor-prod-receipts-dr"
 }
 
 module "s3_sandbox" {
   source                             = "../../modules/s3"
-  name                               = "sevro-prod-sandbox"
+  name                               = "optiqor-prod-sandbox"
   kms_key_arn                        = module.kms.data_key_arn
   expire_noncurrent_after_days       = 30
-  replication_destination_bucket_arn = "arn:aws:s3:::sevro-prod-sandbox-dr"
+  replication_destination_bucket_arn = "arn:aws:s3:::optiqor-prod-sandbox-dr"
 }
 
 module "s3_cur" {
   source                       = "../../modules/s3"
-  name                         = "sevro-prod-cur"
+  name                         = "optiqor-prod-cur"
   kms_key_arn                  = module.kms.data_key_arn
   expire_noncurrent_after_days = 365
 }
 
 module "iam" {
   source                = "../../modules/iam"
-  name                  = "sevro-prod"
-  github_repos          = ["lowplane/backend"]
+  name                  = "optiqor-prod"
+  github_repos          = ["optiqor/backend"]
   eks_oidc_provider_arn = module.eks.oidc_provider_arn
   eks_oidc_provider_url = module.eks.oidc_provider_url
 }

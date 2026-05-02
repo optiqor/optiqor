@@ -4,7 +4,7 @@ variable "name" {
 }
 
 variable "kubernetes_version" {
-  description = "Kubernetes version. Sevro tracks N-1 from the latest EKS-supported."
+  description = "Kubernetes version. Optiqor tracks N-1 from the latest EKS-supported."
   type        = string
   default     = "1.31"
 }

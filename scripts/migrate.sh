@@ -7,9 +7,9 @@ cd "$(dirname "$0")/.."
 # shellcheck disable=SC1091
 [ -f .env ] && source .env
 
-: "${SEVRO_POSTGRES_DSN:?SEVRO_POSTGRES_DSN must be set}"
+: "${OPTIQOR_POSTGRES_DSN:?OPTIQOR_POSTGRES_DSN must be set}"
 
 cmd="${1:-up}"
 shift || true
 
-exec goose -dir ./migrations postgres "$SEVRO_POSTGRES_DSN" "$cmd" "$@"
+exec goose -dir ./migrations postgres "$OPTIQOR_POSTGRES_DSN" "$cmd" "$@"

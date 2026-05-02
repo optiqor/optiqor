@@ -6,7 +6,7 @@ variable "name" {
 variable "github_repos" {
   description = "GitHub repos allowed to assume the ECR-push role, in 'owner/repo' form."
   type        = list(string)
-  default     = ["lowplane/backend"]
+  default     = ["optiqor/backend"]
 }
 
 variable "eks_oidc_provider_arn" {

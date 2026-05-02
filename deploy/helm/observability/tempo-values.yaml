@@ -10,7 +10,7 @@ tempo:
       backend: s3
       s3:
         # Bucket is created by the s3 module in infra/terraform.
-        bucket: sevro-prod-tempo
+        bucket: optiqor-prod-tempo
         region: us-east-1
 
 persistence:

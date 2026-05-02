@@ -1,6 +1,6 @@
 // Package billing defines the pluggable cost-source contract.
 //
-// Sevro issues three Receipt tiers (cloud / capacity / hybrid). Each
+// Optiqor issues three Receipt tiers (cloud / capacity / hybrid). Each
 // tier is backed by a concrete BillingSource implementation:
 //
 //   - AWS CUR (Phase 6, first impl) — Cloud Receipt
@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 // Tier names map 1-to-1 to the receipts.tier CHECK constraint in

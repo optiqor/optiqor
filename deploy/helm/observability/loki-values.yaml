@@ -24,7 +24,7 @@ promtail:
       pipelineStages:
         - cri: {}
         - match:
-            selector: '{namespace="sevro-system"}'
+            selector: '{namespace="optiqor-system"}'
             stages:
               - json:
                   expressions:

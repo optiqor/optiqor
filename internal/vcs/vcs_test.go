@@ -109,8 +109,8 @@ func TestGitHub_PhaseStubs(t *testing.T) {
 }
 
 func TestRepo_String(t *testing.T) {
-	r := Repo{Provider: ProviderGitHub, Owner: "lowplane", Name: "backend"}
-	if got, want := r.String(), "github:lowplane/backend"; got != want {
+	r := Repo{Provider: ProviderGitHub, Owner: "optiqor", Name: "backend"}
+	if got, want := r.String(), "github:optiqor/backend"; got != want {
 		t.Errorf("Repo.String() = %q, want %q", got, want)
 	}
 }

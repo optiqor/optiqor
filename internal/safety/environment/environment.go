@@ -3,7 +3,7 @@
 // per-environment aggressiveness profile.
 //
 // The fail-safe rule is: when in doubt, treat as prod. A first prod
-// incident from "Sevro cut our payments memory and we OOMed during
+// incident from "Optiqor cut our payments memory and we OOMed during
 // peak traffic" is what kills a Year-1 trust contract — see todo.md
 // production-readiness Gap #7.
 package environment

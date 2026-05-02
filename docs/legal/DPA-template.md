@@ -1,4 +1,4 @@
-# Sevro Data Processing Addendum — Template
+# Optiqor Data Processing Addendum — Template
 
 > **Status:** template draft only. Review by qualified counsel required before any
 > customer execution. The Phase 5 onboarding flow signs this via DocuSign;
@@ -6,10 +6,10 @@
 > Last reviewed: 2026-04-27.
 
 This Data Processing Addendum (the "DPA") forms part of the Master
-Services Agreement (the "Agreement") between **Sevro, Inc.** ("Sevro")
+Services Agreement (the "Agreement") between **Optiqor, Inc.** ("Optiqor")
 and the customer identified in the Order Form ("Customer"), and
-governs the processing of Personal Data by Sevro on Customer's behalf
-in connection with Customer's use of the Sevro platform.
+governs the processing of Personal Data by Optiqor on Customer's behalf
+in connection with Customer's use of the Optiqor platform.
 
 ## 1. Definitions
 
@@ -19,21 +19,21 @@ in connection with Customer's use of the Sevro platform.
 - **Personal Data**, **Processing**, **Controller**, **Processor**,
   **Data Subject** — as defined in the GDPR.
 - **Customer Personal Data** — Personal Data that Customer transmits
-  to, or generates through, the Sevro platform.
-- **Subprocessor** — any third party engaged by Sevro to Process
+  to, or generates through, the Optiqor platform.
+- **Subprocessor** — any third party engaged by Optiqor to Process
   Customer Personal Data, as listed in
   [SUBPROCESSORS.md](SUBPROCESSORS.md).
 
 ## 2. Roles and scope
 
-Customer is the Controller and Sevro is the Processor of Customer
+Customer is the Controller and Optiqor is the Processor of Customer
 Personal Data. The categories of data, categories of Data Subjects,
 nature and purpose of Processing, and duration are described in
 **Annex I** below.
 
-## 3. Sevro obligations as Processor
+## 3. Optiqor obligations as Processor
 
-Sevro shall:
+Optiqor shall:
 
 1. Process Customer Personal Data only on documented instructions
    from Customer, including the instructions in the Agreement and
@@ -58,19 +58,19 @@ Sevro shall:
 
 ## 4. Subprocessors
 
-1. Customer authorises Sevro to engage Subprocessors as listed in
+1. Customer authorises Optiqor to engage Subprocessors as listed in
    [SUBPROCESSORS.md](SUBPROCESSORS.md).
-2. Sevro shall maintain a current list and provide **30 days' prior
+2. Optiqor shall maintain a current list and provide **30 days' prior
    written notice** of any new Subprocessor.
 3. Customer may object to a new Subprocessor within 30 days. If the
    parties cannot reach agreement, Customer may terminate the
    affected services with a pro-rated refund.
-4. Sevro remains liable for the acts and omissions of its
-   Subprocessors as if they were Sevro's own.
+4. Optiqor remains liable for the acts and omissions of its
+   Subprocessors as if they were Optiqor's own.
 
 ## 5. Data Subject Access Requests (DSARs)
 
-Sevro shall, taking into account the nature of the Processing,
+Optiqor shall, taking into account the nature of the Processing,
 assist Customer by appropriate technical and organisational measures
 in fulfilling its obligation to respond to DSARs.
 
@@ -84,7 +84,7 @@ Customers may invoke programmatic DSAR endpoints at any time:
 
 ## 6. Data retention
 
-Sevro retains Customer Personal Data for the following periods,
+Optiqor retains Customer Personal Data for the following periods,
 enforced by automated retention jobs:
 
 | Data category | Retention period |
@@ -97,13 +97,13 @@ enforced by automated retention jobs:
 
 ## 7. Audits
 
-1. Sevro provides a SOC 2 report annually to qualifying customers
+1. Optiqor provides a SOC 2 report annually to qualifying customers
    under NDA.
-2. Customer may request an audit of Sevro's compliance with this DPA
+2. Customer may request an audit of Optiqor's compliance with this DPA
    no more than once per twelve-month period, on at least 60 days'
    notice, conducted at Customer's expense.
 3. The audit shall be confidential and shall not unreasonably
-   interfere with Sevro's business operations.
+   interfere with Optiqor's business operations.
 
 ## 8. International data transfers
 
@@ -131,19 +131,19 @@ Processing of Customer Personal Data.
 
 | Item | Description |
 | --- | --- |
-| Subject matter | Provision of the Sevro platform |
+| Subject matter | Provision of the Optiqor platform |
 | Duration | Term of the Agreement |
 | Nature and purpose | Cost and security analysis of Customer's Helm charts and Kubernetes clusters |
-| Categories of Data Subjects | Customer's developers, platform engineers, and administrators authorised to use Sevro |
+| Categories of Data Subjects | Customer's developers, platform engineers, and administrators authorised to use Optiqor |
 | Categories of Personal Data | Email addresses (for authentication), GitHub/GitLab usernames, IP addresses (request logs), audit-log actor identifiers |
-| Special categories | None. Sevro does not process special categories of Personal Data. |
+| Special categories | None. Optiqor does not process special categories of Personal Data. |
 
 ## Annex II — Technical and Organisational Measures
 
-Sevro maintains the following measures, as further described in our
+Optiqor maintains the following measures, as further described in our
 SOC 2 report:
 
-- **Access control** — single sign-on with hardware MFA for all Sevro
+- **Access control** — single sign-on with hardware MFA for all Optiqor
   personnel; least-privilege IAM; just-in-time elevation
 - **Encryption** — TLS 1.2+ in transit; AWS KMS (AES-256-GCM) at rest
 - **Multi-tenant isolation** — PostgreSQL Row-Level Security on every
@@ -167,7 +167,7 @@ Name: __________________________
 Title: __________________________
 Date: __________________________
 
-**Signed for Sevro**
+**Signed for Optiqor**
 
 Name: __________________________
 Title: __________________________

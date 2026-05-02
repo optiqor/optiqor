@@ -1,6 +1,6 @@
 # backend — Sprint Todo
 
-Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is the **canonical engineering tracker for backend work**; CLI-side phase work lives in the [sevro repo](https://github.com/lowplane/sevro). The cross-repo Phase view (cost-detector breakdowns, CLI runtime status, etc.) lives in [ROADMAP.md](ROADMAP.md) — keep both files in sync when a phase milestone moves.
+Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is the **canonical engineering tracker for backend work**; CLI-side phase work lives in the [optiqor repo](https://github.com/optiqor/optiqor-cli). The cross-repo Phase view (cost-detector breakdowns, CLI runtime status, etc.) lives in [ROADMAP.md](ROADMAP.md) — keep both files in sync when a phase milestone moves.
 
 > **Today: 2026-04-27.** Active phase: **Phase 1 — Foundation (Weeks 1–2).**
 >
@@ -8,7 +8,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 >
 > **Cross-repo split (consistent with [ROADMAP.md](ROADMAP.md)):**
 > - **This repo (backend)** — proprietary monorepo: API server, Temporal worker, in-cluster K8s agent, sandbox web frontend, Terraform infra, Receipt issuer, LLM Apply Fix path
-> - **[lowplane/sevro](https://github.com/lowplane/sevro)** — Apache-2.0 OSS CLI: deterministic 30-detector rule engine, `analyze`/`demo`/`diff`/`score`/`audit`/`compare`, `--share` HTTPS upload, `@sevro/cli` npm package
+> - **[optiqor/optiqor](https://github.com/optiqor/optiqor-cli)** — Apache-2.0 OSS CLI: deterministic 30-detector rule engine, `analyze`/`demo`/`diff`/`score`/`audit`/`compare`, `--share` HTTPS upload, `@optiqor/cli` npm package
 
 ## Phase 1 — Weeks 1–2: Foundation
 
@@ -42,10 +42,10 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 ### `cmd/api`
 - [x] HTTP server (stdlib mux), graceful shutdown via `signal.NotifyContext` + configured grace period
 - [x] `/healthz` (liveness), `/readyz` (readiness — registry-driven 200/503 + JSON results), `/metrics` (Prometheus exposition)
-- [x] Middleware: request_id, tenant resolution from `X-Sevro-Tenant` header (Phase 1 dev surface), slog access log, panic recovery
+- [x] Middleware: request_id, tenant resolution from `X-Optiqor-Tenant` header (Phase 1 dev surface), slog access log, panic recovery
 - [x] GitHub App webhook receiver — HMAC verification + 8MiB body cap + 202 ack
 - [x] GitHub OAuth callback handler (Phase 1 ack stub — session issuance lands in Phase 5)
-- [x] pprof endpoints behind `SEVRO_ADMIN_TOKEN` constant-time check (disabled when token is empty)
+- [x] pprof endpoints behind `OPTIQOR_ADMIN_TOKEN` constant-time check (disabled when token is empty)
 - [ ] JWT-based tenant resolution (Phase 5 — replaces header extractor when auth ships)
 
 ### `cmd/worker`
@@ -67,11 +67,11 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 ### Migrations
 - [x] goose-format `migrations/0001_baseline.sql` with: `tenants`, `workspaces`, `clusters`, `namespaces`, `workloads`, `recommendations`, `recommendation_dismissals`, `apply_fixes`, `receipts`, `llm_calls`, `audit_log`
 - [x] RLS policies on all tenant-scoped tables (`tenant_isolation USING tenant_id::text = current_setting('app.tenant_id', true)`)
-- [x] Migration role separate from app role (`sevro_migrator NOLOGIN BYPASSRLS` vs `sevro_app NOLOGIN`)
+- [x] Migration role separate from app role (`optiqor_migrator NOLOGIN BYPASSRLS` vs `optiqor_app NOLOGIN`)
 
 ### Observability (code + Helm complete; cluster install pending EKS)
 - [x] Prometheus + Grafana + Loki + Tempo + OTel Collector Helm values in `deploy/helm/observability/`
-- [x] SLO recording rules + alerts in `deploy/helm/observability/rules/sevro-slo.yaml` (API uptime ≥ 99.5%, PR comment p95 < 45s, sandbox p95 < 3s, cost/PR < $0.40, Apply Fix success > 85%)
+- [x] SLO recording rules + alerts in `deploy/helm/observability/rules/optiqor-slo.yaml` (API uptime ≥ 99.5%, PR comment p95 < 45s, sandbox p95 < 3s, cost/PR < $0.40, Apply Fix success > 85%)
 - [x] Sentry init shim in `internal/platform/telemetry` (no-op default; `NewSentryReporter` adapter ships in Phase 5)
 - [ ] `helm install` of the observability stack on the live EKS cluster
 
@@ -79,7 +79,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [x] Every env's Terraform `provider "aws"` block declares `default_tags` with `Project`, `Environment`, `Tenant`, `ManagedBy`
 - [x] CI check (`scripts/check-terraform-tags.sh`) fails if any env file is missing the required tag keys; wired into `.github/workflows/ci.yml`
 - [x] `terraform fmt -recursive -check` runs in CI
-- [ ] Athena workgroup `sevro-cost-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment` (lands with first prod CUR ingest in Phase 6)
+- [ ] Athena workgroup `optiqor-cost-attribution` + named queries for `cost_per_tenant`, `cost_per_workflow`, `cost_per_environment` (lands with first prod CUR ingest in Phase 6)
 
 ### Production-readiness baseline (Phase 1 — must land before Phase 2)
 
@@ -120,18 +120,18 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 ## Phase 2 — Weeks 3–4: Public Sandbox
 
-> **Backend scope only.** CLI-side parser, cost engine, shareable-URL hashing, and the `--share` upload client all ship in the [sevro repo](https://github.com/lowplane/sevro); see [ROADMAP.md](ROADMAP.md) for the cross-repo view. The backend Phase 2 work is the sandbox **receiver** — the public HTTP endpoint that accepts uploaded analyses, deduplicates them by hash, and renders a stable share URL.
+> **Backend scope only.** CLI-side parser, cost engine, shareable-URL hashing, and the `--share` upload client all ship in the [optiqor repo](https://github.com/optiqor/optiqor-cli); see [ROADMAP.md](ROADMAP.md) for the cross-repo view. The backend Phase 2 work is the sandbox **receiver** — the public HTTP endpoint that accepts uploaded analyses, deduplicates them by hash, and renders a stable share URL.
 
-- [ ] `internal/parser` — Helm values + templates parser. **Values normalisation is reused from `github.com/lowplane/sevro/pkg/parser`** (single source of truth — same `Workload` struct the CLI's detectors run against). This package owns only what the SaaS needs beyond static values: rendered-template parsing, Kustomize overlays, ArgoCD `Application`/Flux `HelmRelease` resolution, and the multi-source bundling for sandbox uploads
-- [ ] `internal/sandbox/handlers` — public sandbox API: `POST /api/v1/share` (accepts `X-Sevro-Hash`-headered upload), `GET /r/{hash}` (HTML render), `GET /api/v1/r/{hash}` (JSON)
-- [ ] `internal/cost` — sandbox-grade rule-based engine v0 (thin wrapper around `github.com/lowplane/sevro/pkg/rules`; server-issued Receipts and shareable analyses cite the exact same `DetectorID`s the CLI does — no fork)
+- [ ] `internal/parser` — Helm values + templates parser. **Values normalisation is reused from `github.com/optiqor/optiqor-cli/pkg/parser`** (single source of truth — same `Workload` struct the CLI's detectors run against). This package owns only what the SaaS needs beyond static values: rendered-template parsing, Kustomize overlays, ArgoCD `Application`/Flux `HelmRelease` resolution, and the multi-source bundling for sandbox uploads
+- [ ] `internal/sandbox/handlers` — public sandbox API: `POST /api/v1/share` (accepts `X-Optiqor-Hash`-headered upload), `GET /r/{hash}` (HTML render), `GET /api/v1/r/{hash}` (JSON)
+- [ ] `internal/cost` — sandbox-grade rule-based engine v0 (thin wrapper around `github.com/optiqor/optiqor-cli/pkg/rules`; server-issued Receipts and shareable analyses cite the exact same `DetectorID`s the CLI does — no fork)
 - [ ] Frontend framework decision (Week 3 Day 1) → ADR — Next.js / Remix / Vite+React
 - [ ] `web/` — sandbox UI: paste textbox, results panel, ±40% accuracy banner, share button
-- [ ] Shareable report storage — S3 bucket `sevro-prod-sandbox` already provisioned in Phase 1 Terraform with KMS + 30-day lifecycle + CRR; receiver writes content-addressed objects keyed by the SHA-256 the CLI sends in `X-Sevro-Hash`
+- [ ] Shareable report storage — S3 bucket `optiqor-prod-sandbox` already provisioned in Phase 1 Terraform with KMS + 30-day lifecycle + CRR; receiver writes content-addressed objects keyed by the SHA-256 the CLI sends in `X-Optiqor-Hash`
 - [ ] Rate limit middleware (Redis-backed, IP + fingerprint) — wired into `cmd/api` via the existing `internal/platform/db/redis` Keyspace
 - [ ] p95 < 3s benchmark in CI (k6 or hey)
 
-**CLI side already shipped (see [sevro repo](https://github.com/lowplane/sevro)):**
+**CLI side already shipped (see [optiqor repo](https://github.com/optiqor/optiqor-cli)):**
 - [x] Helm values parser, 30-detector engine, shareable-URL hashing, `--share` HTTPS upload client with graceful offline fallback
 
 ---
@@ -140,7 +140,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 > **Backend scope is the LLM-driven Apply Fix path.** The deterministic 30-detector library is the CLI's responsibility (per the OSS playbook hard rule: no LLM in the CLI); the backend imports/mirrors the same rule definitions so server-issued recommendations cite the exact same detector IDs.
 
-- [x] **30 detectors mirrored server-side** — canonical implementations live in the CLI's public `pkg/rules` library and are imported directly via `go.mod` (`github.com/lowplane/sevro/pkg/rules` + `github.com/lowplane/sevro/pkg/parser`). No fork, no duplication — backend's `internal/cost` calls `rules.Run(workloads, rules.All())` against the same struct types the CLI emits. New detectors land in the CLI's `pkg/rules` first; a `go get -u github.com/lowplane/sevro` in the backend picks them up automatically. Golden parity tests in `tests/integration/cli_parity_test.go` assert the CLI binary and the backend produce the same `Finding` set for the canonical fixtures
+- [x] **30 detectors mirrored server-side** — canonical implementations live in the CLI's public `pkg/rules` library and are imported directly via `go.mod` (`github.com/optiqor/optiqor-cli/pkg/rules` + `github.com/optiqor/optiqor-cli/pkg/parser`). No fork, no duplication — backend's `internal/cost` calls `rules.Run(workloads, rules.All())` against the same struct types the CLI emits. New detectors land in the CLI's `pkg/rules` first; a `go get -u github.com/optiqor/optiqor-cli` in the backend picks them up automatically. Golden parity tests in `tests/integration/cli_parity_test.go` assert the CLI binary and the backend produce the same `Finding` set for the canonical fixtures
   - Source: 15 cost + 15 security detectors, CIS Kubernetes Benchmark / NSA hardening guide aligned (see [ROADMAP.md](ROADMAP.md) Phase 3 detector tables)
 - [ ] `internal/confidence` — Low/Med/High banding (server-side helper that the LLM augmentation layer down-ranks based on validator-rejection signals; CLI has the qualitative-only equivalent)
 - [ ] `internal/agent/llm` — Anthropic SDK wrapper with prompt caching (50 % hit-rate target Year 1)
@@ -149,13 +149,13 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] LLM-generated Apply Fix diff renderer (consumes detector findings + measured Prometheus context, emits Helm values diff)
 - [ ] LLM canary: same prompt occasionally sent to Sonnet AND Haiku; outputs compared, divergence alerts (todo.md production-readiness gap #6 Layer 3)
 
-**CLI side already shipped (see [sevro repo](https://github.com/lowplane/sevro)):**
+**CLI side already shipped (see [optiqor repo](https://github.com/optiqor/optiqor-cli)):**
 - [x] 15 cost detectors + 15 security detectors firing on bundled demo (30/30)
 - [x] Confidence band engine (`internal/rules.Confidence`)
-- [x] CLI v0.1 build + `npm pack` proven (14 KB `@sevro/cli` tarball); `release.yml` workflow drives publish on `v*` tag
+- [x] CLI v0.1 build + `npm pack` proven (14 KB `@optiqor/cli` tarball); `release.yml` workflow drives publish on `v*` tag
 - [x] Commands: `analyze`, `demo`, `diff`, `score`, `audit`, `compare` + `--version`/`--help`
 - [x] ASCII + JSON output with mandatory ±40% accuracy disclosure
-- [x] `--share` opt-in upload to `https://sandbox.sevro.dev/api/v1/share` over HTTPS with 5 s timeout and graceful offline fallback (overridable via `SEVRO_SHARE_URL`)
+- [x] `--share` opt-in upload to `https://sandbox.optiqor.dev/api/v1/share` over HTTPS with 5 s timeout and graceful offline fallback (overridable via `OPTIQOR_SHARE_URL`)
 
 ---
 
@@ -178,12 +178,12 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] Validators: `pdb`, `resourcequota`, `limitrange`, `hpabounds`, `dependency`, `oom-recent`
 - [ ] Wire as a pipeline stage between `internal/cost` (candidate generation) and `internal/prwriter` (rendering)
 - [ ] Rejected candidates logged with reason for tuning the detector library (not surfaced to PR comment)
-- [ ] Metric: `sevro_validator_rejects_total{reason}`; alert if reject rate jumps >2× week-over-week (signals a detector regression)
+- [ ] Metric: `optiqor_validator_rejects_total{reason}`; alert if reject rate jumps >2× week-over-week (signals a detector regression)
 
 ### Differentiator additions (folded into Phase 4)
 - [ ] `internal/prwriter/narrative` — LLM-generated 2-sentence diff narrative at the top of every PR comment (3 days)
 - [ ] `internal/cost/detectors/sec/cis` — CIS Kubernetes Benchmark control IDs attached to each security finding (2 days)
-- [ ] `internal/prwriter/labels` — PR labels-as-policy parser (`sevro:skip`, `sevro:budget=$X`, `sevro:wait-for-prom=Nd`) (2 days)
+- [ ] `internal/prwriter/labels` — PR labels-as-policy parser (`optiqor:skip`, `optiqor:budget=$X`, `optiqor:wait-for-prom=Nd`) (2 days)
 - [ ] `internal/ingestion/coalesce` — collapse two PRs against the same chart within 24h into one analysis (2 days)
 
 ### Production-readiness — Apply Fix safety + LLM defense + environment classification (Phase 4)
@@ -211,8 +211,8 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 ## Phase 5 — Weeks 9–10: Design Partner #1 + Slack + Dashboards
 
 - [ ] `cmd/agent` real watch loop: client-go informers + Prometheus scrape, mTLS to SaaS
-- [ ] Helm chart in `deploy/helm/sevro-agent/` for customer install
-- [ ] Slack: digest workflow, `/sevro status` slash command
+- [ ] Helm chart in `deploy/helm/optiqor-agent/` for customer install
+- [ ] Slack: digest workflow, `/optiqor status` slash command
 - [ ] Customer dashboard pages in `web/`
 - [ ] On-call docs + runbooks in `docs/runbooks/`
 
@@ -230,13 +230,13 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] `internal/notify/slack/diff` — render Apply Fix diff inline in Slack thread for mobile-first review (3 days)
 - [ ] `internal/integrations/argocd-notifications` — accept ArgoCD Notifications webhook back into our pipeline; close the Apply Fix → merge → sync → measure → Receipt loop (3 days)
 
-### Operational backbone — onboarding + sevro-on-sevro (Phase 5)
+### Operational backbone — onboarding + optiqor-on-optiqor (Phase 5)
 - [ ] `internal/onboarding/` — state machine (`signed_up → vcs_connected → repo_selected → first_pr_analyzed → agent_installed → first_apply_fix → first_receipt_issued`); each transition timestamped in `tenants.onboarding_state` JSONB column
 - [ ] `internal/onboarding/preflight` — pre-flight checker reads cluster K8s version, Prometheus presence, RBAC, Karpenter, PDB/RQ counts; renders preview page before `helm install`
 - [ ] `internal/onboarding/nudges` — Temporal cron workflows: 24h no-VCS email · 72h no-agent in-app prompt · 7-day no-Apply-Fix CSM/Slack alert
 - [ ] `internal/onboarding/demo` — synthetic-but-clearly-labeled demo data path for clusters with <30 days of Prometheus history
 - [ ] `cmd/api` route `/onboarding/health` — per-tenant funnel position + blockers; shareable with the customer
-- [ ] **Sevro-on-Sevro install** against our own EKS — production GitHub App, in-cluster agent on `prod` cluster, every PR to `backend/` gets a Sevro comment (zero engineering effort beyond using the product)
+- [ ] **Optiqor-on-Optiqor install** against our own EKS — production GitHub App, in-cluster agent on `prod` cluster, every PR to `backend/` gets a Optiqor comment (zero engineering effort beyond using the product)
 - [ ] `internal/metrics/activation` — Activation Rate (≥60% target) + Time to First Receipt (≤35 days p50) computed daily
 
 ### Hard SLOs to enforce in Phase 5
@@ -249,7 +249,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 #### Recommendation lifecycle (drives churn if missing)
 - [ ] `internal/recommendations/lifecycle` — five-state machine: `active` / `snoozed` / `dismissed` / `ignored-workload` / `ignored-class`
-- [ ] PR-label parser handles `sevro:snooze=14d` (label-driven snooze)
+- [ ] PR-label parser handles `optiqor:snooze=14d` (label-driven snooze)
 - [ ] "Dismiss" button on PR comment writes to lifecycle store; reason captured for detector tuning
 - [ ] Dashboard toggles for `ignored-workload` and `ignored-class`
 - [ ] **Drift detection** — agent compares cluster state vs last-known-recommendation; if customer applied manually, mark `applied-externally` and route through measured-delta → Receipt path
@@ -284,10 +284,10 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] `internal/receipts/tlog` — Sigstore Rekor-style transparency log; every Receipt appended to a Merkle log; cannot be retrofitted
 - [ ] `cmd/api` routes `/verify/<id>` (HTML page) + `/api/v1/receipts/<id>/verify` (JSON) — anonymous, public, no auth
 - [ ] Browser **WebCrypto** verification — verify Receipt locally without server roundtrip
-- [ ] **`@sevro/verify` CLI** (npm, Apache 2.0, lives in `cli/` repo) — fetches public key via DID/HKP, validates Ed25519 offline, exit code 0/1 for CI gating
+- [ ] **`@optiqor/verify` CLI** (npm, Apache 2.0, lives in `cli/` repo) — fetches public key via DID/HKP, validates Ed25519 offline, exit code 0/1 for CI gating
 - [ ] Yearly key rotation procedure documented; old keys remain valid forever via tlog
 - [ ] Documented + pen-tested compromise procedure (revoke in tlog → rolling-shadow re-sign → 24h customer alert)
-- [ ] Stable Receipt YAML schema versioned at `methodology.sevro.dev/<methodology>/<version>`
+- [ ] Stable Receipt YAML schema versioned at `methodology.optiqor.dev/<methodology>/<version>`
 
 #### Webhooks (cheap and high-value)
 - [ ] `internal/api/webhooks` — outbound event dispatcher; events: `receipt.issued`, `apply_fix.merged`, `cost_spike.detected`, `rollback.opened`, `validator.rejected`, `health_score.changed`
@@ -342,7 +342,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
   - `unknown` → fall back to current Year-1 logic, flag for human review
 - [ ] Classification result attached to every recommendation and stored in `recommendations.workload_class` for retrospective accuracy tracking
 - [ ] Migration: backfill existing tenants' workloads in a single Temporal workflow
-- [ ] Metric: `sevro_recommendation_accuracy_by_class` — weekly accuracy lift dashboard
+- [ ] Metric: `optiqor_recommendation_accuracy_by_class` — weekly accuracy lift dashboard
 
 ### Differentiator additions (folded into Phase 7)
 - [ ] `internal/parser/helmfile` — Helmfile reader (declarative state of multiple Helm releases); opens self-managed platform-team segment (2 wk)
@@ -356,7 +356,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
   - `presets/cert-manager` — `Certificate`, `Issuer`; CPU sizing only, memory is heap-bound
   - `presets/strimzi` — `Kafka`, `KafkaTopic`, `KafkaUser`; per-broker resource math; never auto-fix StatefulSets
   - `presets/istio` — `IstioOperator`, `Gateway`, `VirtualService`; sidecar resource recs bounded by mesh-wide policy
-- [ ] Coverage SLO instrumented: `sevro_workload_coverage_ratio` per tenant; alert if a tenant's ratio < 90% (signals a missing preset for an operator they're using heavily)
+- [ ] Coverage SLO instrumented: `optiqor_workload_coverage_ratio` per tenant; alert if a tenant's ratio < 90% (signals a missing preset for an operator they're using heavily)
 
 ## Phase 8 — Months 6–9: GitLab + Hetzner Cloud K8s
 
@@ -368,11 +368,11 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] First GitLab design partner; first Hetzner design partner
 
 ### Differentiator additions (folded into Phase 8)
-- [ ] `internal/agent/qa` + `internal/prwriter/thread` — `@sevro` PR-thread Q&A. Engineers ask "@sevro why did you suggest 6 GiB?" in the PR thread; the bot answers in-thread with the actual data points it used. Conversational AI in the PR layer (2 wk)
+- [ ] `internal/agent/qa` + `internal/prwriter/thread` — `@optiqor` PR-thread Q&A. Engineers ask "@optiqor why did you suggest 6 GiB?" in the PR thread; the bot answers in-thread with the actual data points it used. Conversational AI in the PR layer (2 wk)
 - [ ] `internal/receipts/currency` — multi-currency Receipts (EUR for Hetzner customers, GBP, etc.) signed against the original-currency invoice (3 days)
 
 ### Production-readiness — EU GA (Phase 8, gates GitLab + Hetzner customer onboarding)
-- [ ] **Terraform `eu-west-1` deployment** — full Sevro control plane in EU; replicates the prod stack
+- [ ] **Terraform `eu-west-1` deployment** — full Optiqor control plane in EU; replicates the prod stack
 - [ ] **Region selection at signup** — user chooses US or EU; cannot change post-signup; tenant data never leaves region after first agent install
 - [ ] **EU-specific Anthropic endpoint** — route all EU tenants through Anthropic's EU data-residency endpoint exclusively
 - [ ] **EU-resident KMS Receipt-signing key** — separate KMS key in `eu-west-1`; EU Receipts signed by the EU key; transparency log shards per region
@@ -388,12 +388,12 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 ### Differentiator additions (folded into Phase 9)
 - [ ] `internal/cost/regression` — cost regression detection (slow drift, not just spikes); separate alert path from Cost Spike (1 wk)
-- [ ] `sevro/detector-sdk` seed release — extract the 30 Year-1 detectors into the SDK shape and ship a rough public release; year ahead of original Y2 plan, builds community-contribution muscle (2 wk)
+- [ ] `optiqor/detector-sdk` seed release — extract the 30 Year-1 detectors into the SDK shape and ship a rough public release; year ahead of original Y2 plan, builds community-contribution muscle (2 wk)
 
 ### Operator-Managed Workload Coverage — Layer 4 (Phase 9)
-- [ ] Public `sevro/operator-presets` repo (Apache 2.0) for community-contributed YAML presets
+- [ ] Public `optiqor/operator-presets` repo (Apache 2.0) for community-contributed YAML presets
 - [ ] CI validates preset schema and runs against a live cluster of the operator
-- [ ] Sevro reviews and merges; presets ship in next agent release; long tail of operators covered with zero per-operator engineering effort (3 days framework + ongoing review time)
+- [ ] Optiqor reviews and merges; presets ship in next agent release; long tail of operators covered with zero per-operator engineering effort (3 days framework + ongoing review time)
 
 ### Operational backbone — full metrics + REST API + auditor mode (Phase 9)
 
@@ -413,8 +413,8 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] API tokens scoped to tenant with scopes (`receipts:read`, `apply_fix:write`, `admin`); Argon2id hashed at rest; audit-logged
 - [ ] OAuth 2.0 authorization-code flow for third-party app integrations (Backstage, Cortex, Port)
 - [ ] Redis-backed rate limiter; `429` with proper `Retry-After`
-- [ ] **`@sevro/sdk-typescript`** (npm, MIT) — REST client + webhook signature verification
-- [ ] `sandbox.sevro.dev` — deterministic mock-data API for customer integration testing
+- [ ] **`@optiqor/sdk-typescript`** (npm, MIT) — REST client + webhook signature verification
+- [ ] `sandbox.optiqor.dev` — deterministic mock-data API for customer integration testing
 - [ ] Docs site auto-generated from OpenAPI; CI fails if a public endpoint changes without docs update
 - [ ] Every endpoint has runnable examples in `curl`, TypeScript, and Go (Go examples even though Go SDK is Y2)
 
@@ -425,8 +425,8 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 #### Public transparency (Month 6+, Phase 9 formalization)
 - [ ] Quarterly transparency report blog post template
-- [ ] Live status page at `status.sevro.dev`: real-time per-tenant cost (anonymized) + SLO performance
-- [ ] Open-source dogfooding Helm chart at `sevro/dogfood` (lets customers install identical infra)
+- [ ] Live status page at `status.optiqor.dev`: real-time per-tenant cost (anonymized) + SLO performance
+- [ ] Open-source dogfooding Helm chart at `optiqor/dogfood` (lets customers install identical infra)
 
 ---
 

@@ -60,7 +60,7 @@ func TestValidate_BadLogLevel(t *testing.T) {
 func TestValidate_BadEnv(t *testing.T) {
 	c := Config{Env: Env("qa"), LogLevel: "info", ShutdownGrace: time.Second}
 	err := c.Validate()
-	if err == nil || !strings.Contains(err.Error(), "SEVRO_ENV") {
+	if err == nil || !strings.Contains(err.Error(), "OPTIQOR_ENV") {
 		t.Fatalf("expected env error, got: %v", err)
 	}
 }
@@ -74,9 +74,9 @@ func TestValidate_NonPositiveShutdownGrace(t *testing.T) {
 }
 
 func TestLoad_Dev(t *testing.T) {
-	t.Setenv("SEVRO_ENV", "dev")
-	t.Setenv("SEVRO_LOG_LEVEL", "debug")
-	t.Setenv("SEVRO_HTTP_ADDR", ":18080")
+	t.Setenv("OPTIQOR_ENV", "dev")
+	t.Setenv("OPTIQOR_LOG_LEVEL", "debug")
+	t.Setenv("OPTIQOR_HTTP_ADDR", ":18080")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -90,8 +90,8 @@ func TestLoad_Dev(t *testing.T) {
 }
 
 func TestLoad_DurationOverride(t *testing.T) {
-	t.Setenv("SEVRO_ENV", "dev")
-	t.Setenv("SEVRO_SHUTDOWN_GRACE", "30s")
+	t.Setenv("OPTIQOR_ENV", "dev")
+	t.Setenv("OPTIQOR_SHUTDOWN_GRACE", "30s")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -102,8 +102,8 @@ func TestLoad_DurationOverride(t *testing.T) {
 }
 
 func TestLoad_DurationFallbackOnGarbage(t *testing.T) {
-	t.Setenv("SEVRO_ENV", "dev")
-	t.Setenv("SEVRO_SHUTDOWN_GRACE", "not-a-duration")
+	t.Setenv("OPTIQOR_ENV", "dev")
+	t.Setenv("OPTIQOR_SHUTDOWN_GRACE", "not-a-duration")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)

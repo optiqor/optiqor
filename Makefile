@@ -91,13 +91,13 @@ docker-logs: ## Tail logs from local stack
 # ---------------- DB ----------------
 .PHONY: migrate migrate-down migrate-status migrate-create seed
 migrate: ## Run pending migrations
-	@goose -dir ./migrations postgres "$$SEVRO_POSTGRES_DSN" up
+	@goose -dir ./migrations postgres "$$OPTIQOR_POSTGRES_DSN" up
 
 migrate-down: ## Roll back the last migration
-	@goose -dir ./migrations postgres "$$SEVRO_POSTGRES_DSN" down
+	@goose -dir ./migrations postgres "$$OPTIQOR_POSTGRES_DSN" down
 
 migrate-status: ## Show migration status
-	@goose -dir ./migrations postgres "$$SEVRO_POSTGRES_DSN" status
+	@goose -dir ./migrations postgres "$$OPTIQOR_POSTGRES_DSN" status
 
 migrate-create: ## Create a new migration: make migrate-create name=add_foo_to_bar
 	@goose -dir ./migrations create $(name) sql

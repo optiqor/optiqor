@@ -1,4 +1,4 @@
-// Command api is the Sevro HTTP API server.
+// Command api is the Optiqor HTTP API server.
 //
 // It serves the GitHub App webhook receiver, sandbox endpoints, and
 // customer dashboard API. Phase 1 wires config + structured logging +
@@ -23,12 +23,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lowplane/backend/internal/platform/config"
-	"github.com/lowplane/backend/internal/platform/healthz"
-	"github.com/lowplane/backend/internal/platform/logging"
-	"github.com/lowplane/backend/internal/platform/telemetry"
-	"github.com/lowplane/backend/internal/tenancy"
-	"github.com/lowplane/backend/internal/vcs"
+	"github.com/optiqor/backend/internal/platform/config"
+	"github.com/optiqor/backend/internal/platform/healthz"
+	"github.com/optiqor/backend/internal/platform/logging"
+	"github.com/optiqor/backend/internal/platform/telemetry"
+	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/vcs"
 )
 
 var version = "dev"
@@ -62,10 +62,10 @@ func run() int {
 	// Future phases register: postgres, redis, temporal, anthropic.
 
 	metrics := telemetry.NewRegistry()
-	httpRequests := metrics.NewCounter("sevro_http_requests_total",
+	httpRequests := metrics.NewCounter("optiqor_http_requests_total",
 		"Total HTTP requests served by the api binary, by route and status",
 		nil)
-	httpLatency := metrics.NewHistogram("sevro_http_request_duration_seconds",
+	httpLatency := metrics.NewHistogram("optiqor_http_request_duration_seconds",
 		"HTTP request latency in seconds",
 		nil,
 		[]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5})
@@ -176,11 +176,11 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 		})
 	})
 
-	// pprof endpoints — gated on the SEVRO_ADMIN_TOKEN header to
+	// pprof endpoints — gated on the OPTIQOR_ADMIN_TOKEN header to
 	// avoid exposing them to unauthenticated traffic. Empty token
 	// disables pprof entirely (the safe default in dev).
-	if os.Getenv("SEVRO_ADMIN_TOKEN") != "" {
-		mountPProf(mux, os.Getenv("SEVRO_ADMIN_TOKEN"))
+	if os.Getenv("OPTIQOR_ADMIN_TOKEN") != "" {
+		mountPProf(mux, os.Getenv("OPTIQOR_ADMIN_TOKEN"))
 	}
 
 	// GitHub App webhook receiver: HMAC-verifies the signature and
@@ -224,25 +224,25 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 // it in the context so downstream handlers can call tenancy.FromContext
 // without parsing headers themselves.
 //
-// Phase 1: tenant id comes from the `X-Sevro-Tenant` header. Real auth
+// Phase 1: tenant id comes from the `X-Optiqor-Tenant` header. Real auth
 // (JWT-extracted tenant claim) lands in Phase 5 alongside GitHub OAuth;
 // the extractor function is pluggable so the middleware itself doesn't
 // change when auth lands.
 type TenantExtractor func(r *http.Request) (tenancy.Context, error)
 
 // HeaderTenantExtractor returns the Phase-1 dev extractor that reads
-// X-Sevro-Tenant. Public endpoints (/healthz, /readyz, /webhooks/*)
+// X-Optiqor-Tenant. Public endpoints (/healthz, /readyz, /webhooks/*)
 // must be routed AROUND this middleware.
 func HeaderTenantExtractor(r *http.Request) (tenancy.Context, error) {
-	id := r.Header.Get("X-Sevro-Tenant")
+	id := r.Header.Get("X-Optiqor-Tenant")
 	if id == "" {
 		return tenancy.Context{}, tenancy.ErrNoTenant
 	}
 	return tenancy.Context{
 		TenantID:    id,
-		WorkspaceID: r.Header.Get("X-Sevro-Workspace"),
-		ClusterID:   r.Header.Get("X-Sevro-Cluster"),
-		Namespace:   r.Header.Get("X-Sevro-Namespace"),
+		WorkspaceID: r.Header.Get("X-Optiqor-Workspace"),
+		ClusterID:   r.Header.Get("X-Optiqor-Cluster"),
+		Namespace:   r.Header.Get("X-Optiqor-Namespace"),
 	}, nil
 }
 
@@ -351,10 +351,10 @@ func withAccessLog(logger *slog.Logger, requests telemetry.Counter, latency tele
 }
 
 // mountPProf wires the standard pprof handlers behind a constant-time
-// header check. Production deploys keep SEVRO_ADMIN_TOKEN long and
+// header check. Production deploys keep OPTIQOR_ADMIN_TOKEN long and
 // rotated; the operator fetches profiles via:
 //
-//	curl -H "X-Admin-Token: $TOKEN" https://api.sevro.dev/debug/pprof/heap > heap.pb
+//	curl -H "X-Admin-Token: $TOKEN" https://api.optiqor.dev/debug/pprof/heap > heap.pb
 func mountPProf(mux *http.ServeMux, token string) {
 	require := func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

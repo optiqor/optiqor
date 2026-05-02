@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# In-cluster Sevro agent — Apache 2.0 (see ../LICENSE-agent).
+# In-cluster Optiqor agent — Apache 2.0 (see ../LICENSE-agent).
 FROM golang:1.23-alpine AS build
 WORKDIR /src
 RUN apk add --no-cache git ca-certificates

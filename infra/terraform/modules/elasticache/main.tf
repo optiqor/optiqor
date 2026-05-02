@@ -18,7 +18,7 @@ resource "aws_elasticache_subnet_group" "this" {
 
 resource "aws_security_group" "this" {
   name        = "${var.name}-cache"
-  description = "Sevro Redis ingress"
+  description = "Optiqor Redis ingress"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -53,7 +53,7 @@ resource "aws_secretsmanager_secret_version" "auth" {
 
 resource "aws_elasticache_replication_group" "this" {
   replication_group_id        = var.name
-  description                 = "Sevro Redis ${var.name}"
+  description                 = "Optiqor Redis ${var.name}"
   engine                      = "redis"
   engine_version              = "7.1"
   node_type                   = var.node_type

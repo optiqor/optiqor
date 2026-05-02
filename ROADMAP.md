@@ -1,10 +1,10 @@
-# Sevro — End-to-End Project Roadmap
+# Optiqor — End-to-End Project Roadmap
 
 The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active work happens; Years 2–6 are summarized into themes and named milestones drawn directly from [docs/idea.md](docs/strategy/idea.md), [docs/business_strategy.md](docs/strategy/business_strategy.md), [docs/technical_implementation.md](docs/strategy/technical_implementation.md), and [docs/open_source_cli_playbook.md](docs/strategy/open_source_cli_playbook.md).
 
 > **Today: 2026-04-25.** Day 0 scaffolding complete. Phase 1 (Foundation) starts next sprint.
 
-> **End-state vision:** Year 5 — **$1.3B ARR (base case) / $527M (floor case), category-defining IPO at $5–10B, "the Datadog of Kubernetes FinOps + Safety."** Independent. Analyst-cited. 60% penetration of K8s-GitOps orgs. Sevro Summit is the must-attend K8s FinOps + Safety event. Cross-customer pattern library is the training set for industry-standard LLM-based K8s tooling.
+> **End-state vision:** Year 5 — **$1.3B ARR (base case) / $527M (floor case), category-defining IPO at $5–10B, "the Datadog of Kubernetes FinOps + Safety."** Independent. Analyst-cited. 60% penetration of K8s-GitOps orgs. Optiqor Summit is the must-attend K8s FinOps + Safety event. Cross-customer pattern library is the training set for industry-standard LLM-based K8s tooling.
 
 ---
 
@@ -43,7 +43,7 @@ The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active w
 - [x] Backend: Go modules, `cmd/{api,worker,agent}` stubs, `internal/` partitions, Dockerfiles, `docker-compose.yml`, Makefile
 - [x] Backend: GitHub Actions (ci, security, release, codeql), Dependabot, CODEOWNERS, PR template
 - [x] Backend: Terraform skeleton (`infra/terraform/envs/{dev,staging,prod}` + `modules/`)
-- [x] CLI: Cobra root with all 7 stub subcommands, npm wrapper (`@sevro/cli`), GoReleaser, OSS norms (CONTRIBUTING, CODE_OF_CONDUCT, SECURITY)
+- [x] CLI: Cobra root with all 7 stub subcommands, npm wrapper (`@optiqor/cli`), GoReleaser, OSS norms (CONTRIBUTING, CODE_OF_CONDUCT, SECURITY)
 - [x] LICENSE files (proprietary backend, Apache-2.0 CLI)
 - [x] Pre-commit hooks (gofmt, golangci-lint, gitleaks)
 - [x] `git init` + initial commit per repo
@@ -83,7 +83,7 @@ The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active w
 - [ ] Helm values + templates parser
 - [ ] Sandbox cost engine v0 (rule-based, ±40% accuracy disclosure mandatory)
 - [ ] Sandbox web UI — **frontend framework decision (Next.js / Remix / Vite+React) by Week 3 Day 1**
-- [ ] Shareable report URLs: `sevro.dev/r/<hash>`
+- [ ] Shareable report URLs: `optiqor.dev/r/<hash>`
 - [ ] Rate limiting, abuse protection, no auth required
 - [ ] p95 < 3s end-to-end for a 200-line `values.yaml`
 
@@ -97,12 +97,12 @@ The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active w
 - [ ] LLM diff generation: Claude Haiku (enrichment ~$0.02), Sonnet (generation ~$0.18), Opus (escalation <5%)
 - [ ] Anthropic prompt caching wired (target 50% hit rate Year 1)
 - [ ] Cost cap per analysis: $0.40
-- [ ] CLI v0.1 to `@sevro/cli` on npm
+- [ ] CLI v0.1 to `@optiqor/cli` on npm
 - [ ] CLI commands shipping: `analyze`, `demo`, `diff`, `score` + `--version`/`--help`
 - [ ] CLI ASCII output with mandatory ±40% accuracy disclosure
 - [ ] CLI shareable URL upload (opt-in)
 
-**Exit:** `npx @sevro/cli analyze ./my-chart` works; >10 npm installs in week.
+**Exit:** `npx @optiqor/cli analyze ./my-chart` works; >10 npm installs in week.
 
 ### Phase 4 — Weeks 7–8: PR Writer + Apply Fix
 
@@ -132,7 +132,7 @@ The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active w
 - [ ] Onboard design partner #1: install GitHub App, deploy in-cluster agent, Prometheus connect, AWS STS AssumeRole
 - [ ] In-cluster agent (Apache 2.0): K8s API watch via `client-go` informers + Prometheus scrape + mTLS to SaaS, short-lived JWTs (15min TTL)
 - [ ] Per-tenant Temporal queues + RLS verified end-to-end
-- [ ] Slack integration: daily digest, weekly team report, `/sevro status` slash command
+- [ ] Slack integration: daily digest, weekly team report, `/optiqor status` slash command
 - [ ] Customer dashboard: savings to date, open PRs, agent health
 - [ ] Skeptic Mode default-on for new customers
 
@@ -228,7 +228,7 @@ Three-tier staircase, each with a hard time-to-value SLO:
 
 | Tier | Trigger | Time to First Value | What lands |
 | --- | --- | --- | --- |
-| **Tier 0: Sandbox** | `sevro.dev/sandbox` | **p95 < 3s** | Paste values.yaml → instant analysis. No login. (Phase 2) |
+| **Tier 0: Sandbox** | `optiqor.dev/sandbox` | **p95 < 3s** | Paste values.yaml → instant analysis. No login. (Phase 2) |
 | **Tier 1: GitHub/GitLab App** | Click "Install" | **< 10 min** | App installed → next PR/MR gets a comment. No agent needed. ±40% accuracy. |
 | **Tier 2: Full agent install** | `helm install` | **< 30 min** | Real Prometheus → exact recommendations + first Cloud Receipt within 30 days. |
 
@@ -236,7 +236,7 @@ Implementation in `internal/onboarding/`:
 
 - [ ] **State machine per tenant** stored in `tenants.onboarding_state`: `signed_up → vcs_connected → repo_selected → first_pr_analyzed → agent_installed → first_apply_fix → first_receipt_issued`. Every transition timestamped. **This is the activation funnel.**
 - [ ] **Per-stage nudge workflows** (Temporal): 24h after signup with no VCS → email · 72h with no agent → in-app prompt · 7 days with no Apply Fix merged → CSM/Slack DM alert (Team tier+).
-- [ ] **Pre-flight checks** before agent install — read cluster K8s version, Prometheus presence, RBAC permissions, Karpenter presence, existing PDB/RQ counts. Output a *"this is what Sevro will do in your cluster"* preview page before they `helm install`. Reduces support load 5–10×.
+- [ ] **Pre-flight checks** before agent install — read cluster K8s version, Prometheus presence, RBAC permissions, Karpenter presence, existing PDB/RQ counts. Output a *"this is what Optiqor will do in your cluster"* preview page before they `helm install`. Reduces support load 5–10×.
 - [ ] **Health page** `/onboarding/health` showing every customer where they are in the funnel and what's blocking them. Shareable with the customer, not internal-only.
 - [ ] **Demo data fallback** — if a cluster is too small or too new for 30 days of Prometheus data, show synthetic-but-clearly-labeled demo data so they see what the product looks like once data accumulates. Prevents the "empty dashboard for 14 days" churn driver.
 - [ ] **Hard SLOs committed in-product:** Sandbox p95 < 3s · Install → first comment < 10 min · Install → first recommendation < 30 min · Install → first Receipt < 35 days (30-day Prometheus window + 5-day CUR buffer).
@@ -250,21 +250,21 @@ Implementation in `internal/onboarding/`:
 
 Three surfaces with cryptographic + observable proofs.
 
-**Surface 1 — Public verification page** (`sevro.dev/verify/<receipt-id>`, no auth):
+**Surface 1 — Public verification page** (`optiqor.dev/verify/<receipt-id>`, no auth):
 
 - [ ] Renders signed payload (savings, period, cluster ID, billing-source attestation)
 - [ ] Ed25519 public key fingerprint with `did:key:` identifier
 - [ ] "Verify locally" panel: copy-pasteable `cosign verify-blob` + `openssl` fallback
-- [ ] Cryptographic provenance: which Sevro backend version generated this, which AWS account ID (hashed), which CUR partition timestamps
+- [ ] Cryptographic provenance: which Optiqor backend version generated this, which AWS account ID (hashed), which CUR partition timestamps
 - [ ] **"Verify Now" button uses browser WebCrypto API** — no server roundtrip; verification works even if our backend is down
 - [ ] Customers can mark a Receipt "public" → shareable proof URL
 
-**Surface 2 — Self-hosted verification CLI** (`npx @sevro/verify <receipt-url>`):
+**Surface 2 — Self-hosted verification CLI** (`npx @optiqor/verify <receipt-url>`):
 
 - [ ] Apache 2.0; fetches public key via DID/HKP; validates Ed25519 signature offline
 - [ ] Returns exit code 0/1 — usable in CI/CD pipelines that gate based on Receipt validity
 - [ ] **Sigstore Rekor-style transparency log** — every Receipt appended to a Merkle log; customers can verify our key history and prove non-revocation
-- [ ] **Works fully offline** once Sevro public keys are downloaded — critical for air-gapped enterprise
+- [ ] **Works fully offline** once Optiqor public keys are downloaded — critical for air-gapped enterprise
 
 **Surface 3 — Auditor mode** (procurement / compliance "are these real?"):
 
@@ -301,16 +301,16 @@ actuals:
 
 signatures:
   receipt_signature: ed25519:base64...
-  signing_key_id: q2-2026-sevro
-  signing_key_pubkey_url: keys.sevro.dev/q2-2026.pub
+  signing_key_id: q2-2026-optiqor
+  signing_key_pubkey_url: keys.optiqor.dev/q2-2026.pub
 
 transparency:
   tlog_index: 12345
-  tlog_url: tlog.sevro.dev/12345
+  tlog_url: tlog.optiqor.dev/12345
   merkle_proof: base64...
 
 methodology_proof:
-  methodology_url: methodology.sevro.dev/hybrid-v1.2
+  methodology_url: methodology.optiqor.dev/hybrid-v1.2
   methodology_hash: sha256:ghi789...
 ```
 
@@ -365,7 +365,7 @@ REST API + TypeScript SDK + Webhooks in Year 1. **GraphQL deferred until custome
 
 **Three surfaces:**
 
-- [ ] **REST API** — `api.sevro.dev/v1/...` — most customers, most use cases. OpenAPI 3.1 spec generated from Go interfaces (oapi-codegen). `/v1/` is forever stable; deprecation notices ≥ 12 months.
+- [ ] **REST API** — `api.optiqor.dev/v1/...` — most customers, most use cases. OpenAPI 3.1 spec generated from Go interfaces (oapi-codegen). `/v1/` is forever stable; deprecation notices ≥ 12 months.
 - [ ] **Webhooks** — outbound events to customer endpoints, HMAC-SHA256 signed, retried with exponential backoff, replayable from a 30-day buffer:
   - `receipt.issued`
   - `apply_fix.merged`
@@ -373,7 +373,7 @@ REST API + TypeScript SDK + Webhooks in Year 1. **GraphQL deferred until custome
   - `rollback.opened`
   - `validator.rejected`
   - `health_score.changed`
-- [ ] **Sandbox API** at `sandbox.sevro.dev` returns deterministic mock data — customers integrate end-to-end before they have real data.
+- [ ] **Sandbox API** at `sandbox.optiqor.dev` returns deterministic mock data — customers integrate end-to-end before they have real data.
 
 **Three-tier access** (same code, different policies):
 
@@ -381,11 +381,11 @@ REST API + TypeScript SDK + Webhooks in Year 1. **GraphQL deferred until custome
 | --- | --- | --- | --- |
 | **Public** | 100 req/sec/token, 10K/hour, plan-tier configurable | 99.9% | General customer integrations |
 | **Partner** | 10–100K req/sec, negotiated | 99.95% | Datadog, PagerDuty, Wiz integrations |
-| **Internal** | unlimited | none, may break | Sevro's own dashboard (eat-your-own-dogfood guarantees API quality) |
+| **Internal** | unlimited | none, may break | Optiqor's own dashboard (eat-your-own-dogfood guarantees API quality) |
 
 **SDK (Year 1):**
 
-- [ ] **`@sevro/sdk-typescript`** — npm, MIT. Covers REST + webhook signature verification. Used inside customer Backstage plugins, internal dashboards.
+- [ ] **`@optiqor/sdk-typescript`** — npm, MIT. Covers REST + webhook signature verification. Used inside customer Backstage plugins, internal dashboards.
 
 Defer: Python / Java / Ruby / Rust SDKs to Year 2+ — start where the platform engineers actually live.
 
@@ -412,10 +412,10 @@ Table-stakes credibility. The embarrassment-of-the-decade waiting to happen if w
 
 **Internal discipline:**
 
-- [ ] **Sevro-on-Sevro from Day 1 of Phase 5** — install our own product against our own EKS cluster. Every PR to `backend/` gets a Sevro analysis comment. Single highest-leverage credibility move; ~zero engineering effort because the product already exists.
+- [ ] **Optiqor-on-Optiqor from Day 1 of Phase 5** — install our own product against our own EKS cluster. Every PR to `backend/` gets a Optiqor analysis comment. Single highest-leverage credibility move; ~zero engineering effort because the product already exists.
 - [ ] **Daily cost-attribution dashboard** showing `cost_per_tenant`, `cost_per_workflow`, `cost_per_apply_fix`, `cost_per_llm_call` (split by Haiku/Sonnet/Opus), `cost_per_receipt`. Alerts on per-PR cost > $0.40.
 - [ ] **Monthly Cost Council** — engineering + finance review the dashboard, sign off on next month's envelope, identify the top 3 line items to cut. 30-minute meeting; skip it and cost creep eats your margin in 6 months.
-- [ ] **Per-cloud cost tagging** — every AWS resource tagged `Project=sevro Environment={dev,staging,prod} Tenant={shared,tenant-id}` from Terraform Day 1. Cost Explorer + Athena queries split by tag. Untagged spend > 1% triggers a fix-it ticket.
+- [ ] **Per-cloud cost tagging** — every AWS resource tagged `Project=optiqor Environment={dev,staging,prod} Tenant={shared,tenant-id}` from Terraform Day 1. Cost Explorer + Athena queries split by tag. Untagged spend > 1% triggers a fix-it ticket.
 - [ ] **LLM cost guardrails:** per-tenant LLM budget · per-prompt cache-hit-rate tracking · weekly review of top-10 most expensive prompts; rewrite to cache better. Anthropic prompt caching: 50% Y1 / 75% Y2 hit rate target.
 - [ ] **Idle-resource auto-shutdown** — staging scales to zero overnight + weekends; dev clusters shut down on inactivity. Saves 60–70% of non-prod spend.
 
@@ -431,9 +431,9 @@ Enterprise breakdown: LLM $300–500 · Compute $150–250 · Storage $30–50 �
 
 **Public transparency:**
 
-- [ ] **Quarterly transparency report** — public blog post with our actual numbers: AWS / Anthropic / observability spend, dollars saved by Sevro-on-Sevro, gross-margin trend. Vercel / PlanetScale / Tailscale all do versions of this — works as both marketing and accountability.
-- [ ] **Live status page** showing real-time per-tenant cost (anonymized) and our SLO performance: "Sevro is currently at $0.34/PR average; SLO is < $0.40."
-- [ ] **Open-source the dogfooding rig** — publish the Helm chart we use to install Sevro against itself. Customers install identical infra. Reinforces "any K8s, anywhere" positioning.
+- [ ] **Quarterly transparency report** — public blog post with our actual numbers: AWS / Anthropic / observability spend, dollars saved by Optiqor-on-Optiqor, gross-margin trend. Vercel / PlanetScale / Tailscale all do versions of this — works as both marketing and accountability.
+- [ ] **Live status page** showing real-time per-tenant cost (anonymized) and our SLO performance: "Optiqor is currently at $0.34/PR average; SLO is < $0.40."
+- [ ] **Open-source the dogfooding rig** — publish the Helm chart we use to install Optiqor against itself. Customers install identical infra. Reinforces "any K8s, anywhere" positioning.
 
 **Hard targets (Y1 exit):**
 
@@ -444,8 +444,8 @@ Enterprise breakdown: LLM $300–500 · Compute $150–250 · Storage $30–50 �
 - [ ] Untagged AWS spend: < 1%
 - [ ] Non-prod spend as % of total: ≤ 25%
 
-**Effort:** ~3 engineer-weeks for dashboard + tagging + auto-shutdown. Public report is ongoing time, not engineering. Sevro-on-Sevro is zero engineering effort.
-**Phase placement:** Cost tagging in **Phase 1** (Terraform from Day 1 — easy now, expensive to retrofit). Internal dashboard + Cost Council in **Phase 6**. Public quarterly report Month 6+. Sevro-on-Sevro on **Day 1 of Phase 5**.
+**Effort:** ~3 engineer-weeks for dashboard + tagging + auto-shutdown. Public report is ongoing time, not engineering. Optiqor-on-Optiqor is zero engineering effort.
+**Phase placement:** Cost tagging in **Phase 1** (Terraform from Day 1 — easy now, expensive to retrofit). Internal dashboard + Cost Council in **Phase 6**. Public quarterly report Month 6+. Optiqor-on-Optiqor on **Day 1 of Phase 5**.
 
 ---
 
@@ -456,16 +456,16 @@ These are gaps I've identified beyond the core roadmap. Ranked by *impact-to-eff
 #### Folded into Year 1 (high impact-to-effort)
 
 - [ ] **Diff narrative summarizer** at the top of every PR comment (Phase 4, ~3 days). LLM-generated 2-sentence plain-English summary above the cost table: *"This PR doubles your Kafka brokers from 4 → 8 GiB. Based on 30 days of P95 data your peak was 5.1 GiB — we recommend 6 GiB instead, saving ~$340/mo (Medium confidence)."* Readability win that no competitor has.
-- [ ] **`@sevro` PR-thread Q&A** (Phase 8, ~2 wk). Engineers can `@sevro why did you suggest 6 GiB?` in the PR thread; the bot answers in-thread with the data it used. Conversational AI in the PR layer is genuinely novel for this category.
+- [ ] **`@optiqor` PR-thread Q&A** (Phase 8, ~2 wk). Engineers can `@optiqor why did you suggest 6 GiB?` in the PR thread; the bot answers in-thread with the data it used. Conversational AI in the PR layer is genuinely novel for this category.
 - [ ] **CIS Kubernetes Benchmark mapping** for security findings (Phase 4, ~2 days). Every security finding includes a CIS control ID. Free credibility with security buyers; lets them roll our findings into existing compliance dashboards.
 - [ ] **Slack-rendered Apply Fix diff** (Phase 5, ~3 days). Render the proposed diff in a Slack thread so platform engineers can review on phone. Mobile-first review = faster merge.
-- [ ] **Free-tier monthly verified Receipt** (Phase 6, ~1 wk). Free tier (capped at 2 clusters) gets one Cloud Receipt per month. Customers post "Sevro saved my company $4,200, signed receipt attached" on LinkedIn — viral growth lever, low marginal cost to us.
+- [ ] **Free-tier monthly verified Receipt** (Phase 6, ~1 wk). Free tier (capped at 2 clusters) gets one Cloud Receipt per month. Customers post "Optiqor saved my company $4,200, signed receipt attached" on LinkedIn — viral growth lever, low marginal cost to us.
 - [ ] **Shadow recommendations for confidence calibration** (Phase 6, ~1 wk). High-volume customers opt in to shadow-fire detectors that don't post PR comments yet; we measure outcomes for 30 days. Builds the dataset we need for Year-2 numerical Confidence Scores.
-- [ ] **PR labels-as-policy** (Phase 4, ~2 days). `sevro:skip`, `sevro:budget=$5000`, `sevro:wait-for-prom=7d` labels override behavior. Familiar pattern (CodeQL, Renovate); zero-friction for power users.
+- [ ] **PR labels-as-policy** (Phase 4, ~2 days). `optiqor:skip`, `optiqor:budget=$5000`, `optiqor:wait-for-prom=7d` labels override behavior. Familiar pattern (CodeQL, Renovate); zero-friction for power users.
 - [ ] **Cross-PR coalescing** (Phase 4, ~2 days). Two PRs touching the same chart within 24h get one analysis comment, not two. Removes a known friction point with platform teams that have noisy PRs.
 - [ ] **Helmfile parser** (Phase 7, ~2 wk). Helmfile is real adoption that doesn't fit cleanly into ArgoCD/Flux. Opens a chunk of mid-market platform teams who self-manage.
 - [ ] **Cost regression detection** (Phase 9, ~1 wk). Beyond Cost Spike (anomaly), detect *slow drift* — "your nginx-ingress workload's CPU has crept up 18% over 3 months." Different alerting surface, same data pipeline.
-- [ ] **ArgoCD Notifications integration** (Phase 5, ~3 days). When ArgoCD syncs a Sevro-recommended change, ping our webhook back. Closes the Apply Fix → merge → sync → measure → Receipt loop into one observable workflow.
+- [ ] **ArgoCD Notifications integration** (Phase 5, ~3 days). When ArgoCD syncs a Optiqor-recommended change, ping our webhook back. Closes the Apply Fix → merge → sync → measure → Receipt loop into one observable workflow.
 - [ ] **Multi-currency Receipts** (Phase 8, ~3 days). Hetzner customers get EUR-denominated Receipts signed against EUR invoices. Same for GBP. Yes, looks small; matters for non-US enterprise.
 - [ ] **Operator-Managed Workload Coverage — full four-layer design** (Phases 4 / 7 / 9, ~3 wk total). Replaces the original "operator preset library" with a generic-coverage engine that lifts effective Y1 coverage from ~60% to ~98% of all workloads. See [dedicated section below](#operator-managed-workload-coverage-replaces-the-old-skip-with-explanation-floor).
 
@@ -476,14 +476,14 @@ These are gaps I've identified beyond the core roadmap. Ranked by *impact-to-eff
 - [ ] **Anomaly Receipts** — sign cryptographic receipts for anomaly *detections*, not just savings; ~2 wk effort; **deferred Y2 Q2.** Reason: useful for SOX / financial-controls customers but those are enterprise deals with 12-month sales cycles, not Year-1 buyers.
 - [ ] **AI-generated Cost Spike postmortems** — when Cost Spike fires, generate an LLM-written postmortem the platform team can ship to leadership; ~1 wk; **deferred Y2 Q1.** Reason: requires Cost Spike to have been live long enough to have failure modes worth diagnosing.
 - [ ] **Carbon-per-PR** — kg CO2e per merged change; **deferred Y2 Q3.** Reason: real demand from EU CSRD-regulated customers but data quality (provider-published carbon intensity) is still evolving; ship when the upstream data hardens.
-- [ ] **Receipt aggregation marketing page** — public "Sevro customers have saved $X across Y verified Receipts this quarter"; ~1 wk; **Y2 Q1.** Reason: needs ~50+ paying customers to be a credible number; targets Month 12+.
+- [ ] **Receipt aggregation marketing page** — public "Optiqor customers have saved $X across Y verified Receipts this quarter"; ~1 wk; **Y2 Q1.** Reason: needs ~50+ paying customers to be a credible number; targets Month 12+.
 - [ ] **kubeconform integration** — structural manifest validation before Apply Fix opens a PR; ~1 wk; **Y2 Q1.** Reason: nice-to-have, not a differentiator.
 - [ ] **Cluster diff replay** — "what if I'd applied 6 months ago"; ~2 wk; **Y2 Q2.** Reason: only valuable once we have 6 months of recommendation history per customer.
-- [ ] **`@sevro` slash commands in PR (`/sevro run`, `/sevro dismiss`)** — ~1 wk; **Y2 Q1.** Reason: paired with the Q&A feature, but Q&A is the higher-impact half.
+- [ ] **`@optiqor` slash commands in PR (`/optiqor run`, `/optiqor dismiss`)** — ~1 wk; **Y2 Q1.** Reason: paired with the Q&A feature, but Q&A is the higher-impact half.
 - [ ] **Service Catalog auto-mention** (Backstage / Cortex / Port pull) — ~1 wk; **Y2 Q2.** Reason: depends on Backstage plugin work landing first.
 - [ ] **GitHub merge queue cost re-prediction** — re-analyze when a PR is rebased onto main inside the merge queue; ~1 wk; **Y2 Q1.** Reason: only Series-C+ customers use merge queues; concentrate on PR-layer first.
 - [ ] **Bring-your-own-metrics (Mimir / Cortex / VictoriaMetrics)** — agent reads remote-write endpoints other than vanilla Prometheus; ~2 wk; **Y2 Q2.** Reason: ~80% of target customers run Prometheus directly; long tail can wait.
-- [ ] **CLI `sevro ship-it`** — one command runs analyze + opens local PR + pushes via gh; ~3 days; **Y2 Q1.** Reason: power-user feature, not the wedge.
+- [ ] **CLI `optiqor ship-it`** — one command runs analyze + opens local PR + pushes via gh; ~3 days; **Y2 Q1.** Reason: power-user feature, not the wedge.
 
 ### Operator-Managed Workload Coverage (replaces the old "skip with explanation" floor)
 
@@ -526,10 +526,10 @@ Year 2 expansion (15+): ArgoCD operator, Crossplane, External Secrets, Cluster A
 
 #### Layer 4 — Community-contributed presets (Phase 9, ~3 days framework)
 
-- [ ] Public `sevro/operator-presets` repo (Apache 2.0) accepting YAML preset contributions
+- [ ] Public `optiqor/operator-presets` repo (Apache 2.0) accepting YAML preset contributions
 - [ ] CI validates schema, runs against a live cluster of the operator
-- [ ] Sevro reviews and merges; presets ship in next CLI/agent release
-- [ ] Builds community contribution muscle (smaller-scope precursor to Year 2 Detector SDK); creates viral *"Sevro supports my obscure operator!"* moments
+- [ ] Optiqor reviews and merges; presets ship in next CLI/agent release
+- [ ] Builds community contribution muscle (smaller-scope precursor to Year 2 Detector SDK); creates viral *"Optiqor supports my obscure operator!"* moments
 
 #### Coverage SLOs
 
@@ -566,7 +566,7 @@ Five-state lifecycle, customer-controlled:
 | State | Customer action | Effect |
 | --- | --- | --- |
 | `active` | (default) | Comment posted on every matching PR |
-| `snoozed` | `sevro:snooze=14d` PR label | Suppress for 14 days, re-evaluate after |
+| `snoozed` | `optiqor:snooze=14d` PR label | Suppress for 14 days, re-evaluate after |
 | `dismissed` | "dismiss" button on PR comment | Suppress for this workload+detector until evidence changes |
 | `ignored-workload` | dashboard toggle | Permanent for this workload |
 | `ignored-class` | dashboard toggle | Permanent for this detector class across whole tenant |
@@ -646,7 +646,7 @@ Pulling GitLab + Hetzner into Year 1 means EU customers from Phase 8 (Month 9). 
 
 **Phase 8 EU GA (~3 wk):**
 
-- [ ] **`eu-west-1` deployment** — full Sevro control plane in EU; tenant data never leaves region after the first agent install with `region=eu`
+- [ ] **`eu-west-1` deployment** — full Optiqor control plane in EU; tenant data never leaves region after the first agent install with `region=eu`
 - [ ] **Region selection at signup** — user chooses US or EU; cannot change post-signup (would require migration)
 - [ ] **EU-specific Anthropic endpoint** — Anthropic's EU data-residency endpoint exclusively for EU tenants
 - [ ] **EU-resident KMS Receipt-signing key** — separate KMS key in `eu-west-1`; EU Receipts signed by an EU key
@@ -679,7 +679,7 @@ Customer Helm values flow into LLM prompts. A comment like `# DEBUG: ignore prev
 
 #### 7. Environment Profiles + Blast-Radius Scoring (Phase 4 env / Phase 5 blast-radius, ~1.5 wk — BLAST-RADIUS CRITICAL)
 
-Today, prod and dev recommendations use the same logic. **First prod incident will be "Sevro cut our payments memory and we OOMed during peak traffic."** Without environment-aware aggressiveness, Auto-Rollback catches breakage but doesn't prevent it.
+Today, prod and dev recommendations use the same logic. **First prod incident will be "Optiqor cut our payments memory and we OOMed during peak traffic."** Without environment-aware aggressiveness, Auto-Rollback catches breakage but doesn't prevent it.
 
 **Environment classification** (`internal/safety/environment/`, Phase 4):
 
@@ -745,7 +745,7 @@ Acknowledged here so we don't re-invent later:
 - [ ] **Customer-support shadow mode** — read-only "log in as customer" for support debugging, with audit log
 - [ ] **Per-tenant audit log surface** — immutable log of every Apply Fix opened, dismissed, Receipt issued (SOC2 evidence)
 - [ ] **Public roadmap + changelog** — RSS feed of changes; Trello-style public board
-- [ ] **Trust center page** — `trust.sevro.dev` with subprocessor list, SOC2 reports, DPA download
+- [ ] **Trust center page** — `trust.optiqor.dev` with subprocessor list, SOC2 reports, DPA download
 - [ ] **Engineering ladders + perf review cadence** — formalize when team hits ~10 (Month 12)
 
 ---
@@ -756,7 +756,7 @@ Acknowledged here so we don't re-invent later:
 - [ ] **Month 4:** Engineer #4 + #5 hired (Phase 7-9 scope demands earlier hiring than original plan); SEO engine (programmatic content from detector knowledge base)
 - [ ] **Month 5:** First case-study blog post; engineering blog; **Flux CD parser GA**
 - [ ] **Month 6:** 50 paying teams; $500K ARR; SOC 2 Type 1 readiness kickoff; **Azure AKS GA + first AKS Receipt**; chaos testing begins (monthly); DevRel hired
-- [ ] **Month 7:** GitHub Actions Marketplace listing for `sevro/actions`; **GitLab integration alpha** (internal dogfood)
+- [ ] **Month 7:** GitHub Actions Marketplace listing for `optiqor/actions`; **GitLab integration alpha** (internal dogfood)
 - [ ] **Month 8:** Pen test #1; **GitLab GA** (MR comments + Apply Fix in production)
 - [ ] **Month 9:** KubeCon EU sponsorship + booth; 150 paying teams; $1.5M ARR; SOC 2 Type 1 issued; **Hetzner Cloud K8s GA + first Hetzner Receipt**
 - [ ] **Month 10:** First dedicated SRE hired; 24/7 on-call rotation
@@ -774,7 +774,7 @@ Acknowledged here so we don't re-invent later:
 - [ ] **Bitbucket integration** (Q3) — PR comments
 - [ ] **Terraform cost analysis for K8s-adjacent resources** (Q2) — RDS, ElastiCache, S3 sized for K8s workloads (Year 1 target: not Infracost replacement, but K8s-adjacent only)
 - [ ] _(AKS GA, Hetzner Cloud, GitLab, Flux CD already shipped in Year 1 — see Phases 7-9.)_
-- [ ] **Detector SDK** public release (`sevro/detector-sdk`, Apache 2.0) — customers and partners write detectors
+- [ ] **Detector SDK** public release (`optiqor/detector-sdk`, Apache 2.0) — customers and partners write detectors
 - [ ] **pgvector embedding similarity** for "similar change" cross-customer matching
 - [ ] **Numerical Confidence Scores** (replace qualitative Low/Med/High once 50K+ merged PRs calibrate them)
 - [ ] **Custom Resource Definition support** beyond common operators (Prometheus Operator + cert-manager first)
@@ -804,7 +804,7 @@ Acknowledged here so we don't re-invent later:
 - [ ] **First "State of Kubernetes Efficiency" annual report** (anonymized benchmarks from 2,500+ clusters; press- and analyst-cited)
 - [ ] **KubeCon NA** + **KubeCon EU** booth at full scale; **KubeCon APAC** sponsorship
 - [ ] **Partnership Program launch** — every major K8s security and observability vendor
-- [ ] **CNCF Sandbox application** for `sevro/cli` or `sevro/agent`
+- [ ] **CNCF Sandbox application** for `optiqor/cli` or `optiqor/agent`
 - [ ] **HIPAA BAA available** (Month 30, Q4)
 - [ ] **SOC 2 Type 2** issued
 - [ ] **DevRel team:** ~$800K/year by Month 18 in salaries + event budget
@@ -820,24 +820,24 @@ Acknowledged here so we don't re-invent later:
 
 ## Year 3 — Run the Platform & Define the Category
 
-> **Targets:** $231M ARR (base) / $95M (floor) · Series C in motion · 75% gross margin · Sevro Summit launches · "Kubernetes Control Plane for Cost and Safety" is the public positioning.
+> **Targets:** $231M ARR (base) / $95M (floor) · Series C in motion · 75% gross margin · Optiqor Summit launches · "Kubernetes Control Plane for Cost and Safety" is the public positioning.
 
 ### Product
-- [ ] **Apply Fix Template Marketplace** — community-contributed patterns, Sevro-curated and quality-scored
+- [ ] **Apply Fix Template Marketplace** — community-contributed patterns, Optiqor-curated and quality-scored
 - [ ] **Full non-K8s cloud cost analysis** (head-to-head with Infracost on the broader Terraform surface) — differentiate on verified Receipts + Auto-Rollback + cluster-connected analysis
 - [ ] **AI/LLM infrastructure cost analysis** (training + inference)
 - [ ] **Carbon-per-PR** (CSRD/ESG impact analysis)
 - [ ] **Compliance-per-PR** (does this change break SOC 2 / HIPAA / PCI controls?)
 - [ ] **Performance impact-per-PR** (latency / error rate predicted)
 - [ ] **Shadow Mode** for ClickOps / `kubectl apply` patterns — reconstruct PR-equivalent diffs from cluster state changes
-- [ ] **Chart-specific public benchmarks** — `helm show sevro bitnami/postgresql` returns efficiency stats from our customer base
-- [ ] **Open API surface** — partners build on top of Sevro
+- [ ] **Chart-specific public benchmarks** — `helm show optiqor bitnami/postgresql` returns efficiency stats from our customer base
+- [ ] **Open API surface** — partners build on top of Optiqor
 - [ ] **Neo4j / graph DB evaluation** if a query Postgres genuinely can't answer emerges
 
 ### GTM & Org
-- [ ] **Sevro Summit** (inaugural) — must-attend K8s FinOps + Safety event
+- [ ] **Optiqor Summit** (inaugural) — must-attend K8s FinOps + Safety event
 - [ ] **Series C** ($200–300M) closed
-- [ ] **Sevro newsletter at KubeWeekly scale** (50K+ subscribers)
+- [ ] **Optiqor newsletter at KubeWeekly scale** (50K+ subscribers)
 - [ ] **Annual "State of K8s Efficiency" report** (Year 2 → industry standard)
 - [ ] **Enterprise customer count: 100+**
 - [ ] **International expansion:** EMEA + APAC GTM teams
@@ -847,7 +847,7 @@ Acknowledged here so we don't re-invent later:
 - [ ] **ISO 27001** issued
 - [ ] **SOC 2 Type 2** continuous re-attestation
 
-**Exit (Month 36):** Sevro Summit attended by 1,500+ · category positioning ("K8s Cost & Safety Control Plane") in Gartner / Forrester · $231M ARR (base) · 60+ enterprise logos · API + Marketplace driving 20% of pipeline.
+**Exit (Month 36):** Optiqor Summit attended by 1,500+ · category positioning ("K8s Cost & Safety Control Plane") in Gartner / Forrester · $231M ARR (base) · 60+ enterprise logos · API + Marketplace driving 20% of pipeline.
 
 ---
 
@@ -858,7 +858,7 @@ Acknowledged here so we don't re-invent later:
 - [ ] **Series C** fully deployed across international GTM, enterprise GTM, and adjacency M&A (if warranted)
 - [ ] **Strategic M&A** — likely targets in K8s policy-as-code, FinOps reporting, or carbon analytics
 - [ ] **FedRAMP Moderate** issued; first government / public-sector customers
-- [ ] **40%+ K8s GitOps org penetration target** (>12,000 companies on Sevro)
+- [ ] **40%+ K8s GitOps org penetration target** (>12,000 companies on Optiqor)
 - [ ] **Cross-customer pattern library** crosses threshold to be cited by Kubernetes maintainers as default-sizing reference
 - [ ] **Operating margin** approaching 18–25% target as scale leverage kicks in
 - [ ] **Pre-IPO financial controls** (audit-ready quarterly close, SOX readiness)
@@ -874,8 +874,8 @@ Acknowledged here so we don't re-invent later:
 > **Targets:** Year 5 — **$1.3B ARR (base) / $527M (floor)** · 60% K8s-GitOps penetration · Year 6 — **IPO at $5–10B**, "the Datadog of K8s FinOps + Safety."
 
 - [ ] **Cross-customer pattern library** is the training set for industry-standard LLM-based K8s tooling — Kubernetes maintainers and cloud providers consult our data for sizing recommendations
-- [ ] **Sevro Summit** is the definitive K8s FinOps + Safety event of the year
-- [ ] **Chart maintainers care about their Sevro efficiency score** publicly
+- [ ] **Optiqor Summit** is the definitive K8s FinOps + Safety event of the year
+- [ ] **Chart maintainers care about their Optiqor efficiency score** publicly
 - [ ] **Analyst-cited as category leader** (Gartner Magic Quadrant top-right)
 - [ ] **Operating margin: 18–25%** sustained
 - [ ] **Revenue mix:** Team 35% / Team+ 35% / Enterprise 25% / Terraform+LLM cost add-ons 5%
@@ -909,22 +909,22 @@ Acknowledged here so we don't re-invent later:
 - [ ] **IPO:** Year 6, $5–10B valuation
 
 ### Open Source & Community
-- [ ] **Y1:** `sevro/cli` (Apache 2.0, npm), `sevro/actions` (GitHub Actions), `sevro/agent` (in-cluster Apache 2.0 — unlocks regulated industries)
-- [ ] **Y2:** `sevro/detector-sdk` (Apache 2.0), `sevro/helm-bench` (public efficiency benchmarks)
+- [ ] **Y1:** `optiqor/cli` (Apache 2.0, npm), `optiqor/actions` (GitHub Actions), `optiqor/agent` (in-cluster Apache 2.0 — unlocks regulated industries)
+- [ ] **Y2:** `optiqor/detector-sdk` (Apache 2.0), `optiqor/helm-bench` (public efficiency benchmarks)
 - [ ] **Y2+:** CNCF Sandbox application for one or more repos
-- [ ] **Y3:** Apply Fix Template Marketplace (community-contributed, Sevro-curated)
+- [ ] **Y3:** Apply Fix Template Marketplace (community-contributed, Optiqor-curated)
 - [ ] **Always:** quarterly community office hours; annual "State of K8s Efficiency" report
 
 ### Content & SEO
 - [ ] **Y1:** Detector knowledge base → public docs (M3); programmatic SEO pages (M4+); engineering blog with case studies (M5+)
-- [ ] **Y2:** First "State of Kubernetes Efficiency" report; Sevro newsletter launches
+- [ ] **Y2:** First "State of Kubernetes Efficiency" report; Optiqor newsletter launches
 - [ ] **Y3:** KubeWeekly-scale newsletter (50K+ subs); chart-specific public benchmarks indexed
-- [ ] **Y4+:** Sevro Summit content library; analyst-cited research
+- [ ] **Y4+:** Optiqor Summit content library; analyst-cited research
 
 ### Design Partners → Customer Pipeline
 - [ ] **Y1:** 30 conversations → 3 design partners → 300 paying teams
 - [ ] **Y2:** Weekly partner office hours; first 20 enterprise logos
-- [ ] **Y3:** Customer Advisory Board; Sevro Summit attendee → pipeline conversion track
+- [ ] **Y3:** Customer Advisory Board; Optiqor Summit attendee → pipeline conversion track
 - [ ] **Always:** NRR ≥ 120% (Y1 target, ≥ 130% by Y3), gross retention ≥ 95% (Y1, ≥ 97% by Y3) — see [six-metric health framework](#3-customer-metrics--six-metric-health-framework)
 
 ### Risk Mitigations (per business strategy doc)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lowplane/backend/internal/tenancy"
+	"github.com/optiqor/backend/internal/tenancy"
 )
 
 func TestNoopProvider_ReturnsDefaults(t *testing.T) {
