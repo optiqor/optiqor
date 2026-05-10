@@ -45,8 +45,8 @@ resource "aws_db_parameter_group" "this" {
   family = "postgres16"
 
   parameter {
-    name  = "shared_preload_libraries"
-    value = "pg_stat_statements"
+    name         = "shared_preload_libraries"
+    value        = "pg_stat_statements"
     apply_method = "pending-reboot"
   }
   parameter {
@@ -66,9 +66,9 @@ resource "aws_db_instance" "this" {
   instance_class    = var.instance_class
   allocated_storage = var.allocated_storage_gb
 
-  db_name           = "optiqor"
-  username          = "optiqor_migrator"
-  manage_master_user_password = true
+  db_name                       = "optiqor"
+  username                      = "optiqor_migrator"
+  manage_master_user_password   = true
   master_user_secret_kms_key_id = var.kms_key_arn
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
@@ -76,22 +76,22 @@ resource "aws_db_instance" "this" {
   parameter_group_name   = aws_db_parameter_group.this.name
 
   # DR baseline (Phase 1, todo.md production-readiness gap #8)
-  multi_az                            = var.multi_az
-  backup_retention_period             = 35  # PITR window
-  backup_window                       = "03:00-04:00"
-  delete_automated_backups            = false
-  copy_tags_to_snapshot               = true
-  storage_encrypted                   = true
-  kms_key_id                          = var.kms_key_arn
-  performance_insights_enabled        = true
-  performance_insights_kms_key_id     = var.kms_key_arn
+  multi_az                              = var.multi_az
+  backup_retention_period               = 35 # PITR window
+  backup_window                         = "03:00-04:00"
+  delete_automated_backups              = false
+  copy_tags_to_snapshot                 = true
+  storage_encrypted                     = true
+  kms_key_id                            = var.kms_key_arn
+  performance_insights_enabled          = true
+  performance_insights_kms_key_id       = var.kms_key_arn
   performance_insights_retention_period = 7
-  enabled_cloudwatch_logs_exports     = ["postgresql"]
-  monitoring_interval                 = 60
-  monitoring_role_arn                 = aws_iam_role.rds_monitoring.arn
-  deletion_protection                 = var.deletion_protection
-  skip_final_snapshot                 = !var.deletion_protection
-  auto_minor_version_upgrade          = true
+  enabled_cloudwatch_logs_exports       = ["postgresql"]
+  monitoring_interval                   = 60
+  monitoring_role_arn                   = aws_iam_role.rds_monitoring.arn
+  deletion_protection                   = var.deletion_protection
+  skip_final_snapshot                   = !var.deletion_protection
+  auto_minor_version_upgrade            = true
 }
 
 resource "aws_iam_role" "rds_monitoring" {
