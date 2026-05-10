@@ -71,7 +71,7 @@ func TestHandler_GetVerified_True(t *testing.T) {
 	reg.Add("k1", pub)
 	h := &Handler{Store: store, Registry: reg}
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/receipts/rcpt_1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/receipts/rcpt_1", http.NoBody)
 	mux := http.NewServeMux()
 	h.Mount(mux)
 	w := httptest.NewRecorder()
@@ -95,7 +95,7 @@ func TestHandler_GetUnknown_404(t *testing.T) {
 	h := &Handler{Store: NewInMemoryStore(), Registry: NewStaticRegistry()}
 	mux := http.NewServeMux()
 	h.Mount(mux)
-	req := httptest.NewRequest(http.MethodGet, "/v1/receipts/missing", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/receipts/missing", http.NoBody)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
@@ -119,7 +119,7 @@ func TestHandler_VerifyPage_HTMLAndStatus(t *testing.T) {
 
 	mux := http.NewServeMux()
 	h.Mount(mux)
-	req := httptest.NewRequest(http.MethodGet, "/v/rcpt_1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v/rcpt_1", http.NoBody)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -143,7 +143,7 @@ func TestHandler_VerifyPage_HTMLAndStatus(t *testing.T) {
 
 func TestHandler_RejectsNonGet(t *testing.T) {
 	h := &Handler{Store: NewInMemoryStore(), Registry: NewStaticRegistry()}
-	req := httptest.NewRequest(http.MethodPost, "/v1/receipts/x", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/receipts/x", http.NoBody)
 	req.SetPathValue("id", "x")
 	w := httptest.NewRecorder()
 	h.Get(w, req)

@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/optiqor/backend/internal/agent"
@@ -65,10 +66,11 @@ func buildDomainDeps() *domainDeps {
 	region := "us-east-1"
 
 	sandboxH := &sandbox.Handler{
-		Store:  sandbox.NewInMemoryStore(),
-		Pricer: pricer,
-		Region: region,
-		Now:    func() time.Time { return time.Now().UTC() },
+		Store:         sandbox.NewInMemoryStore(),
+		Pricer:        pricer,
+		Region:        region,
+		Now:           func() time.Time { return time.Now().UTC() },
+		PublicBaseURL: os.Getenv("OPTIQOR_PUBLIC_URL"), // "" → derive from request
 	}
 
 	receiptsStore := receipts.NewInMemoryStore()

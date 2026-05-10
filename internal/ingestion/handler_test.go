@@ -13,7 +13,7 @@ import (
 
 func TestHandler_RejectsNonPost(t *testing.T) {
 	h := &Handler{}
-	req := httptest.NewRequest(http.MethodGet, "/v1/ingest", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/ingest", http.NoBody)
 	w := httptest.NewRecorder()
 	h.Ingest(w, req)
 	if w.Code != http.StatusMethodNotAllowed {

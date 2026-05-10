@@ -38,7 +38,7 @@ func TestRoutes_Analyze_Reachable(t *testing.T) {
 
 func TestRoutes_Meta_ListsKnownEndpoints(t *testing.T) {
 	mux := fullMux()
-	req := httptest.NewRequest(http.MethodGet, "/v1/meta", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/meta", http.NoBody)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -92,7 +92,7 @@ func TestRoutes_ApplyFixes_AcceptsTenantHeader(t *testing.T) {
 
 func TestRoutes_Receipts_404OnMissing(t *testing.T) {
 	mux := fullMux()
-	req := httptest.NewRequest(http.MethodGet, "/v1/receipts/missing-id", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/receipts/missing-id", http.NoBody)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {

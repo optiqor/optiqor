@@ -63,7 +63,7 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	var req PreviewRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "json: "+err.Error(), http.StatusBadRequest)

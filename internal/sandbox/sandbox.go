@@ -51,14 +51,18 @@ const MaxBodyBytes = 1 << 20 // 1 MiB
 const ShareTTL = 30 * 24 * time.Hour
 
 // Handler holds the dependencies needed to serve both routes. Pricer
-// and Region come from cmd/api config; Now and Hash are abstracted so
-// tests can pin them.
+// and Region come from cmd/api config; Now is abstracted so tests
+// can pin time. PublicBaseURL builds the share_url surfaced to clients;
+// when empty the handler derives it from the request (Host header +
+// X-Forwarded-Proto), so dev defaults to http://localhost:3000/r/...
+// without any wiring.
 type Handler struct {
-	Store     Store
-	Detectors []rules.Detector // defaults to rules.All() when empty
-	Pricer    cost.Pricer
-	Region    string
-	Now       func() time.Time
+	Store         Store
+	Detectors     []rules.Detector // defaults to rules.All() when empty
+	Pricer        cost.Pricer
+	Region        string
+	Now           func() time.Time
+	PublicBaseURL string // e.g. "https://optiqor.dev" in prod; "" in dev
 }
 
 // AnalyzeResponse is the JSON shape returned by POST /v1/analyze.
@@ -99,7 +103,7 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	ws, err := parser.ParseValues(strings.NewReader(string(body)))
 	if err != nil {
@@ -150,7 +154,7 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	body = canonicalYAML(body)
 	hash := hashBytes(body)
 	resp.ShareHash = hash
-	resp.ShareURL = "https://optiqor.dev/r/" + hash
+	resp.ShareURL = h.publicURL(r) + "/r/" + hash
 
 	out, err := json.Marshal(resp)
 	if err != nil {
@@ -224,7 +228,7 @@ func (h *Handler) Share(w http.ResponseWriter, r *http.Request) {
 		Source:      sa.Source,
 		Workloads:   sa.Workloads,
 		Findings:    sa.Findings,
-		ShareURL:    "https://optiqor.dev/r/" + sa.Hash,
+		ShareURL:    h.publicURL(r) + "/r/" + sa.Hash,
 		Mode:        htmlrender.ModeSandbox,
 		GeneratedAt: sa.CreatedAt,
 	})
@@ -247,14 +251,14 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 
 // Helpers -------------------------------------------------------------
 
-func splitByCategory(in []rules.Finding) (cost, sec []rules.Finding) {
-	cost = make([]rules.Finding, 0, len(in))
-	sec = make([]rules.Finding, 0, len(in))
+func splitByCategory(in []rules.Finding) (costF, secF []rules.Finding) {
+	costF = make([]rules.Finding, 0, len(in))
+	secF = make([]rules.Finding, 0, len(in))
 	for _, f := range in {
 		if f.Category == rules.CategorySecurity {
-			sec = append(sec, f)
+			secF = append(secF, f)
 		} else {
-			cost = append(cost, f)
+			costF = append(costF, f)
 		}
 	}
 	return
@@ -293,4 +297,27 @@ func (h *Handler) nowOrDefault() time.Time {
 // String adds a String() for context propagation logging.
 func (h *Handler) String() string {
 	return fmt.Sprintf("sandbox.Handler(region=%s)", h.Region)
+}
+
+// publicURL returns the user-facing origin for share links. When the
+// operator has configured a fixed PublicBaseURL we use it verbatim
+// (production), otherwise we derive scheme + host from the inbound
+// request — so dev sees http://localhost:3000 automatically via the
+// Next.js proxy, and prod-behind-a-reverse-proxy honours
+// X-Forwarded-Proto / X-Forwarded-Host.
+func (h *Handler) publicURL(r *http.Request) string {
+	if h.PublicBaseURL != "" {
+		return strings.TrimRight(h.PublicBaseURL, "/")
+	}
+	scheme := "http"
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	} else if r.TLS != nil {
+		scheme = "https"
+	}
+	host := r.Host
+	if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
+		host = fh
+	}
+	return scheme + "://" + host
 }

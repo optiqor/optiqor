@@ -47,7 +47,7 @@ func TestSpikeHandler_HappyPath_202(t *testing.T) {
 
 func TestSpikeHandler_RejectsNonPost(t *testing.T) {
 	h := &SpikeHandler{Dispatcher: &fakeSpikeDispatcher{}}
-	req := httptest.NewRequest(http.MethodGet, "/v1/cost-spikes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/cost-spikes", http.NoBody)
 	w := httptest.NewRecorder()
 	h.Receive(w, req)
 	if w.Code != http.StatusMethodNotAllowed {

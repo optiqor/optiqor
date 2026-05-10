@@ -53,7 +53,7 @@ func (h *SpikeHandler) Receive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	var env SpikeEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {

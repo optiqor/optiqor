@@ -1,6 +1,7 @@
 package receipts
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"errors"
 	"strings"
@@ -186,7 +187,7 @@ func TestCanonical_StableFieldOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(a) != string(b) {
+	if !bytes.Equal(a, b) {
 		t.Errorf("Canonical is non-deterministic")
 	}
 }

@@ -7,8 +7,8 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/parser"
 )
 
-func mkWorkload(name string, cpuMilli, memBytes int64, replicas int) parser.Workload {
-	w := parser.Workload{Name: name, Replicas: replicas}
+func mkWorkload(cpuMilli, memBytes int64, replicas int) parser.Workload {
+	w := parser.Workload{Name: "api", Replicas: replicas}
 	if cpuMilli > 0 {
 		w.Requests.CPU = parser.Quantity{Value: cpuMilli, Set: true, Original: "set"}
 	}
@@ -58,7 +58,7 @@ func TestEstimator_NoRequests_UnpriceableNotError(t *testing.T) {
 func TestEstimator_CPUOnly_LinearInMillicores(t *testing.T) {
 	e := &Estimator{Pricer: NewStaticPricer(), Region: "us-east-1"}
 	// 500m × 1 replica × 3504 c/vCPU·month = 500 × 3504 / 1000 = 1752
-	est, err := e.Estimate(mkWorkload("api", 500, 0, 1))
+	est, err := e.Estimate(mkWorkload(500, 0, 1))
 	if err != nil {
 		t.Fatalf("Estimate: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestEstimator_MemoryOnly_LinearInBytes(t *testing.T) {
 	e := &Estimator{Pricer: NewStaticPricer(), Region: "us-east-1"}
 	// 1 GiB × 1 replica × 876 c/GiB·month
 	gib := int64(1024 * 1024 * 1024)
-	est, err := e.Estimate(mkWorkload("api", 0, gib, 1))
+	est, err := e.Estimate(mkWorkload(0, gib, 1))
 	if err != nil {
 		t.Fatalf("Estimate: %v", err)
 	}
@@ -85,8 +85,8 @@ func TestEstimator_MemoryOnly_LinearInBytes(t *testing.T) {
 
 func TestEstimator_RepliesScaleLinear(t *testing.T) {
 	e := &Estimator{Pricer: NewStaticPricer(), Region: "us-east-1"}
-	one, _ := e.Estimate(mkWorkload("api", 1000, 0, 1))
-	five, _ := e.Estimate(mkWorkload("api", 1000, 0, 5))
+	one, _ := e.Estimate(mkWorkload(1000, 0, 1))
+	five, _ := e.Estimate(mkWorkload(1000, 0, 5))
 	if five.MonthlyUSDCents != one.MonthlyUSDCents*5 {
 		t.Errorf("5×1-replica should equal 5-replica: %d vs %d", five.MonthlyUSDCents, one.MonthlyUSDCents*5)
 	}
@@ -94,8 +94,8 @@ func TestEstimator_RepliesScaleLinear(t *testing.T) {
 
 func TestEstimator_UnsetReplicasTreatedAsOne(t *testing.T) {
 	e := &Estimator{Pricer: NewStaticPricer(), Region: "us-east-1"}
-	zero, _ := e.Estimate(mkWorkload("api", 1000, 0, 0))
-	one, _ := e.Estimate(mkWorkload("api", 1000, 0, 1))
+	zero, _ := e.Estimate(mkWorkload(1000, 0, 0))
+	one, _ := e.Estimate(mkWorkload(1000, 0, 1))
 	if zero.MonthlyUSDCents != one.MonthlyUSDCents {
 		t.Errorf("replicas=0 should clamp to 1: %d vs %d", zero.MonthlyUSDCents, one.MonthlyUSDCents)
 	}
@@ -103,7 +103,7 @@ func TestEstimator_UnsetReplicasTreatedAsOne(t *testing.T) {
 
 func TestEstimator_RegionMissing_Propagates(t *testing.T) {
 	e := &Estimator{Pricer: NewStaticPricer(), Region: "mars-east-1"}
-	_, err := e.Estimate(mkWorkload("api", 500, 0, 1))
+	_, err := e.Estimate(mkWorkload(500, 0, 1))
 	if err == nil {
 		t.Fatal("want error when region missing")
 	}
@@ -111,7 +111,7 @@ func TestEstimator_RegionMissing_Propagates(t *testing.T) {
 
 func TestEstimator_AccuracyBandHonoured(t *testing.T) {
 	e := &Estimator{Pricer: NewStaticPricer(), Region: "us-east-1", AccuracyBandPct: 15}
-	est, _ := e.Estimate(mkWorkload("api", 500, 0, 1))
+	est, _ := e.Estimate(mkWorkload(500, 0, 1))
 	if est.AccuracyBandPct != 15 {
 		t.Errorf("band = %d, want 15 (agent accuracy)", est.AccuracyBandPct)
 	}
@@ -146,7 +146,7 @@ var errSentinel = errors.New("test sentinel")
 
 func TestEstimator_PricerError_Wrapped(t *testing.T) {
 	e := &Estimator{Pricer: failingPricer{}, Region: "us-east-1"}
-	_, err := e.Estimate(mkWorkload("api", 500, 0, 1))
+	_, err := e.Estimate(mkWorkload(500, 0, 1))
 	if !errors.Is(err, errSentinel) {
 		t.Errorf("want error chain to include sentinel; got %v", err)
 	}

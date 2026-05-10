@@ -2,7 +2,7 @@
 
 Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is the **canonical engineering tracker for backend work**; CLI-side phase work lives in the [optiqor repo](https://github.com/optiqor/optiqor-cli). The cross-repo Phase view (cost-detector breakdowns, CLI runtime status, etc.) lives in [ROADMAP.md](ROADMAP.md) — keep both files in sync when a phase milestone moves.
 
-> **Today: 2026-05-11.** Active phase: **Phase 2 — Public Sandbox (Weeks 3–4).** Phase 1 closed 2026-05-11.
+> **Today: 2026-05-11.** Active phase: **Phase 2 — Public Sandbox (Weeks 3–4).** Phase 1 closed 2026-05-11. Phase 2 Weeks 1-3 backend + frontend slice landed 2026-05-11; remaining Phase-2 work is the auth-gated dashboard shell, S3 / Redis adapters, the perf benchmark, and the OpenAPI spec.
 >
 > **Year 1 surface (expanded):** AWS EKS · Azure AKS · Hetzner Cloud K8s · GitHub · GitLab · ArgoCD · Flux CD · Helm · Kustomize. Day 90 demo stays narrow (EKS + GitHub + ArgoCD + Helm); the rest lands in Phases 7-9 (Months 4-12).
 >
@@ -141,30 +141,39 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 ### Web frontend — `backend/web/` (proprietary, Next.js App Router)
 
-> **Stack decision (ADR-0001, pending sign-off):** Next.js 15 App Router + TypeScript strict + pnpm workspace + Tailwind CSS + shadcn/ui + TanStack Query + Zod + Auth.js. Marketing, sandbox, and the auth-gated dashboard all live here. Public share pages (`/r/<hash>`) and Receipt verifier pages (`/v/<id>`) are **served directly by the Go API** using the Apache-2.0 `pkg/htmlrender` package from the CLI repo — they need no Next.js layer, must be raw-HTTP indexable for Slack/GitHub link previews, and share the exact rendering with `optiqor analyze --html`.
+> **Stack decision (de-facto sign-off — 2026-05-11):** Next.js 15 App Router + TypeScript strict + pnpm + Tailwind 4 + Geist Sans/Mono + TanStack Query + Zod (planned) + Auth.js (planned). Marketing, sandbox, and the (still-open) auth-gated dashboard live in `backend/web/`. Public share pages (`/r/<hash>`) and Receipt verifier pages (`/v/<id>`) are **served directly by the Go API** through the Apache-2.0 `pkg/htmlrender` package from the CLI repo — they need no Next.js layer, must be raw-HTTP indexable for Slack/GitHub link previews, and share the exact rendering with `optiqor analyze --html`.
 >
 > **Why this split:** keeps proprietary code (dashboard, billing, auth) in `backend/web/` while the report rendering stays Apache-2.0 in `optiqor-cli/pkg/htmlrender/` (single source of truth for "what an analysis looks like"). See [optiqor-cli/todo.md](https://github.com/optiqor/optiqor-cli/blob/main/todo.md#tier-1--launch-anchors-still-open) Tier 1 for the CLI-side commitments.
+>
+> **Status (2026-05-11):** scaffolding, brand system, marketing + sandbox + supporting routes (11 static pages), Go-served share/verifier pages, and `make dev` runner all shipped. Remaining `[ ]` items are the formal ADR write-up, the auth-gated dashboard shell, S3 / Redis adapters, and the perf benchmark — none block the customer-visible marketing + sandbox path that is live now.
 
-- [ ] **ADR-0001 — Frontend framework** (`docs/adr/0001-frontend-stack.md`). Records the Next.js / shadcn / Auth.js choice + the Go-served share-page split + the `pkg/htmlrender` import. Signed off before any `web/` code lands.
-- [ ] **`backend/web/` scaffold** — `pnpm create next-app@latest web --typescript --tailwind --app --src-dir`. Add: shadcn/ui init, TanStack Query, Zod, Auth.js (GitHub + GitLab providers), Playwright. ESLint strict, Prettier, `pnpm typecheck` in CI.
-- [ ] **`web/lib/api/`** — typed TanStack Query client generated from `optiqor-cli/docs/api/openapi.yaml` (via `openapi-typescript`). One module per backend domain (`analyze`, `receipts`, `applyFixes`, `ingest`). Zod response schemas wrap fetch so runtime drift surfaces as a thrown error, not undefined behaviour.
-- [ ] **`web/lib/brand/`** — TS module that imports `optiqor-cli/brand/tokens.json` at build time and exposes it as Tailwind theme tokens. Backend frontend + CLI terminal + CLI HTML report stay in sync on the hero color without a manual sync step.
-- [ ] **Sandbox page (`/sandbox`)** — paste-and-go: textarea → `POST /v1/analyze` → shadcn-styled results panel. ±40% banner pinned to the top, cost-first ordering, security findings rendered as a `<details>` bonus block (matches CLI brand voice). Share button uses the `share_url` from the API response. < 3s p95 measured by Playwright + CI lighthouse.
-- [ ] **Go-served `/r/<hash>` share page** — `cmd/api/sharepage.go` reads from the `sandbox.Store` and renders with `pkg/htmlrender`. Open Graph + Twitter Card meta tags so Slack/GitHub previews are first-class. No Next.js layer; pure Go template + inline CSS.
-- [ ] **Go-served `/v/<id>` Receipt verifier** — `cmd/api/receiptpage.go` reads from `receipts.Store`, renders via `pkg/htmlrender`. Anonymous, public, no auth. Includes the canonical signed bytes inline so finance teams can run `optiqor verify` (Phase 6 CLI command) locally.
-- [ ] **Marketing routes** — `web/app/(marketing)/`: `/`, `/pricing`, `/security`, `/how-it-works`. MDX-driven content; one `<MarketingLayout>` server component; Vercel preview deploys per PR.
-- [ ] **Onboarding flow (`/install/*`)** — OAuth → choose VCS host → repo picker → `helm install` instructions with copy-pasteable values. Backend exposes `/v1/onboarding/state` (uses existing `internal/onboarding/` state machine); frontend polls it.
-- [ ] **Dashboard shell (`/app/*`)** — Auth.js session → tenant header injection → `<DashboardLayout>` with cluster/namespace switcher. Year-1 pages: Analyses list, Receipts list, Apply Fix history, Cost spike timeline. Auth-gated by Next.js middleware that validates the session JWT against the backend's `/v1/session/whoami`.
+- [ ] **ADR-0001 — Frontend framework** (`docs/adr/0001-frontend-stack.md`). Capture the Next 15 / Tailwind 4 / Auth.js / Go-served share-page split in writing for future maintainers; the choices are already in code.
+- [x] **`backend/web/` scaffold** — Next.js 15 App Router + TypeScript strict + pnpm + Tailwind 4 + Geist (Sans + Mono). ESLint + Prettier on by default; production build produces 11 static pages with 0 errors. [next.config.ts](web/next.config.ts), [package.json](web/package.json).
+- [x] **Brand system** — [`optiqor-cli/brand/tokens.json`](../optiqor-cli/brand/tokens.json) (Apache-2.0 single source of truth) imported by `web/src/lib/brand.ts`; CSS custom properties mirror the same palette in [`globals.css`](web/src/app/globals.css). Hero glyph + wordmark shipped inline as SVG so the brand renders without a binary asset hop. _Editorial × Engineering visual language: near-black ink scale, electric-cyan accent on data only, hairline borders, no gradients, no purple._
+- [x] **Typed API client (`web/src/lib/api.ts`)** — hand-maintained TS shapes mirror every Go handler response. Default base URL is `""` so calls go same-origin through the Next.js rewrite. Migration to OpenAPI-generated types lands with the spec at `optiqor-cli/docs/api/openapi.yaml`.
+- [x] **Sandbox page (`/sandbox`)** — paste-and-go: textarea → `POST /v1/analyze` → results panel with cost-first ordering, severity badges, share-URL row, `⌘+Enter` shortcut. [sandbox/page.tsx](web/src/app/sandbox/page.tsx) + [sandbox-client.tsx](web/src/app/sandbox/sandbox-client.tsx).
+- [x] **Go-served `/r/<hash>` share page** — `internal/sandbox.Handler.Share` reads from the `Store` and renders via `pkg/htmlrender` by default; `Accept: application/json` or `?format=json` serves JSON. **`share_url` now derives from the request host** (or `OPTIQOR_PUBLIC_URL` override) so dev sees `http://localhost:3000/r/<hash>` automatically.
+- [x] **Go-served `/v/<id>` Receipt verifier** — `internal/receipts.Handler.Verify` renders a self-contained HTML page with a live signature-status badge, the canonical payload, the base64url signature, and offline-verify instructions.
+- [x] **Marketing routes** — `/`, `/pricing`, `/security`, `/how-it-works`, `/install`, `/docs`, `/about`, `/contact`, `/legal`. Hero terminal preview shows the cost-first CLI output verbatim; stats grid uses tabular-nums for a Bloomberg-terminal feel.
+- [x] **Dev runner (`make dev`)** — `scripts/dev-app.sh` boots api (:8080) + web (:3000) under one Ctrl+C with prefix-tagged logs, `set -m` process-group teardown, and a pre-shutdown pid snapshot so `go run`'s re-parented child doesn't leak. `make bootstrap` covers docker + migrate + pnpm install for first-run.
+- [x] **Same-origin proxy (`next.config.ts`)** — `/v1/*`, `/r/*`, `/v/*`, `/oauth/*`, `/webhooks/*`, `/healthz`, `/readyz` rewrites point at `OPTIQOR_API_UPSTREAM` (default `http://localhost:8080`). The browser never sees a cross-origin call, CORS never gates a sandbox request, and production matches dev under any reverse proxy that does the same.
+- [x] **Worker registers all five workflows** — `cmd/worker` now binds `apply_fix`, `cost_spike`, `echo`, `receipt_issue`, `rollback_watchdog` with dev-grade dependencies (noop LLM, logging publisher / notifier / initiator, in-memory receipt store, ephemeral signer). Production replaces each binding behind the same interface. ([register.go](cmd/worker/register.go) + [bindings.go](cmd/worker/bindings.go))
+- [ ] **Auth.js + dashboard shell (`/app/*`)** — GitHub + GitLab OAuth, session cookie carries a tenant JWT, dashboard middleware validates via `/v1/session/whoami`. Year-1 dashboard pages: Analyses list, Receipts browser with WebCrypto verifier, Apply Fix history, Cost spike timeline.
+- [ ] **Onboarding flow (`/install/*`)** — extend the existing static `/install` page into OAuth → VCS pick → repo picker → `helm install`. Backend exposes `/v1/onboarding/state` against `internal/onboarding/`'s state machine; frontend polls it.
+- [ ] **S3-backed `sandbox.Store`** — current `InMemoryStore` resets on restart. Phase-1 Terraform already provisions the `optiqor-prod-sandbox` bucket with KMS + 30-day lifecycle + CRR; the adapter is a single-file change once the AWS account binds.
+- [ ] **Rate limit middleware** — Redis-backed IP+fingerprint limiter wired into `cmd/api` via the existing `internal/platform/db/redis` Keyspace. Mandatory before the sandbox goes truly public.
+- [ ] **p95 < 3s benchmark in CI** — k6 or hey hitting `/v1/analyze` against the bundled demo chart. Currently the engine returns in ~50ms locally; CI keeps the regression door shut.
+- [ ] **OpenAPI spec (`optiqor-cli/docs/api/openapi.yaml`)** — formalise the public route shapes so the TS client + community tooling can be generated. CI parity check between the spec and the handlers.
 - [ ] **Deployment** — Vercel preview deploys per PR (cheap, fast, free for Phase 2). Production initially Vercel; migration to self-hosted Next standalone behind CloudFront when SOC 2 binds (Phase 9).
 
-**Sequencing — 4 weeks for one engineer:**
+**Sequencing recap (week 1-2 shipped, weeks 3-4 open):**
 
-| Wk | Drop | Demoable outcome |
+| Wk | Drop | Status |
 | --- | --- | --- |
-| 1 | `optiqor-cli/pkg/htmlrender` + `optiqor analyze --html` + Go `/r/<hash>` page wired to `sandbox.Store` | `npx @optiqor/cli analyze ./chart --html /tmp/report.html && open /tmp/report.html` |
-| 2 | `backend/web/` Next scaffold + `/sandbox` page calling live `/v1/analyze` | paste in a values.yaml, see findings + share URL |
-| 3 | Marketing pages + Astro docs stub at `docs-site/` | `optiqor.dev/` + `docs.optiqor.dev/` reachable in staging |
-| 4 | Auth.js + dashboard shell + first dashboard page (Analyses list) | first paying-customer-shaped demo |
+| 1 | `pkg/htmlrender` + `optiqor analyze --html` + Go `/r/<hash>` + `/v/<id>` | ✅ shipped |
+| 2 | `backend/web/` scaffold + `/sandbox` + brand system + dev-proxy | ✅ shipped |
+| 3 | Marketing pages + dev runner `make dev` + worker workflow wiring | ✅ shipped (Astro docs site still open at [optiqor-cli/docs-site/](../optiqor-cli/docs-site/)) |
+| 4 | Auth.js + dashboard shell + first dashboard page (Analyses list) | ⏳ open |
 
 **CLI side already shipped (see [optiqor repo](https://github.com/optiqor/optiqor-cli)):**
 - [x] Helm values parser, 30-detector engine, shareable-URL hashing, `--share` HTTPS upload client with graceful offline fallback

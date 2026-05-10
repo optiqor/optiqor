@@ -59,7 +59,7 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "read: "+err.Error(), http.StatusRequestEntityTooLarge)
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	var req IngestRequest
 	if err := json.Unmarshal(body, &req); err != nil {

@@ -35,7 +35,7 @@ func newHandler() *Handler {
 
 func TestAnalyze_RejectsNonPost(t *testing.T) {
 	h := newHandler()
-	req := httptest.NewRequest(http.MethodGet, "/v1/analyze", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/analyze", http.NoBody)
 	w := httptest.NewRecorder()
 	h.Analyze(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
@@ -67,8 +67,11 @@ func TestAnalyze_HappyPath(t *testing.T) {
 	if resp.ShareHash == "" {
 		t.Error("share_hash empty")
 	}
-	if !strings.HasPrefix(resp.ShareURL, "https://optiqor.dev/r/") {
-		t.Errorf("share_url = %q", resp.ShareURL)
+	// Default handler (no PublicBaseURL) derives from request host —
+	// httptest defaults to example.com. The /r/<hash> suffix is the
+	// stable part; we assert that and not the origin.
+	if !strings.Contains(resp.ShareURL, "/r/"+resp.ShareHash) {
+		t.Errorf("share_url = %q, missing /r/<hash> suffix", resp.ShareURL)
 	}
 	if len(resp.CostFindings)+len(resp.SecurityFindingsBonus) != len(resp.Findings) {
 		t.Errorf("split mismatch: cost=%d security=%d findings=%d",
@@ -76,6 +79,46 @@ func TestAnalyze_HappyPath(t *testing.T) {
 	}
 	if resp.AnnualSavingsUSD != resp.MonthlySavingsUSD*12 {
 		t.Errorf("annual != monthly*12: %v vs %v", resp.AnnualSavingsUSD, resp.MonthlySavingsUSD)
+	}
+}
+
+func TestAnalyze_ShareURL_DerivedFromRequestInDev(t *testing.T) {
+	h := newHandler() // no PublicBaseURL
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:3000/v1/analyze", strings.NewReader(exampleChart))
+	req.Host = "localhost:3000"
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	var resp AnalyzeResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if !strings.HasPrefix(resp.ShareURL, "http://localhost:3000/r/") {
+		t.Errorf("share_url should derive from request: got %q", resp.ShareURL)
+	}
+}
+
+func TestAnalyze_ShareURL_HonoursPublicBaseURL(t *testing.T) {
+	h := newHandler()
+	h.PublicBaseURL = "https://optiqor.dev"
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:3000/v1/analyze", strings.NewReader(exampleChart))
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	var resp AnalyzeResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if !strings.HasPrefix(resp.ShareURL, "https://optiqor.dev/r/") {
+		t.Errorf("share_url should honour configured PublicBaseURL: got %q", resp.ShareURL)
+	}
+}
+
+func TestAnalyze_ShareURL_HonoursXForwardedProto(t *testing.T) {
+	h := newHandler()
+	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
+	req.Host = "optiqor.dev"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	var resp AnalyzeResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if !strings.HasPrefix(resp.ShareURL, "https://optiqor.dev/r/") {
+		t.Errorf("X-Forwarded-Proto should drive scheme: got %q", resp.ShareURL)
 	}
 }
 
@@ -115,7 +158,7 @@ func TestAnalyze_StoresShareEntry_HTMLByDefault(t *testing.T) {
 	h.Mount(mux)
 
 	// Default Accept → HTML report rendered via pkg/htmlrender.
-	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, http.NoBody)
 	getW := httptest.NewRecorder()
 	mux.ServeHTTP(getW, getReq)
 	if getW.Code != http.StatusOK {
@@ -143,7 +186,7 @@ func TestAnalyze_StoresShareEntry_JSONOnAccept(t *testing.T) {
 	mux := http.NewServeMux()
 	h.Mount(mux)
 
-	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, http.NoBody)
 	getReq.Header.Set("Accept", "application/json")
 	getW := httptest.NewRecorder()
 	mux.ServeHTTP(getW, getReq)
@@ -155,7 +198,7 @@ func TestAnalyze_StoresShareEntry_JSONOnAccept(t *testing.T) {
 	}
 
 	// ?format=json query also opts into JSON.
-	getReq2 := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash+"?format=json", nil)
+	getReq2 := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash+"?format=json", http.NoBody)
 	getW2 := httptest.NewRecorder()
 	mux.ServeHTTP(getW2, getReq2)
 	if !strings.Contains(getW2.Body.String(), "accuracy_disclosure") {
@@ -167,7 +210,7 @@ func TestShare_404OnMissing(t *testing.T) {
 	h := newHandler()
 	mux := http.NewServeMux()
 	h.Mount(mux)
-	req := httptest.NewRequest(http.MethodGet, "/r/deadbeef", nil)
+	req := httptest.NewRequest(http.MethodGet, "/r/deadbeef", http.NoBody)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {

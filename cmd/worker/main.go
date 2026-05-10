@@ -19,7 +19,6 @@ import (
 	"github.com/optiqor/backend/internal/platform/config"
 	"github.com/optiqor/backend/internal/platform/logging"
 	"github.com/optiqor/backend/internal/worker"
-	"github.com/optiqor/backend/internal/worker/workflows"
 )
 
 var version = "dev"
@@ -49,11 +48,7 @@ func run() int {
 	slog.SetDefault(logger)
 
 	dispatcher := worker.NewInMemory()
-	// Phase 1: register the Echo workflow so the dispatcher contract
-	// is exercised end-to-end at boot. Phase 3+ replaces this with
-	// PR-analysis, Apply Fix, Receipt issuer, Auto-Rollback monitor,
-	// Cost Spike detector.
-	if err := dispatcher.Register(workflows.NewEcho(logger)); err != nil {
+	if err := registerWorkflows(dispatcher, logger); err != nil {
 		logger.Error("workflow registration failed", "err", err)
 		return 1
 	}

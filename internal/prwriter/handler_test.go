@@ -68,7 +68,7 @@ func TestPreview_NoTenant_401(t *testing.T) {
 
 func TestPreview_RejectsNonPost(t *testing.T) {
 	h := &Handler{Composer: &agent.Composer{LLM: &agent.FakeLLMClient{}}}
-	req := httptest.NewRequest(http.MethodGet, "/v1/apply-fixes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/apply-fixes", http.NoBody)
 	w := httptest.NewRecorder()
 	h.Preview(w, req)
 	if w.Code != http.StatusMethodNotAllowed {

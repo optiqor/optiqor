@@ -148,7 +148,7 @@ type CURRow struct {
 func ParseCURRows(r io.Reader) ([]CURRow, error) {
 	rd := csv.NewReader(r)
 	header, err := rd.Read()
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return nil, nil
 	}
 	if err != nil {
@@ -162,7 +162,7 @@ func ParseCURRows(r io.Reader) ([]CURRow, error) {
 	row := 0
 	for {
 		rec, err := rd.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

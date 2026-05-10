@@ -264,7 +264,7 @@ func cutSection(s, start, end string) string {
 // projectedCostCents is the budget gate's worst-case estimator. The
 // numbers track the published Anthropic rates for the Phase-1 default
 // model lineup; update when prices change.
-func projectedCostCents(model string, inputChars int, maxOutputTokens int) int64 {
+func projectedCostCents(model string, inputChars, maxOutputTokens int) int64 {
 	// Rough heuristic: 1 token ≈ 4 input chars for English.
 	inputTokens := int64(inputChars) / 4
 	outputTokens := int64(maxOutputTokens)
