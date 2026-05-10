@@ -41,6 +41,10 @@ tests/           # integration + e2e (real Postgres via testcontainers)
 docs/adr/        # architectural decision records
 ```
 
+## API
+
+The full HTTP surface — every route the `api` binary registers, the wire shapes, the status-code matrix, and the tenancy contract — is documented in [docs/api.md](docs/api.md). Update it in lockstep with handler changes.
+
 ## Conventions
 
 See [CLAUDE.md](CLAUDE.md) for layering rules, multi-tenancy invariants, and testing standards.
