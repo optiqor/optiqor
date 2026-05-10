@@ -29,13 +29,13 @@ import (
 // Signal describes the evidence backing a finding at decision time.
 // Build one per [rules.Finding] before calling [Classify].
 type Signal struct {
-	DetectorID         string
-	SandboxMode        bool // true → CLI/sandbox path (no Prometheus); false → agent
-	HasHistoricalData  bool // ≥1 day of Prometheus history
+	DetectorID          string
+	SandboxMode         bool // true → CLI/sandbox path (no Prometheus); false → agent
+	HasHistoricalData   bool // ≥1 day of Prometheus history
 	HistoryDaysObserved int  // exact count; used to disambiguate medium ↔ high
-	SignalCount        int  // independent corroborations (e.g. P95+P99+request)
-	PriorDismissed     bool // tenant previously dismissed the same detector on this workload
-	DetectorDefault    rules.Confidence
+	SignalCount         int  // independent corroborations (e.g. P95+P99+request)
+	PriorDismissed      bool // tenant previously dismissed the same detector on this workload
+	DetectorDefault     rules.Confidence
 }
 
 // Classifier returns a [rules.Confidence] band for the input signal.

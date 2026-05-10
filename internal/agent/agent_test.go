@@ -149,10 +149,10 @@ func TestProjectedCostCents_FavoursSonnetForUnknownModel(t *testing.T) {
 
 func TestNormaliseModel(t *testing.T) {
 	for in, want := range map[string]string{
-		"claude-haiku-4-5":    "claude-haiku",
-		"claude-sonnet-4-6":   "claude-sonnet",
-		"claude-opus-4-7-1m":  "claude-opus",
-		"gpt-mystery":         "claude-sonnet",
+		"claude-haiku-4-5":   "claude-haiku",
+		"claude-sonnet-4-6":  "claude-sonnet",
+		"claude-opus-4-7-1m": "claude-opus",
+		"gpt-mystery":        "claude-sonnet",
 	} {
 		if got := normaliseModel(in); got != want {
 			t.Errorf("normaliseModel(%q) = %q, want %q", in, got, want)

@@ -72,7 +72,7 @@ fmt-check: ## fail if gofmt would change anything
 vet: ## go vet
 	$(GO) vet $(PKG)
 
-lint: ## golangci-lint + terraform fmt -check
+lint: fmt-check vet ## gofmt + vet + golangci-lint + terraform fmt -check (mirrors CI lint job)
 	golangci-lint run
 	terraform -chdir=infra/terraform fmt -recursive -check
 

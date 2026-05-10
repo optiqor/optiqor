@@ -43,10 +43,12 @@ func (f *fakeTemporalClient) ExecuteWorkflow(
 
 type fakeRun struct{}
 
-func (fakeRun) GetID() string                                                                 { return "wf-1" }
-func (fakeRun) GetRunID() string                                                              { return "run-1" }
-func (fakeRun) Get(_ context.Context, _ any) error                                            { return nil }
-func (fakeRun) GetWithOptions(_ context.Context, _ any, _ client.WorkflowRunGetOptions) error { return nil }
+func (fakeRun) GetID() string                      { return "wf-1" }
+func (fakeRun) GetRunID() string                   { return "run-1" }
+func (fakeRun) Get(_ context.Context, _ any) error { return nil }
+func (fakeRun) GetWithOptions(_ context.Context, _ any, _ client.WorkflowRunGetOptions) error {
+	return nil
+}
 
 // trivialWorkflow is a registrable Workflow stub.
 type trivialWorkflow struct {

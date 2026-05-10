@@ -4,8 +4,8 @@
 // The two HTTP handlers in this package are the operational mirror of
 // the CLI's offline `optiqor analyze`:
 //
-//   POST /v1/analyze    — take a values.yaml body, return findings + savings
-//   GET  /r/{hash}      — fetch a previously-shared sanitised analysis
+//	POST /v1/analyze    — take a values.yaml body, return findings + savings
+//	GET  /r/{hash}      — fetch a previously-shared sanitised analysis
 //
 // Both ship the mandatory ±40% accuracy disclosure. The handler never
 // reads tenant context — the surface is intentionally unauth.
@@ -69,24 +69,24 @@ type Handler struct {
 // Mirrors the CLI's JSON output so the same client library can
 // consume both.
 type AnalyzeResponse struct {
-	AccuracyDisclosure     string          `json:"accuracy_disclosure"`
-	Source                 string          `json:"source"`
-	Workloads              int             `json:"workloads_analyzed"`
-	Findings               []rules.Finding `json:"findings"`
-	CostFindings           []rules.Finding `json:"cost_findings"`
-	SecurityFindingsBonus  []rules.Finding `json:"security_findings_bonus"`
-	MonthlySavingsUSD      float64         `json:"monthly_savings_usd"`
-	AnnualSavingsUSD       float64         `json:"annual_savings_usd"`
-	CostEstimates          []cost.Estimate `json:"cost_estimates,omitempty"`
-	ShareHash              string          `json:"share_hash"`
-	ShareURL               string          `json:"share_url"`
+	AccuracyDisclosure    string          `json:"accuracy_disclosure"`
+	Source                string          `json:"source"`
+	Workloads             int             `json:"workloads_analyzed"`
+	Findings              []rules.Finding `json:"findings"`
+	CostFindings          []rules.Finding `json:"cost_findings"`
+	SecurityFindingsBonus []rules.Finding `json:"security_findings_bonus"`
+	MonthlySavingsUSD     float64         `json:"monthly_savings_usd"`
+	AnnualSavingsUSD      float64         `json:"annual_savings_usd"`
+	CostEstimates         []cost.Estimate `json:"cost_estimates,omitempty"`
+	ShareHash             string          `json:"share_hash"`
+	ShareURL              string          `json:"share_url"`
 }
 
 // Analyze parses the body and runs the deterministic rule engine.
 //
-//   400 — malformed YAML / empty body
-//   413 — body exceeds MaxBodyBytes
-//   500 — pricer / store failure
+//	400 — malformed YAML / empty body
+//	413 — body exceeds MaxBodyBytes
+//	500 — pricer / store failure
 func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

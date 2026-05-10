@@ -49,16 +49,16 @@ const (
 // Comment is what callers build and hand to [Render]. Only public
 // fields belong here; rendering logic owns nothing else.
 type Comment struct {
-	Chart                   string
-	Tenant                  string
-	Workloads               int
-	Findings                []rules.Finding
-	MonthlySavingsUSDCents  int64
-	AnnualSavingsUSDCents   int64
-	Mode                    Mode
-	GeneratedAt             time.Time
-	OptiqorAnalysisURL      string // e.g. https://optiqor.dev/r/<hash>
-	ApplyFixURL             string // populated when an Apply Fix PR has been opened
+	Chart                  string
+	Tenant                 string
+	Workloads              int
+	Findings               []rules.Finding
+	MonthlySavingsUSDCents int64
+	AnnualSavingsUSDCents  int64
+	Mode                   Mode
+	GeneratedAt            time.Time
+	OptiqorAnalysisURL     string // e.g. https://optiqor.dev/r/<hash>
+	ApplyFixURL            string // populated when an Apply Fix PR has been opened
 	// SecurityVisible toggles the bonus security section. Default off;
 	// most customers turn it on after they've cleaned up cost first.
 	SecurityVisible bool
@@ -76,18 +76,18 @@ func Render(c Comment) (string, error) {
 	}
 	cost, security := split(c.Findings)
 	view := view{
-		Chart:                   c.Chart,
-		Workloads:               c.Workloads,
-		CostFindings:            sortCostForDisplay(cost),
-		SecurityFindings:        security,
-		ShowSecurity:            c.SecurityVisible && len(security) > 0,
-		MonthlyUSD:              fmtUSD(c.MonthlySavingsUSDCents),
-		AnnualUSD:               fmtUSD(c.AnnualSavingsUSDCents),
-		ShowSavings:             c.MonthlySavingsUSDCents > 0,
-		AccuracyDisclosure:      AccuracyDisclosureSandbox,
-		OptiqorAnalysisURL:      c.OptiqorAnalysisURL,
-		ApplyFixURL:             c.ApplyFixURL,
-		GeneratedAtISO:          generatedAt(c.GeneratedAt).Format(time.RFC3339),
+		Chart:              c.Chart,
+		Workloads:          c.Workloads,
+		CostFindings:       sortCostForDisplay(cost),
+		SecurityFindings:   security,
+		ShowSecurity:       c.SecurityVisible && len(security) > 0,
+		MonthlyUSD:         fmtUSD(c.MonthlySavingsUSDCents),
+		AnnualUSD:          fmtUSD(c.AnnualSavingsUSDCents),
+		ShowSavings:        c.MonthlySavingsUSDCents > 0,
+		AccuracyDisclosure: AccuracyDisclosureSandbox,
+		OptiqorAnalysisURL: c.OptiqorAnalysisURL,
+		ApplyFixURL:        c.ApplyFixURL,
+		GeneratedAtISO:     generatedAt(c.GeneratedAt).Format(time.RFC3339),
 	}
 	if c.Mode == ModeAgent {
 		view.AccuracyDisclosure = AccuracyDisclosureAgent

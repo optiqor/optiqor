@@ -12,12 +12,12 @@
 //
 // Verification:
 //
-//	1. Decode both halves.
-//	2. Hash the payload with SHA-512.
-//	3. Verify the Ed25519 signature against the issuer's published
-//	   public key.
-//	4. Compare the receipt's `issuer_key_id` against the issuer-key
-//	   registry to detect rotated or revoked keys.
+//  1. Decode both halves.
+//  2. Hash the payload with SHA-512.
+//  3. Verify the Ed25519 signature against the issuer's published
+//     public key.
+//  4. Compare the receipt's `issuer_key_id` against the issuer-key
+//     registry to detect rotated or revoked keys.
 //
 // Determinism: the canonical payload uses the [Canonical] helper to
 // encode JSON with sorted keys and stable struct field order. Two

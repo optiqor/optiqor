@@ -17,11 +17,11 @@ type SpikeNotifier interface {
 
 // SpikeEvent is the human-readable summary of an anomaly.
 type SpikeEvent struct {
-	WorkloadID         string    `json:"workload_id"`
-	ObservedDeltaUSD   float64   `json:"observed_delta_usd"`
-	ObservedAt         time.Time `json:"observed_at"`
-	LikelyPRCommitSHA  string    `json:"likely_pr_commit_sha,omitempty"`
-	LikelyPRURL        string    `json:"likely_pr_url,omitempty"`
+	WorkloadID        string    `json:"workload_id"`
+	ObservedDeltaUSD  float64   `json:"observed_delta_usd"`
+	ObservedAt        time.Time `json:"observed_at"`
+	LikelyPRCommitSHA string    `json:"likely_pr_commit_sha,omitempty"`
+	LikelyPRURL       string    `json:"likely_pr_url,omitempty"`
 }
 
 // CostSpikePayload is the dispatcher input.

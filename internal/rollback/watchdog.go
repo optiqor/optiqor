@@ -38,8 +38,8 @@ const (
 // SignalSnapshot is one Prometheus query result. Watchdog logic is
 // pure functions over a sequence of these.
 type Snapshot struct {
-	Kind      SignalKind
-	Value     float64
+	Kind       SignalKind
+	Value      float64
 	ObservedAt time.Time
 }
 

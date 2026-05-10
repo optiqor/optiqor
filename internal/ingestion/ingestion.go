@@ -132,13 +132,13 @@ func promPairToSample(p [2]any) (PromSample, error) {
 // narrow to the few we sign into Receipts so future widening doesn't
 // quietly change the signature surface.
 type CURRow struct {
-	UsageStartUTC   time.Time
-	UsageEndUTC     time.Time
-	ServiceCode     string  // e.g. AmazonEC2
-	UsageType       string  // e.g. BoxUsage:m6i.large
-	Region          string
-	ResourceID      string  // optional but typical for K8s nodes
-	UsageQuantity   float64
+	UsageStartUTC    time.Time
+	UsageEndUTC      time.Time
+	ServiceCode      string // e.g. AmazonEC2
+	UsageType        string // e.g. BoxUsage:m6i.large
+	Region           string
+	ResourceID       string // optional but typical for K8s nodes
+	UsageQuantity    float64
 	UnblendedCostUSD float64
 }
 
@@ -191,8 +191,8 @@ var requiredCURColumns = []string{
 
 type curIndex struct {
 	start, end, service, usageType, region int
-	resourceID                              int // -1 when absent
-	usage, unblendedCost                    int
+	resourceID                             int // -1 when absent
+	usage, unblendedCost                   int
 }
 
 func indexCURHeader(header []string) (curIndex, error) {

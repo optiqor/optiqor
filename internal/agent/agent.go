@@ -38,17 +38,17 @@ import (
 // LLMRequest is the shape every model adapter consumes. Keep it small;
 // the orchestrator owns prompt construction, not the caller.
 type LLMRequest struct {
-	System   string
-	User     string
-	Model    string // adapter-specific identifier (e.g. "claude-sonnet-4-6")
+	System    string
+	User      string
+	Model     string // adapter-specific identifier (e.g. "claude-sonnet-4-6")
 	MaxTokens int
 }
 
 // LLMResponse is what the adapter returns. The orchestrator decides
 // what to do with it; the adapter only marshals the call.
 type LLMResponse struct {
-	Text        string
-	InputTokens int
+	Text         string
+	InputTokens  int
 	OutputTokens int
 	CostUSDCents int64
 	Model        string
@@ -74,11 +74,11 @@ type FixRequest struct {
 // FixResponse is the orchestrator's output. The PR-writer renders the
 // markdown; this package only commits to the structured fields.
 type FixResponse struct {
-	Explanation string
-	UnifiedDiff string
+	Explanation  string
+	UnifiedDiff  string
 	CostUSDCents int64
-	Model       string
-	Sanitised   sanitizer.Result
+	Model        string
+	Sanitised    sanitizer.Result
 }
 
 // Budget enforces the per-call cost cap stated in backend CLAUDE.md

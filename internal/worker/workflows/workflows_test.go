@@ -162,8 +162,8 @@ func TestReceiptIssue_SignsAndStores(t *testing.T) {
 // ---- Rollback Watchdog ----------------------------------------------
 
 type fakeInitiator struct {
-	mu       sync.Mutex
-	opened   []string
+	mu         sync.Mutex
+	opened     []string
 	openCalled int
 }
 

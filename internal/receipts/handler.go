@@ -80,9 +80,9 @@ type VerifyResponse struct {
 // flag so the caller knows whether the Optiqor server itself still
 // trusts the signature today.
 //
-//   400 — missing id
-//   404 — unknown id
-//   500 — store / registry failures
+//	400 — missing id
+//	404 — unknown id
+//	500 — store / registry failures
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -159,21 +159,21 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = verifyTmpl.Execute(w, verifyView{
-		ID:           parsed.ID,
-		TenantID:     parsed.TenantID,
-		Workload:     parsed.Workload,
-		ApplyFixID:   parsed.ApplyFixID,
-		Observed:     fmt.Sprintf("%s → %s", parsed.ObservedFromUTC.Format("2006-01-02"), parsed.ObservedToUTC.Format("2006-01-02")),
-		Predicted:    fmtCentsUSD(parsed.PredictedSavingsUSDCents),
-		Realised:     fmtCentsUSD(parsed.RealisedSavingsUSDCents),
-		CloudBill:    parsed.CloudBillSource,
-		IssuerKeyID:  parsed.IssuerKeyID,
-		IssuedAtUTC:  parsed.IssuedAtUTC.Format("2006-01-02 15:04 UTC"),
-		Verified:     verified,
-		Signature:    sigPart,
-		PayloadB64:   payloadPart,
-		PayloadJSON:  string(pretty),
-		Disclosure:   "Agent accuracy: ±15%. Backed by 30 days of Prometheus + your AWS bill.",
+		ID:          parsed.ID,
+		TenantID:    parsed.TenantID,
+		Workload:    parsed.Workload,
+		ApplyFixID:  parsed.ApplyFixID,
+		Observed:    fmt.Sprintf("%s → %s", parsed.ObservedFromUTC.Format("2006-01-02"), parsed.ObservedToUTC.Format("2006-01-02")),
+		Predicted:   fmtCentsUSD(parsed.PredictedSavingsUSDCents),
+		Realised:    fmtCentsUSD(parsed.RealisedSavingsUSDCents),
+		CloudBill:   parsed.CloudBillSource,
+		IssuerKeyID: parsed.IssuerKeyID,
+		IssuedAtUTC: parsed.IssuedAtUTC.Format("2006-01-02 15:04 UTC"),
+		Verified:    verified,
+		Signature:   sigPart,
+		PayloadB64:  payloadPart,
+		PayloadJSON: string(pretty),
+		Disclosure:  "Agent accuracy: ±15%. Backed by 30 days of Prometheus + your AWS bill.",
 	})
 }
 
@@ -186,11 +186,11 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 // verifyView is the html/template input. Kept small + flat.
 type verifyView struct {
 	ID, TenantID, Workload, ApplyFixID, Observed string
-	Predicted, Realised, CloudBill                string
-	IssuerKeyID, IssuedAtUTC                       string
-	Verified                                       bool
-	Signature, PayloadB64, PayloadJSON             string
-	Disclosure                                     string
+	Predicted, Realised, CloudBill               string
+	IssuerKeyID, IssuedAtUTC                     string
+	Verified                                     bool
+	Signature, PayloadB64, PayloadJSON           string
+	Disclosure                                   string
 }
 
 // fmtCentsUSD renders int64 cents as `$X,YYY.ZZ`. Negative receipts

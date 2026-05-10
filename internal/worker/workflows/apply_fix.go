@@ -30,14 +30,14 @@ type PRPublisher interface {
 
 // PullRequest is what the workflow asks the publisher to open.
 type PullRequest struct {
-	RepoOwner  string
-	RepoName   string
-	HeadBranch string
-	BaseBranch string
-	Title      string
-	Body       string
+	RepoOwner   string
+	RepoName    string
+	HeadBranch  string
+	BaseBranch  string
+	Title       string
+	Body        string
 	UnifiedDiff string
-	ApplyFixID string
+	ApplyFixID  string
 }
 
 // PRResult is what the publisher returns.
@@ -48,15 +48,15 @@ type PRResult struct {
 
 // ApplyFixPayload is the JSON the dispatcher receives on Submit.
 type ApplyFixPayload struct {
-	RepoOwner  string         `json:"repo_owner"`
-	RepoName   string         `json:"repo_name"`
-	BaseBranch string         `json:"base_branch"`
-	ChartPath  string         `json:"chart_path"`
-	ChartYAML  string         `json:"chart_yaml"`
-	Model      string         `json:"model"`
-	Finding    rules.Finding  `json:"finding"`
-	ApplyFixID string         `json:"apply_fix_id"`
-	Now        time.Time      `json:"now"`
+	RepoOwner  string        `json:"repo_owner"`
+	RepoName   string        `json:"repo_name"`
+	BaseBranch string        `json:"base_branch"`
+	ChartPath  string        `json:"chart_path"`
+	ChartYAML  string        `json:"chart_yaml"`
+	Model      string        `json:"model"`
+	Finding    rules.Finding `json:"finding"`
+	ApplyFixID string        `json:"apply_fix_id"`
+	Now        time.Time     `json:"now"`
 }
 
 // ApplyFix is the workflow shape the dispatcher registers.
@@ -72,11 +72,11 @@ func (ApplyFix) Name() string { return "apply_fix" }
 
 // Execute runs one Apply Fix. Steps:
 //
-//   1. Decode payload + revalidate tenant.
-//   2. Parse the chart so we can attach the precise workload name.
-//   3. Run the agent composer to get an explanation + unified diff.
-//   4. Render the PR markdown body via prwriter.
-//   5. Hand off to the PRPublisher.
+//  1. Decode payload + revalidate tenant.
+//  2. Parse the chart so we can attach the precise workload name.
+//  3. Run the agent composer to get an explanation + unified diff.
+//  4. Render the PR markdown body via prwriter.
+//  5. Hand off to the PRPublisher.
 func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) error {
 	var p ApplyFixPayload
 	if err := json.Unmarshal(raw, &p); err != nil {

@@ -18,8 +18,8 @@ const MaxIngestBytes = 16 << 20
 // request carries either Prometheus matrix bytes, CUR-row bytes, or
 // both — but never neither.
 type IngestRequest struct {
-	Tenant        string `json:"tenant"`
-	ClusterID     string `json:"cluster_id"`
+	Tenant         string `json:"tenant"`
+	ClusterID      string `json:"cluster_id"`
 	PrometheusJSON []byte `json:"prometheus_json,omitempty"`
 	CURRowsCSV     []byte `json:"cur_rows_csv,omitempty"`
 }
@@ -47,8 +47,8 @@ type Handler struct {
 // Ingest parses incoming bytes and routes them to the configured
 // sinks. Returns counts so the caller can verify lossless ingestion.
 //
-//   400 — malformed JSON / CSV
-//   413 — body exceeds MaxIngestBytes
+//	400 — malformed JSON / CSV
+//	413 — body exceeds MaxIngestBytes
 func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
