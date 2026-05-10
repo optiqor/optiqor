@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Optiqor design tokens — mirrored from optiqor-cli/brand/tokens.json
+ * Editorial × Engineering. Restraint. No gradient hero text. No purple.
+ * ───────────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* ink scale: 0 darkest → 9 lightest */
+  --color-ink-0: #0A0A0B;
+  --color-ink-1: #111114;
+  --color-ink-2: #16161A;
+  --color-ink-3: #1C1C22;
+  --color-ink-4: #24242B;
+  --color-ink-5: #33333D;
+  --color-ink-6: #5C5C68;
+  --color-ink-7: #9C9CA8;
+  --color-ink-8: #C8C8D0;
+  --color-ink-9: #EDEDEE;
+
+  /* accent */
+  --color-accent: #22D3EE;
+  --color-accent-dim: #0E7490;
+
+  /* signals — keep these on data only */
+  --color-high: #FF6B6B;
+  --color-med:  #F59E0B;
+  --color-low:  #22D3EE;
+  --color-ok:   #34D399;
+
+  /* borders */
+  --color-rule: #1F1F25;
+  --color-rule-default: #2A2A33;
+  --color-rule-strong: #3A3A45;
+
+  /* radius */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* fonts */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ─── base ─────────────────────────────────────────────────────────── */
+html,
+body {
+  background: var(--color-ink-0);
+  color: var(--color-ink-9);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* extremely subtle grid texture — adds engineering feel without
+   * looking like a generic dotted-bg landing page. 64px lattice,
+   * one pixel of #ffffff at 1.5% opacity. */
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.25);
+  color: var(--color-ink-9);
+}
+
+/* keep default-Tailwind margin-collapsing out of our layouts */
+h1, h2, h3, h4, h5, h6, p, ul, ol, dl, blockquote, pre {
+  margin: 0;
+}
+
+/* ─── focus ────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ─── scrollbar ────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink-1);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-4);
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-ink-1);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-5);
+}
+
+/* ─── small utility additions ──────────────────────────────────────── */
+.font-mono-tabular {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+/* Hairline border helper — Tailwind's `border-*` picks up subpixel-
+ * rounding at certain zooms. Inset shadow keeps it crisp at any DPI. */
+.hairline {
+  box-shadow: inset 0 0 0 1px var(--color-rule-default);
+}
+.hairline-subtle {
+  box-shadow: inset 0 0 0 1px var(--color-rule);
+}
+.hairline-strong {
+  box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+}
+
+/* Underline-on-hover inline links. */
+.link-inline {
+  color: var(--color-accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 200ms var(--ease-out);
+}
+.link-inline:hover {
+  border-bottom-color: var(--color-accent);
+}
+
+/* Subtle on-load reveal — applied to the page <main> wrapper. */
+@keyframes optiqor-load-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.load-in {
+  animation: optiqor-load-in 320ms var(--ease-out) both;
+}
+
+/* Terminal-rule divider used in the marketing page. */
+.term-rule {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-rule-default) 12%,
+    var(--color-rule-default) 88%,
+    transparent
+  );
+}

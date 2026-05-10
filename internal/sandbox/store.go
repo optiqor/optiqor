@@ -5,16 +5,28 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
 // ErrNotFound is returned by Store.Get when a hash is not present.
 var ErrNotFound = errors.New("sandbox: share not found")
 
-// SharedAnalysis is what /r/<hash> serves.
+// SharedAnalysis is what /r/<hash> serves. The structured fields
+// (Source, Workloads, Findings) let the share handler render either
+// JSON (Accept: application/json) or HTML (default, via pkg/htmlrender)
+// without re-parsing the cached body.
 type SharedAnalysis struct {
 	Hash      string
-	Body      []byte
+	Body      []byte // canonical JSON representation, ready to stream
 	MediaType string
+
+	// Structured echo of the analysis so callers can render alternate
+	// formats. Populated by the analyze handler when storing.
+	Source    string
+	Workloads int
+	Findings  []rules.Finding
+
 	CreatedAt time.Time
 	ExpiresAt time.Time
 }

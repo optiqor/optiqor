@@ -100,7 +100,7 @@ func TestAnalyze_OversizedBody_413(t *testing.T) {
 	}
 }
 
-func TestAnalyze_StoresShareEntry(t *testing.T) {
+func TestAnalyze_StoresShareEntry_HTMLByDefault(t *testing.T) {
 	h := newHandler()
 	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
 	w := httptest.NewRecorder()
@@ -111,17 +111,55 @@ func TestAnalyze_StoresShareEntry(t *testing.T) {
 	var resp AnalyzeResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
-	// /r/<hash> should now return the same body.
 	mux := http.NewServeMux()
 	h.Mount(mux)
+
+	// Default Accept → HTML report rendered via pkg/htmlrender.
 	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, nil)
 	getW := httptest.NewRecorder()
 	mux.ServeHTTP(getW, getReq)
 	if getW.Code != http.StatusOK {
 		t.Fatalf("share GET code = %d, body = %s", getW.Code, getW.Body.String())
 	}
+	if ct := getW.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("default content-type = %q, want text/html", ct)
+	}
+	if !strings.Contains(getW.Body.String(), "<!doctype html>") {
+		t.Errorf("default share render is not HTML:\n%s", getW.Body.String()[:200])
+	}
+	if !strings.Contains(getW.Body.String(), "Sandbox accuracy: ±40%") {
+		t.Errorf("HTML share missing accuracy disclosure")
+	}
+}
+
+func TestAnalyze_StoresShareEntry_JSONOnAccept(t *testing.T) {
+	h := newHandler()
+	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	var resp AnalyzeResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+
+	mux := http.NewServeMux()
+	h.Mount(mux)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, nil)
+	getReq.Header.Set("Accept", "application/json")
+	getW := httptest.NewRecorder()
+	mux.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("share GET code = %d", getW.Code)
+	}
 	if !strings.Contains(getW.Body.String(), "accuracy_disclosure") {
-		t.Errorf("share GET body missing disclosure:\n%s", getW.Body.String())
+		t.Errorf("Accept:application/json branch missing disclosure key")
+	}
+
+	// ?format=json query also opts into JSON.
+	getReq2 := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash+"?format=json", nil)
+	getW2 := httptest.NewRecorder()
+	mux.ServeHTTP(getW2, getReq2)
+	if !strings.Contains(getW2.Body.String(), "accuracy_disclosure") {
+		t.Errorf("?format=json branch missing disclosure key")
 	}
 }
 

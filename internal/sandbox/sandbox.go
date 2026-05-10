@@ -35,6 +35,7 @@ import (
 
 	"github.com/optiqor/backend/internal/cost"
 	"github.com/optiqor/backend/internal/parser"
+	"github.com/optiqor/optiqor-cli/pkg/htmlrender"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
@@ -163,6 +164,9 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 			Hash:      hash,
 			Body:      out,
 			MediaType: "application/json",
+			Source:    resp.Source,
+			Workloads: resp.Workloads,
+			Findings:  resp.Findings,
 			CreatedAt: now,
 			ExpiresAt: now.Add(ShareTTL),
 		})
@@ -173,9 +177,14 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(out)
 }
 
-// Share serves GET /r/{hash} from the shared store. Returns 404 when
-// no entry exists (or it has expired). The body is whatever Analyze
-// wrote earlier — no re-rendering happens here.
+// Share serves GET /r/{hash}. By default it renders a styled HTML
+// page via pkg/htmlrender (Apache-2.0 — same renderer the CLI's
+// --html flag uses, so local files and share pages render
+// byte-identically). With `Accept: application/json` or `?format=json`
+// it returns the cached JSON instead.
+//
+//	200 — share found, body in requested format
+//	404 — unknown / expired hash
 func (h *Handler) Share(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -199,9 +208,34 @@ func (h *Handler) Share(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "store: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", sa.MediaType)
+
+	if wantsJSON(r) {
+		w.Header().Set("Content-Type", sa.MediaType)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(sa.Body)
+		return
+	}
+
+	// Default: HTML render. Re-using pkg/htmlrender keeps the share
+	// page and the CLI's local --html report in lockstep.
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(sa.Body)
+	_ = htmlrender.Render(w, htmlrender.Data{
+		Source:      sa.Source,
+		Workloads:   sa.Workloads,
+		Findings:    sa.Findings,
+		ShareURL:    "https://optiqor.dev/r/" + sa.Hash,
+		Mode:        htmlrender.ModeSandbox,
+		GeneratedAt: sa.CreatedAt,
+	})
+}
+
+func wantsJSON(r *http.Request) bool {
+	if r.URL.Query().Get("format") == "json" {
+		return true
+	}
+	accept := r.Header.Get("Accept")
+	return strings.Contains(accept, "application/json")
 }
 
 // Mount registers both routes on a mux. cmd/api wraps the result with

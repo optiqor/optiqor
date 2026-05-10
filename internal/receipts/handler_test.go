@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -99,6 +100,44 @@ func TestHandler_GetUnknown_404(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("code = %d", w.Code)
+	}
+}
+
+func TestHandler_VerifyPage_HTMLAndStatus(t *testing.T) {
+	iss, pub, err := GenerateIssuer("k1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewInMemoryStore()
+	signed, _ := iss.Sign(mkValidReceipt())
+	r := mkValidReceipt()
+	r.IssuerKeyID = "k1"
+	_ = store.Save(context.Background(), tenancy.Context{TenantID: "t1"}, "rcpt_1", signed, r)
+	reg := NewStaticRegistry()
+	reg.Add("k1", pub)
+	h := &Handler{Store: store, Registry: reg}
+
+	mux := http.NewServeMux()
+	h.Mount(mux)
+	req := httptest.NewRequest(http.MethodGet, "/v/rcpt_1", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code = %d, body = %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("content-type = %q", ct)
+	}
+	body := w.Body.String()
+	for _, want := range []string{
+		"<!doctype html>",
+		"Verified Receipt",
+		"rcpt_1",
+		"signature verified",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("verifier missing %q", want)
+		}
 	}
 }
 
