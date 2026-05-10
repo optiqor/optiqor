@@ -47,9 +47,11 @@ export type AnalyzeResponse = {
 };
 
 /**
- * apiBase — backend origin. Defaults to "" so the same Next.js
- * deployment can be reverse-proxied in front of the Go API; override
- * with NEXT_PUBLIC_OPTIQOR_API for split-host setups.
+ * apiBase — backend origin. Default "" → calls go to the same
+ * origin and are proxied to the Go API by next.config.ts's
+ * `rewrites` (dev) or the reverse proxy (prod). Override with
+ * NEXT_PUBLIC_OPTIQOR_API for split-host setups (e.g. when the
+ * Next.js app is deployed on Vercel and the Go API on AWS).
  */
 export const apiBase =
   process.env.NEXT_PUBLIC_OPTIQOR_API ?? "";
@@ -62,7 +64,9 @@ export async function analyze(values: string): Promise<AnalyzeResponse> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new ApiError(res.status, text || res.statusText);
+    // Surface the backend's error body verbatim when present — the
+    // sandbox panel renders it inline.
+    throw new ApiError(res.status, text.trim() || res.statusText);
   }
   return (await res.json()) as AnalyzeResponse;
 }

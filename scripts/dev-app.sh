@@ -60,9 +60,11 @@ export OPTIQOR_ENV="${OPTIQOR_ENV:-dev}"
 API_URL="http://localhost${OPTIQOR_HTTP_ADDR}"
 WEB_URL="http://localhost:3000"
 
-# Tell the Next.js client where the backend is so /sandbox + share
-# pages call the right host. Falls through to same-origin if unset.
-export NEXT_PUBLIC_OPTIQOR_API="${NEXT_PUBLIC_OPTIQOR_API:-$API_URL}"
+# Tell the Next.js dev server where to proxy /v1/*, /r/*, /v/* so the
+# browser only ever talks to localhost:3000 (no CORS). The next.config
+# rewrites read this. Do NOT export NEXT_PUBLIC_OPTIQOR_API here —
+# that would force absolute URLs in the client and bypass the proxy.
+export OPTIQOR_API_UPSTREAM="${OPTIQOR_API_UPSTREAM:-$API_URL}"
 
 # ── prefix helper ──────────────────────────────────────────────────
 # stdbuf keeps Go and Next.js stdout from buffering when piped.
