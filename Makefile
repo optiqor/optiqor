@@ -40,8 +40,8 @@ build-agent: ## Build the agent binary
 	$(GO) build $(GOFLAGS) -ldflags='$(LDFLAGS)' -o $(BIN_DIR)/agent ./cmd/agent
 
 # ---------------- Run (local) ----------------
-.PHONY: run-api run-worker run-agent
-run-api: ## Run api locally
+.PHONY: run-api run-worker run-agent run-web
+run-api: ## Run api locally (:8080)
 	$(GO) run ./cmd/api
 
 run-worker: ## Run worker locally
@@ -49,6 +49,16 @@ run-worker: ## Run worker locally
 
 run-agent: ## Run agent locally
 	$(GO) run ./cmd/agent
+
+run-web: web-install ## Run the Next.js frontend locally (:3000)
+	cd web && pnpm exec next dev --turbopack
+
+.PHONY: web-install
+web-install: ## Install web deps (idempotent — skips when node_modules exists)
+	@if [ ! -d web/node_modules ]; then \
+		echo "==> installing web deps (first run)"; \
+		cd web && pnpm install; \
+	fi
 
 # ---------------- Quality ----------------
 .PHONY: lint test test-race vet fmt fmt-check security
@@ -119,9 +129,15 @@ tf-plan-dev: ## terraform plan dev
 	terraform -chdir=infra/terraform/envs/dev plan
 
 # ---------------- Composite ----------------
-.PHONY: dev ci
-dev: docker-up migrate ## docker-up + migrate (one-shot dev bootstrap)
-	@echo "==> dev stack ready. run \`make run-api\` in another terminal."
+.PHONY: dev bootstrap ci
+dev: ## Start the api (:8080) + web (:3000) together. Ctrl+C stops both.
+	@./scripts/dev-app.sh
+
+bootstrap: docker-up migrate web-install ## One-shot first-run: docker stack + migrations + web deps
+	@echo
+	@echo "==> bootstrap complete."
+	@echo "    next: make dev      (start api + web)"
+	@echo "          make run-worker (start temporal worker in another terminal)"
 
 ci: fmt-check vet lint test-race security ## what CI runs
 
