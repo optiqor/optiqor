@@ -62,8 +62,9 @@ fmt-check: ## fail if gofmt would change anything
 vet: ## go vet
 	$(GO) vet $(PKG)
 
-lint: ## golangci-lint run
+lint: ## golangci-lint + terraform fmt -check
 	golangci-lint run
+	terraform -chdir=infra/terraform fmt -recursive -check
 
 test: ## go test (no race)
 	$(GO) test $(PKG)
