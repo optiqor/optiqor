@@ -196,19 +196,26 @@ for route in '/healthz' '/readyz' '/metrics' '/oauth/github/callback' '/webhooks
     bash -c "grep -q '\"[A-Z]\\+ ${route}\"' cmd/api/main.go"
 done
 
-# Routes the docs PROMISE but the API server doesn't expose yet:
-gap_check "POST /v1/analyze (sandbox/SaaS analysis endpoint)" \
-  bash -c "grep -qE 'POST /v1/analyze|/api/v1/analyze' cmd/api/main.go"
-gap_check "GET /r/<hash> (public share endpoint, --share target)" \
-  bash -c "grep -qE 'GET /r/|/api/v1/share|/r/{hash}' cmd/api/main.go"
-gap_check "POST /v1/apply-fixes (Apply Fix PR generation)" \
-  bash -c "grep -qE 'apply-fixes|/v1/fix' cmd/api/main.go"
-gap_check "GET /v1/receipts/<id> (Verified Receipt fetch)" \
-  bash -c "grep -qE '/v1/receipts|/r/receipts' cmd/api/main.go"
-gap_check "POST /v1/ingest (agent → SaaS metrics ingestion)" \
-  bash -c "grep -qE '/v1/ingest|/ingest/metrics' cmd/api/main.go"
-gap_check "POST /v1/cost-spikes (bill anomaly webhook)" \
-  bash -c "grep -qE 'cost-spike|/spikes' cmd/api/main.go"
+# Routes the docs PROMISE — search across cmd/api + every internal
+# package because each domain Mount()s its own routes.
+routegrep() {
+  # Return 0 (route present) when the pattern is found anywhere in the
+  # api binary or its domain packages.
+  local pattern="$1"
+  grep -rE "$pattern" --include='*.go' cmd/api internal >/dev/null
+}
+check "POST /v1/analyze (sandbox/SaaS analysis endpoint)" \
+  bash -c "$(declare -f routegrep); routegrep 'POST /v1/analyze'"
+check "GET /r/<hash> (public share endpoint, --share target)" \
+  bash -c "$(declare -f routegrep); routegrep 'GET /r/\\{hash\\}'"
+check "POST /v1/apply-fixes (Apply Fix PR generation)" \
+  bash -c "$(declare -f routegrep); routegrep 'POST /v1/apply-fixes'"
+check "GET /v1/receipts/<id> (Verified Receipt fetch)" \
+  bash -c "$(declare -f routegrep); routegrep 'GET /v1/receipts/\\{id\\}'"
+check "POST /v1/ingest (agent → SaaS metrics ingestion)" \
+  bash -c "$(declare -f routegrep); routegrep 'POST /v1/ingest'"
+check "POST /v1/cost-spikes (bill anomaly webhook)" \
+  bash -c "$(declare -f routegrep); routegrep 'POST /v1/cost-spikes'"
 
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ G. Worker + workflows (Temporal swap-in)                             ║

@@ -71,6 +71,8 @@ func run() int {
 		[]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5})
 
 	mux := buildMux(checks, logger, []byte(cfg.GitHubAppWebhookSecret), metrics)
+	mountDomainRoutes(mux, buildDomainDeps())
+	mux.HandleFunc("GET /v1/meta", metaHandler)
 	handler := http.Handler(mux)
 	handler = withAccessLog(logger, httpRequests, httpLatency, handler)
 	handler = withPanicRecovery(logger, handler)

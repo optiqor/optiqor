@@ -1,0 +1,175 @@
+package sandbox
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/optiqor/backend/internal/cost"
+)
+
+const exampleChart = `api:
+  replicas: 3
+  resources:
+    requests: {cpu: 500m, memory: 256Mi}
+    limits:   {cpu: 1, memory: 512Mi}
+  image: nginx:1.25
+worker:
+  resources:
+    requests: {cpu: 200m, memory: 128Mi}
+`
+
+func newHandler() *Handler {
+	return &Handler{
+		Store:  NewInMemoryStore(),
+		Pricer: cost.NewStaticPricer(),
+		Region: "us-east-1",
+		Now:    func() time.Time { return time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC) },
+	}
+}
+
+func TestAnalyze_RejectsNonPost(t *testing.T) {
+	h := newHandler()
+	req := httptest.NewRequest(http.MethodGet, "/v1/analyze", nil)
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("code = %d", w.Code)
+	}
+}
+
+func TestAnalyze_HappyPath(t *testing.T) {
+	h := newHandler()
+	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code = %d, body = %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("content-type = %q", ct)
+	}
+	var resp AnalyzeResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v\nbody:%s", err, w.Body.String())
+	}
+	if resp.AccuracyDisclosure != AccuracyDisclosure {
+		t.Errorf("disclosure mismatch: %q", resp.AccuracyDisclosure)
+	}
+	if resp.Workloads != 2 {
+		t.Errorf("workloads = %d, want 2", resp.Workloads)
+	}
+	if resp.ShareHash == "" {
+		t.Error("share_hash empty")
+	}
+	if !strings.HasPrefix(resp.ShareURL, "https://optiqor.dev/r/") {
+		t.Errorf("share_url = %q", resp.ShareURL)
+	}
+	if len(resp.CostFindings)+len(resp.SecurityFindingsBonus) != len(resp.Findings) {
+		t.Errorf("split mismatch: cost=%d security=%d findings=%d",
+			len(resp.CostFindings), len(resp.SecurityFindingsBonus), len(resp.Findings))
+	}
+	if resp.AnnualSavingsUSD != resp.MonthlySavingsUSD*12 {
+		t.Errorf("annual != monthly*12: %v vs %v", resp.AnnualSavingsUSD, resp.MonthlySavingsUSD)
+	}
+}
+
+func TestAnalyze_BadYAML_400(t *testing.T) {
+	h := newHandler()
+	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(":\n  - not: [valid"))
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("code = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAnalyze_OversizedBody_413(t *testing.T) {
+	h := newHandler()
+	big := strings.Repeat("a", int(MaxBodyBytes)+1)
+	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(big))
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("code = %d", w.Code)
+	}
+}
+
+func TestAnalyze_StoresShareEntry(t *testing.T) {
+	h := newHandler()
+	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("analyze failed: %s", w.Body.String())
+	}
+	var resp AnalyzeResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+
+	// /r/<hash> should now return the same body.
+	mux := http.NewServeMux()
+	h.Mount(mux)
+	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, nil)
+	getW := httptest.NewRecorder()
+	mux.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Fatalf("share GET code = %d, body = %s", getW.Code, getW.Body.String())
+	}
+	if !strings.Contains(getW.Body.String(), "accuracy_disclosure") {
+		t.Errorf("share GET body missing disclosure:\n%s", getW.Body.String())
+	}
+}
+
+func TestShare_404OnMissing(t *testing.T) {
+	h := newHandler()
+	mux := http.NewServeMux()
+	h.Mount(mux)
+	req := httptest.NewRequest(http.MethodGet, "/r/deadbeef", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("code = %d", w.Code)
+	}
+}
+
+func TestShare_RespectsExpiry(t *testing.T) {
+	store := NewInMemoryStore()
+	now := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now.Add(31 * 24 * time.Hour) } // simulate "tomorrow + 30 days"
+	_ = store.Put(context.Background(), SharedAnalysis{
+		Hash:      "x",
+		Body:      []byte("{}"),
+		MediaType: "application/json",
+		ExpiresAt: now.Add(1 * time.Hour),
+	})
+	if _, err := store.Get(context.Background(), "x"); err == nil {
+		t.Error("expected ErrNotFound for expired entry")
+	}
+}
+
+func TestAnalyze_DisclosureAlwaysPresent(t *testing.T) {
+	h := newHandler()
+	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
+	w := httptest.NewRecorder()
+	h.Analyze(w, req)
+	body, _ := io.ReadAll(w.Body)
+	if !strings.Contains(string(body), "±40%") {
+		t.Errorf("response missing accuracy disclosure:\n%s", body)
+	}
+}
+
+func TestHashBytes_StableAcrossCalls(t *testing.T) {
+	a := hashBytes([]byte("hello"))
+	b := hashBytes([]byte("hello"))
+	if a != b {
+		t.Errorf("hash non-deterministic: %s vs %s", a, b)
+	}
+	if len(a) != 24 { // 12 bytes hex
+		t.Errorf("hash length = %d, want 24", len(a))
+	}
+}
