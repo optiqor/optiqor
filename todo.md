@@ -135,11 +135,36 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [x] `internal/parser` — Helm values + templates parser. **Values normalisation is reused from `github.com/optiqor/optiqor-cli/pkg/parser`** (single source of truth — same `Workload` struct the CLI's detectors run against). _Shipped as a thin re-export shim ([`internal/parser/parser.go`](internal/parser/parser.go)); Kustomize / ArgoCD / Flux multi-source bundling lands with Phase 7's GitOps work._
 - [x] `internal/sandbox/handlers` — public sandbox API: `POST /v1/analyze` and `GET /r/{hash}` ([`internal/sandbox/sandbox.go`](internal/sandbox/sandbox.go)). 1 MiB body cap, content-hash-addressed share URLs, mandatory ±40% accuracy disclosure on every response. _HTML rendering of `/r/{hash}` ships with `web/` below; JSON is live now._
 - [x] `internal/cost` — sandbox-grade rule-based engine v0 ([`internal/cost/pricer.go`](internal/cost/pricer.go) + [`internal/cost/static_pricer.go`](internal/cost/static_pricer.go)). Calls `rules.All()` from the CLI's `pkg/rules` directly via `go.mod` (no fork); 7-region AWS pricing table; `Pricer` interface so the agent's `LivePricer` (Phase 5) swaps in without callers changing.
-- [ ] Frontend framework decision (Week 3 Day 1) → ADR — Next.js / Remix / Vite+React
-- [ ] `web/` — sandbox UI: paste textbox, results panel, ±40% accuracy banner, share button
 - [ ] Shareable report storage — S3 bucket `optiqor-prod-sandbox` already provisioned in Phase 1 Terraform with KMS + 30-day lifecycle + CRR. Receiver currently writes to `internal/sandbox.InMemoryStore` behind the `Store` interface; swap to an S3 adapter is a single-file change once the AWS account binds.
 - [ ] Rate limit middleware (Redis-backed, IP + fingerprint) — wired into `cmd/api` via the existing `internal/platform/db/redis` Keyspace
 - [ ] p95 < 3s benchmark in CI (k6 or hey)
+
+### Web frontend — `backend/web/` (proprietary, Next.js App Router)
+
+> **Stack decision (ADR-0001, pending sign-off):** Next.js 15 App Router + TypeScript strict + pnpm workspace + Tailwind CSS + shadcn/ui + TanStack Query + Zod + Auth.js. Marketing, sandbox, and the auth-gated dashboard all live here. Public share pages (`/r/<hash>`) and Receipt verifier pages (`/v/<id>`) are **served directly by the Go API** using the Apache-2.0 `pkg/htmlrender` package from the CLI repo — they need no Next.js layer, must be raw-HTTP indexable for Slack/GitHub link previews, and share the exact rendering with `optiqor analyze --html`.
+>
+> **Why this split:** keeps proprietary code (dashboard, billing, auth) in `backend/web/` while the report rendering stays Apache-2.0 in `optiqor-cli/pkg/htmlrender/` (single source of truth for "what an analysis looks like"). See [optiqor-cli/todo.md](https://github.com/optiqor/optiqor-cli/blob/main/todo.md#tier-1--launch-anchors-still-open) Tier 1 for the CLI-side commitments.
+
+- [ ] **ADR-0001 — Frontend framework** (`docs/adr/0001-frontend-stack.md`). Records the Next.js / shadcn / Auth.js choice + the Go-served share-page split + the `pkg/htmlrender` import. Signed off before any `web/` code lands.
+- [ ] **`backend/web/` scaffold** — `pnpm create next-app@latest web --typescript --tailwind --app --src-dir`. Add: shadcn/ui init, TanStack Query, Zod, Auth.js (GitHub + GitLab providers), Playwright. ESLint strict, Prettier, `pnpm typecheck` in CI.
+- [ ] **`web/lib/api/`** — typed TanStack Query client generated from `optiqor-cli/docs/api/openapi.yaml` (via `openapi-typescript`). One module per backend domain (`analyze`, `receipts`, `applyFixes`, `ingest`). Zod response schemas wrap fetch so runtime drift surfaces as a thrown error, not undefined behaviour.
+- [ ] **`web/lib/brand/`** — TS module that imports `optiqor-cli/brand/tokens.json` at build time and exposes it as Tailwind theme tokens. Backend frontend + CLI terminal + CLI HTML report stay in sync on the hero color without a manual sync step.
+- [ ] **Sandbox page (`/sandbox`)** — paste-and-go: textarea → `POST /v1/analyze` → shadcn-styled results panel. ±40% banner pinned to the top, cost-first ordering, security findings rendered as a `<details>` bonus block (matches CLI brand voice). Share button uses the `share_url` from the API response. < 3s p95 measured by Playwright + CI lighthouse.
+- [ ] **Go-served `/r/<hash>` share page** — `cmd/api/sharepage.go` reads from the `sandbox.Store` and renders with `pkg/htmlrender`. Open Graph + Twitter Card meta tags so Slack/GitHub previews are first-class. No Next.js layer; pure Go template + inline CSS.
+- [ ] **Go-served `/v/<id>` Receipt verifier** — `cmd/api/receiptpage.go` reads from `receipts.Store`, renders via `pkg/htmlrender`. Anonymous, public, no auth. Includes the canonical signed bytes inline so finance teams can run `optiqor verify` (Phase 6 CLI command) locally.
+- [ ] **Marketing routes** — `web/app/(marketing)/`: `/`, `/pricing`, `/security`, `/how-it-works`. MDX-driven content; one `<MarketingLayout>` server component; Vercel preview deploys per PR.
+- [ ] **Onboarding flow (`/install/*`)** — OAuth → choose VCS host → repo picker → `helm install` instructions with copy-pasteable values. Backend exposes `/v1/onboarding/state` (uses existing `internal/onboarding/` state machine); frontend polls it.
+- [ ] **Dashboard shell (`/app/*`)** — Auth.js session → tenant header injection → `<DashboardLayout>` with cluster/namespace switcher. Year-1 pages: Analyses list, Receipts list, Apply Fix history, Cost spike timeline. Auth-gated by Next.js middleware that validates the session JWT against the backend's `/v1/session/whoami`.
+- [ ] **Deployment** — Vercel preview deploys per PR (cheap, fast, free for Phase 2). Production initially Vercel; migration to self-hosted Next standalone behind CloudFront when SOC 2 binds (Phase 9).
+
+**Sequencing — 4 weeks for one engineer:**
+
+| Wk | Drop | Demoable outcome |
+| --- | --- | --- |
+| 1 | `optiqor-cli/pkg/htmlrender` + `optiqor analyze --html` + Go `/r/<hash>` page wired to `sandbox.Store` | `npx @optiqor/cli analyze ./chart --html /tmp/report.html && open /tmp/report.html` |
+| 2 | `backend/web/` Next scaffold + `/sandbox` page calling live `/v1/analyze` | paste in a values.yaml, see findings + share URL |
+| 3 | Marketing pages + Astro docs stub at `docs-site/` | `optiqor.dev/` + `docs.optiqor.dev/` reachable in staging |
+| 4 | Auth.js + dashboard shell + first dashboard page (Analyses list) | first paying-customer-shaped demo |
 
 **CLI side already shipped (see [optiqor repo](https://github.com/optiqor/optiqor-cli)):**
 - [x] Helm values parser, 30-detector engine, shareable-URL hashing, `--share` HTTPS upload client with graceful offline fallback
@@ -225,7 +250,7 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] `cmd/agent` real watch loop: client-go informers + Prometheus scrape, mTLS to SaaS
 - [ ] Helm chart in `deploy/helm/optiqor-agent/` for customer install
 - [ ] Slack: digest workflow, `/optiqor status` slash command
-- [ ] Customer dashboard pages in `web/`
+- [ ] Customer dashboard pages in `web/` — builds on the Phase 2 dashboard shell. Year-1 pages: cluster fleet view, per-workload Apply Fix timeline, Receipt browser with WebCrypto verifier, billing/usage panel (Stripe integration). Auth via Auth.js GitHub OAuth from Phase 2 → tenant header injection downstream
 - [ ] On-call docs + runbooks in `docs/runbooks/`
 
 ### Tier-1 data sources (agent-resident — round out the data picture)
