@@ -14,15 +14,15 @@ import (
 	"os"
 	"time"
 
-	"github.com/optiqor/backend/internal/agent"
-	"github.com/optiqor/backend/internal/billing"
-	"github.com/optiqor/backend/internal/cost"
-	"github.com/optiqor/backend/internal/ingestion"
-	"github.com/optiqor/backend/internal/prwriter"
-	"github.com/optiqor/backend/internal/receipts"
-	"github.com/optiqor/backend/internal/sandbox"
-	"github.com/optiqor/backend/internal/tenancy"
-	"github.com/optiqor/backend/internal/worker/workflows"
+	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/billing"
+	"github.com/optiqor/optiqor/internal/cost"
+	"github.com/optiqor/optiqor/internal/ingestion"
+	"github.com/optiqor/optiqor/internal/prwriter"
+	"github.com/optiqor/optiqor/internal/receipts"
+	"github.com/optiqor/optiqor/internal/sandbox"
+	"github.com/optiqor/optiqor/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/worker/workflows"
 )
 
 // domainDeps is the set of constructed handlers + stores threaded

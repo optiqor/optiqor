@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/optiqor/backend/internal/rollback"
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/rollback"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // RollbackInitiator is the seam between the watchdog and the GitHub

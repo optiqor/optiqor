@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 func TestRetentionPolicy(t *testing.T) {

@@ -117,10 +117,10 @@ gap_check() { _run gap "$@"; }  # amber on failure (planned/phased work)
 section A "Prerequisites"
 check "go toolchain"              bash -c 'go version'
 check "git"                       bash -c 'git --version'
-check "module is github.com/optiqor/backend" \
-  bash -c "head -1 go.mod | grep -q 'module github.com/optiqor/backend'"
+check "module is github.com/optiqor/optiqor" \
+  bash -c "head -1 go.mod | grep -q 'module github.com/optiqor/optiqor'"
 check "git remote points to optiqor/backend" \
-  bash -c "git remote get-url origin 2>/dev/null | grep -q 'optiqor/backend.git\$'"
+  bash -c "git remote get-url origin 2>/dev/null | grep -q 'optiqor/optiqor.git\$'"
 
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ B. Build + test                                                      ║

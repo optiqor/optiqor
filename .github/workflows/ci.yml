@@ -3,12 +3,12 @@ name: CI
 # Workspace layout this workflow assumes:
 #
 #   $GITHUB_WORKSPACE/
-#     backend/          ← this repo
+#     optiqor/          ← this repo
 #     optiqor-cli/      ← Apache-2.0 OSS CLI (public per OSS playbook)
 #
-# The backend's go.mod has `replace github.com/optiqor/optiqor-cli =>
+# The optiqor backend's go.mod has `replace github.com/optiqor/optiqor-cli =>
 # ../optiqor-cli`. CI checks out both repos as siblings so that path
-# resolves; every Go step then sets `working-directory: backend`.
+# resolves; every Go step then sets `working-directory: optiqor`.
 #
 # If `optiqor-cli` ever becomes private, set the `OPTIQOR_BOT_TOKEN`
 # repo secret to a PAT with `contents:read` on the CLI repo and pass
@@ -30,17 +30,17 @@ concurrency:
 # pattern. YAML anchors keep the diff readable.
 defaults:
   run:
-    working-directory: backend
+    working-directory: optiqor
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - name: Check out backend
+      - name: Check out optiqor backend
         uses: actions/checkout@v5
         with:
-          path: backend
+          path: optiqor
       - name: Check out optiqor-cli sibling (for go.mod replace)
         uses: actions/checkout@v5
         with:
@@ -51,7 +51,7 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
-          cache-dependency-path: backend/go.sum
+          cache-dependency-path: optiqor/go.sum
       - name: gofmt
         run: |
           diff=$(gofmt -l . | grep -v '^vendor/' || true)
@@ -61,16 +61,16 @@ jobs:
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.1.6
-          working-directory: backend
+          working-directory: optiqor
 
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - name: Check out backend
+      - name: Check out optiqor backend
         uses: actions/checkout@v5
         with:
-          path: backend
+          path: optiqor
       - name: Check out optiqor-cli sibling
         uses: actions/checkout@v5
         with:
@@ -81,7 +81,7 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
-          cache-dependency-path: backend/go.sum
+          cache-dependency-path: optiqor/go.sum
       - name: Run tests with race detector
         run: go test -race -count=1 ./...
 
@@ -90,10 +90,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
-      - name: Check out backend
+      - name: Check out optiqor backend
         uses: actions/checkout@v5
         with:
-          path: backend
+          path: optiqor
       - name: Check out optiqor-cli sibling
         uses: actions/checkout@v5
         with:
@@ -104,17 +104,17 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
-          cache-dependency-path: backend/go.sum
+          cache-dependency-path: optiqor/go.sum
       - run: make build
 
   terraform-tags:
     name: Terraform tag check
     runs-on: ubuntu-latest
     steps:
-      - name: Check out backend
+      - name: Check out optiqor backend
         uses: actions/checkout@v5
         with:
-          path: backend
+          path: optiqor
       - name: Verify default_tags block on every env
         run: bash scripts/check-terraform-tags.sh
 
@@ -122,10 +122,10 @@ jobs:
     name: Terraform fmt
     runs-on: ubuntu-latest
     steps:
-      - name: Check out backend
+      - name: Check out optiqor backend
         uses: actions/checkout@v5
         with:
-          path: backend
+          path: optiqor
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.7.5"

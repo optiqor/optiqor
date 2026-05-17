@@ -33,10 +33,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/optiqor/backend/internal/cost"
-	"github.com/optiqor/backend/internal/parser"
 	"github.com/optiqor/optiqor-cli/pkg/htmlrender"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
+	"github.com/optiqor/optiqor/internal/cost"
+	"github.com/optiqor/optiqor/internal/parser"
 )
 
 // AccuracyDisclosure is the mandatory ±40% line. Keep byte-identical

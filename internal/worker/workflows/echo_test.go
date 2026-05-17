@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/optiqor/backend/internal/tenancy"
-	"github.com/optiqor/backend/internal/worker"
+	"github.com/optiqor/optiqor/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/worker"
 )
 
 func TestEcho_Name(t *testing.T) {

@@ -9,10 +9,10 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/optiqor/backend/internal/agent"
-	"github.com/optiqor/backend/internal/receipts"
-	"github.com/optiqor/backend/internal/tenancy"
-	"github.com/optiqor/backend/internal/worker/workflows"
+	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/receipts"
+	"github.com/optiqor/optiqor/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/worker/workflows"
 )
 
 // noopLLM matches cmd/api/routes.go's stand-in: returns a canned

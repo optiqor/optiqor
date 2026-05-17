@@ -1,4 +1,4 @@
-# backend — Claude Conventions
+# optiqor — Claude Conventions
 
 This is the Optiqor proprietary monorepo: Go modular monolith producing three binaries (`api`, `worker`, `agent`) from `cmd/`. Ground truth for stack and architecture decisions is [docs/strategy/technical_implementation.md](docs/strategy/technical_implementation.md). When code disagrees with that doc, the doc wins unless an ADR in [docs/adr/](docs/adr/) records the change.
 

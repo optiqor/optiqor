@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // QueueClass differentiates workflow priorities. Two classes are

@@ -1,5 +1,5 @@
 // Typed client for the Optiqor backend API. Mirrors the Go handler
-// shapes in backend/internal/sandbox/sandbox.go etc. The OpenAPI spec
+// shapes in internal/sandbox/sandbox.go etc. The OpenAPI spec
 // at optiqor-cli/docs/api/openapi.yaml will eventually generate this
 // — until then it's hand-maintained so changes show up in TS review.
 

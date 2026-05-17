@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // decode parses a single JSON log line into a map.

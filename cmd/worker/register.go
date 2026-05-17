@@ -3,10 +3,10 @@ package main
 import (
 	"log/slog"
 
-	"github.com/optiqor/backend/internal/agent"
-	"github.com/optiqor/backend/internal/receipts"
-	"github.com/optiqor/backend/internal/worker"
-	"github.com/optiqor/backend/internal/worker/workflows"
+	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/receipts"
+	"github.com/optiqor/optiqor/internal/worker"
+	"github.com/optiqor/optiqor/internal/worker/workflows"
 )
 
 // registerWorkflows binds every Year-1 workflow to the dispatcher

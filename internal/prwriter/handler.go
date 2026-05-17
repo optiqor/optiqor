@@ -5,9 +5,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/optiqor/backend/internal/agent"
-	"github.com/optiqor/backend/internal/tenancy"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
+	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // MaxPreviewBytes caps the size of an /v1/apply-fixes request body.

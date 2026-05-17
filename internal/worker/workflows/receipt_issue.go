@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/optiqor/backend/internal/receipts"
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/receipts"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // ReceiptStore is the persistence seam for issued receipts. Production

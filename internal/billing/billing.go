@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // Tier names map 1-to-1 to the receipts.tier CHECK constraint in

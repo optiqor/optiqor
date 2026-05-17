@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 func TestNewKeyspace_RequiresTenant(t *testing.T) {

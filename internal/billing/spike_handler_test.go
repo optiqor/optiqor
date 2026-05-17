@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 type fakeSpikeDispatcher struct {

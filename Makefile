@@ -72,9 +72,10 @@ fmt-check: ## fail if gofmt would change anything
 vet: ## go vet
 	$(GO) vet $(PKG)
 
-lint: fmt-check vet ## gofmt + vet + golangci-lint + terraform fmt -check (mirrors CI lint job)
+lint: fmt-check vet ## gofmt + vet + golangci-lint + terraform fmt -check + roadmap sync (mirrors CI lint job)
 	golangci-lint run
 	terraform -chdir=infra/terraform fmt -recursive -check
+	./scripts/check-roadmap-sync.sh
 
 test: ## go test (no race)
 	$(GO) test $(PKG)

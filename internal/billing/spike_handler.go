@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // SpikeEnvelope is the wire shape of a cost-spike event delivered by

@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/optiqor/backend/internal/agent"
-	"github.com/optiqor/backend/internal/receipts"
-	"github.com/optiqor/backend/internal/rollback"
-	"github.com/optiqor/backend/internal/tenancy"
-	"github.com/optiqor/backend/internal/worker"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
+	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/receipts"
+	"github.com/optiqor/optiqor/internal/rollback"
+	"github.com/optiqor/optiqor/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/worker"
 )
 
 // ---- Apply Fix -------------------------------------------------------

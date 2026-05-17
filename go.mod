@@ -1,4 +1,4 @@
-module github.com/optiqor/backend
+module github.com/optiqor/optiqor
 
 go 1.24.0
 

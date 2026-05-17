@@ -3,7 +3,7 @@ package billing
 import (
 	"context"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // Capacity sources back the Capacity Receipt tier — non-managed-cloud
