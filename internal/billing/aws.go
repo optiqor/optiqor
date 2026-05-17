@@ -3,7 +3,7 @@ package billing
 import (
 	"context"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // AWSCUR is the AWS Cost and Usage Report source. Phase 6 fills in

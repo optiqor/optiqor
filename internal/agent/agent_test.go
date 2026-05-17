@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/optiqor/backend/internal/tenancy"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 func mkRequest() FixRequest {

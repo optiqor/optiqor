@@ -10,8 +10,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/optiqor/backend/internal/tenancy"
-	"github.com/optiqor/backend/internal/worker"
+	"github.com/optiqor/optiqor/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/worker"
 )
 
 // EchoName is the registered workflow name; stable wire format.

@@ -1,6 +1,6 @@
 # Optiqor SLO recording rules + alerts.
 #
-# These materialise the targets committed in backend/todo.md and the
+# These materialise the targets committed in todo.md and the
 # strategy doc amendments so dashboards and PagerDuty integration both
 # read the same numbers.
 #

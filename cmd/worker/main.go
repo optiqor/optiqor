@@ -16,9 +16,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/optiqor/backend/internal/platform/config"
-	"github.com/optiqor/backend/internal/platform/logging"
-	"github.com/optiqor/backend/internal/worker"
+	"github.com/optiqor/optiqor/internal/platform/config"
+	"github.com/optiqor/optiqor/internal/platform/logging"
+	"github.com/optiqor/optiqor/internal/worker"
 )
 
 var version = "dev"

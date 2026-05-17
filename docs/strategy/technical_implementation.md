@@ -323,6 +323,8 @@ All of these run in milliseconds on well-indexed Postgres. None need a dedicated
 
 ### 4.2 Schema (Core Tables)
 
+> **Canonical schema lives in [optiqor/migrations/0001_baseline.sql](../../migrations/0001_baseline.sql).** The SQL below pre-dates the baseline and remains as a *design sketch* — table names and column shapes drift from what shipped (e.g. baseline uses `tenants` not `customers`, has a `workspaces` layer the sketch omits, models receipts with a three-tier `tier` enum). When the sketch disagrees with the baseline, the baseline wins. The migration plan in §4.2.1 evolves the baseline forward.
+
 All tables have `tenant_id` for row-level security. RLS policies enforce that no query returns another customer's data, even on bugs.
 
 ```sql
@@ -467,20 +469,103 @@ CREATE TABLE cost_attributions (
 SELECT create_hypertable('cost_attributions', 'day', chunk_time_interval => INTERVAL '7 days');
 ```
 
-### 4.3 Multi-Tenancy: Row-Level Security Is Non-Negotiable
+### 4.2.1 Planned migrations beyond the baseline
 
-Every table has `tenant_id`. Every query runs under a Postgres role scoped to a single tenant. Row-level security policies make cross-tenant leaks impossible at the database layer, even if application code has a bug:
+The committed baseline ([optiqor/migrations/0001_baseline.sql](../../migrations/0001_baseline.sql)) covers the 5-level hierarchy (`tenants → workspaces → clusters → namespaces → workloads`) plus `recommendations`, `recommendation_dismissals`, `apply_fixes`, `receipts` (with `tier ∈ {cloud, capacity, hybrid}`), `llm_calls`, `audit_log`, RLS via `current_setting('app.tenant_id', true)`, and the `optiqor_app` / `optiqor_migrator BYPASSRLS` role split. **Nine** follow-up migrations are queued, each behind its triggering feature. Order is deterministic; detail tracked in [optiqor/todo.md](../../todo.md).
+
+| Migration | Lands with | Locked design choices |
+| --- | --- | --- |
+| `0002_workload_observed_state.sql` | Phase 1 follow-up, before Phase 5 agent | Additive cols on `workloads`: `container_image TEXT` (**non-negotiable from row one** — pattern-library moat) · `replicas INT` · `has_hpa BOOL` · `current_cpu_request_millicores`, `current_memory_request_bytes`, `current_cpu_limit_millicores`, `current_memory_limit_bytes` · `last_observed_at TIMESTAMPTZ`. Agent reconciler is sole writer. Index on `container_image` for cross-tenant pattern queries (used under `is_superuser_context()`, see §4.2.2). |
+| `0003_tenancy_primitives.sql` | Phase 1 follow-up, paired with `0002` | Pure additive — does not change existing table structure, only refactors RLS policies to read through new helpers. UUID v7 generator · `current_tenant_id()` helper · `is_superuser_context()` per-query bypass · `set_updated_at()` trigger. **Variable name stays `app.tenant_id`** to match `internal/platform/db` bind helper. See §4.2.2. |
+| `0004_shared_analyses.sql` | Phase 2 sandbox hardening | `hash TEXT UNIQUE`, `payload_sha256`, `findings_json JSONB`, `source CHECK ('cli','sandbox')`, `view_count`, `created_at`, `expires_at`. Public-by-design, **no RLS**. In-row payload until a single share exceeds ~256 KiB, then promote payload to S3 (pointer stays in Postgres). |
+| `0005_auth.sql` | Phase 5 dashboard go-live | `users` (global, **no RLS** — a human can belong to many tenants; the auth subsystem is sole reader/writer) · `memberships` (RLS-scoped, role CHECK `owner/admin/member/viewer`) · `api_tokens` (RLS-scoped, `token_hash BYTEA`, `scopes TEXT[]`, `last_used_at`, `expires_at`, `revoked_at`). Token validation runs on the `optiqor_migrator BYPASSRLS` connection until tenant is resolved; then `set_config('app.tenant_id', ...)` switches to the regular pool. |
+| `0006_metric_samples.sql` | Phase 5 agent watch loop | `create_hypertable('metric_samples','time', chunk_time_interval => '1 day')` · compress `segmentby='workload_id', orderby='time DESC'`, `add_compression_policy(INTERVAL '7 days')` · retain `add_retention_policy(INTERVAL '35 days')` (30-day window + 5-day buffer) · continuous aggregate `metric_samples_hourly` materialising `avg / max / approx_percentile(0.95) / approx_percentile(0.99)` via TimescaleDB-toolkit `percentile_agg`; refresh `start_offset=35d / end_offset=1h / schedule=30min`. **Sizing engine reads the aggregate, not raw.** RLS via `tenant_id`. No FKs (hypertable convention; referential integrity is app-enforced and verified by a nightly cross-table sanity check). |
+| `0007_billing_line_items.sql` | Phase 5 → 6, when first CUR ingest lands in Postgres | Hypertable, 1-day chunks. **Two enum columns mandatory from row one — impossible to retrofit cleanly:** `source TEXT CHECK ('aws_cur','azure_cost_mgmt','hetzner_invoice','capacity_deferred')` (which bill, drives 3-tier Receipt routing) and `pricing_mode TEXT CHECK ('spot','on_demand','savings_plan','reserved','other')` (rate within the bill). Compress `segmentby='cluster_id'` after 7d; retain 365d (financial data; Receipts cite it). |
+| `0008_stripe_mirror.sql` | Phase 6 Stripe billing | Additive col `tenants.stripe_customer_id TEXT UNIQUE` · `subscriptions` (one row per Stripe subscription — a tenant can have many over time) · `usage_records` · `invoices`. Reconciliation via Stripe webhook → `internal/api/webhooks`. |
+| `0009_vcs_installations.sql` | Phase 4 GitHub App go-live (applied alongside 0005–0008 in one deployment) | One row per GitHub/GitLab App installation per tenant — multi-VCS and multi-org enterprise both demand many installations per tenant: `tenant_id`, `provider TEXT CHECK ('github','gitlab')`, `installation_id BIGINT`, `account_login TEXT`, `access_token_ciphertext BYTEA` (KMS-encrypted; tokens expire hourly and are refreshed in-place), `token_expires_at TIMESTAMPTZ`, `installed_at`, `revoked_at`, `status TEXT CHECK ('active','suspended','revoked')`, `UNIQUE (provider, installation_id)`. RLS-scoped. **Without this table** the webhook handler can't refresh the GitHub App access token after the first hour and can't disambiguate multi-org enterprise tenants. |
+| `0010_audit_log_partitioning.sql` | Phase 8 SOC 2 Type 1 prep | Convert `audit_log` from a normal table to a TimescaleDB hypertable on `occurred_at` (1-month chunks), `add_compression_policy(INTERVAL '30 days')`, `add_retention_policy(INTERVAL '7 years')`. 7-year retention with billions of rows is a non-starter on a normal heap — `ALTER TABLE` slows to minutes by Y3 without partitioning. Hypertable conversion is online and lossless. Append-only DML grants stay (`REVOKE UPDATE, DELETE`). |
+
+**Design calls deliberately deferred** (decision when the trigger fires, not before):
+
+- **Denormalised current state on `workloads` vs derive-from-`metric_samples`.** Default is denormalise — one writer (agent reconciler) keeps consistency, dashboard reads stay fast. Revisit when the first dashboard latency budget bites.
+- **`onboarding_progress` table vs `tenants.onboarding_state` JSONB.** JSONB is fine while nudge cadence is hard-coded. Split into a dedicated table when nudges become customer-tunable, per-stage SLA reporting lands, or activation-funnel charting wants per-step time-in-state.
+- **`shared_analyses` body in-row vs S3 pointer.** Start in-row (one small table is operationally trivial). Promote payload to S3 only if a single share exceeds ~256 KiB.
+- **Long-horizon downsample of `metric_samples_hourly`.** Continuous aggregate has no retention policy at launch. Daily/weekly downsamples come only if storage cost demands them.
+- **Promote `workloads.workload_class_group_id UUID` into a real `workload_classes` table.** Today the group-id is a free-floating UUID indexed for cross-cluster fleet queries — enough for Y1's "apply this fix to all 5 instances" story. A real table earns its weight only when a class needs to carry metadata (description, customer-tunable snooze rules, class-level blast-radius overrides) or when the dashboard ships a per-class detail page. Promote in Phase 7 alongside the workload classifier rollout if fleet-wide Apply Fix has a UI; defer otherwise.
+
+### 4.2.2 Tenancy primitives (locked in `0003_tenancy_primitives.sql`)
+
+Four additive helpers that pay back on every future migration. `0003` does not alter the structure of any baseline table — it adds functions, then rewrites existing RLS policies to read through them. Semantics unchanged.
 
 ```sql
-ALTER TABLE workloads ENABLE ROW LEVEL SECURITY;
-CREATE POLICY workload_tenant_isolation ON workloads
-    FOR ALL
-    USING (tenant_id = current_setting('Optiqor.tenant_id')::uuid);
+-- UUID v7: time-ordered, better B-tree locality on append-heavy hot tables
+-- (metric_samples_hourly, audit_log, recommendations). Existing v4 UUIDs on
+-- baseline tables stay untouched; DEFAULT uuid_generate_v7() applies to future
+-- inserts only. Drop this function when PG18 ships native uuidv7().
+CREATE OR REPLACE FUNCTION uuid_generate_v7() RETURNS uuid AS $$
+DECLARE unix_ts_ms bytea; uuid_bytes bytea;
+BEGIN
+    unix_ts_ms := substring(int8send((extract(epoch FROM clock_timestamp()) * 1000)::bigint) FROM 3);
+    uuid_bytes := unix_ts_ms || gen_random_bytes(10);
+    uuid_bytes := set_byte(uuid_bytes, 6, (b'0111' || get_byte(uuid_bytes, 6)::bit(4))::bit(8)::int);
+    uuid_bytes := set_byte(uuid_bytes, 8, (b'10'   || get_byte(uuid_bytes, 8)::bit(6))::bit(8)::int);
+    RETURN encode(uuid_bytes, 'hex')::uuid;
+END $$ LANGUAGE plpgsql VOLATILE;
+
+-- Tenant resolver. Variable name MUST stay app.tenant_id (matches the existing
+-- internal/platform/db bind helper).
+CREATE OR REPLACE FUNCTION current_tenant_id() RETURNS uuid AS $$
+    SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid;
+$$ LANGUAGE sql STABLE;
+
+-- Per-transaction RLS bypass for legitimate cross-tenant background jobs
+-- (cross-customer pattern-library aggregation, nightly metrics rollup,
+-- transparency-log writer). Off by default. Every flip to 'on' is logged in
+-- audit_log with the calling workflow + actor.
+CREATE OR REPLACE FUNCTION is_superuser_context() RETURNS boolean AS $$
+    SELECT COALESCE(current_setting('app.bypass_rls', true), 'off') = 'on';
+$$ LANGUAGE sql STABLE;
+
+-- updated_at trigger. Attach to every table that has an updated_at column.
+CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
+BEGIN NEW.updated_at := now(); RETURN NEW; END $$ LANGUAGE plpgsql;
+
+-- Refactor every baseline RLS policy to read through the helpers. Semantics
+-- unchanged; the policy body becomes shorter and the bypass flag becomes
+-- usable. Run for: workspaces, clusters, namespaces, workloads, recommendations,
+-- recommendation_dismissals, apply_fixes, receipts, llm_calls, audit_log.
+ALTER POLICY tenant_isolation ON workloads
+    USING (tenant_id = current_tenant_id() OR is_superuser_context());
+-- (repeat for the other nine tenant-scoped tables)
 ```
 
-Before every query, the application sets `SET LOCAL Optiqor.tenant_id = '<uuid>'`. A bug that forgets to set it = zero rows returned, not another customer's data.
+**Why these specific picks:**
 
-For high-tier (Enterprise) customers, we can go further: per-customer Postgres schema, or dedicated logical database. The RLS model is the Year-1 default; schema isolation is Month 15+ optional.
+- **UUID v7 not v4 for hot tables.** `metric_samples_hourly`, `audit_log`, `llm_calls` will see millions of inserts per tenant per day. Time-ordered IDs keep the B-tree's right edge hot and avoid random-insert page splits. Existing v4 IDs on baseline tables stay; new tables and append-heavy hot tables get v7.
+- **Per-transaction bypass flag, not blanket BYPASSRLS.** The pattern-library aggregation job legitimately reads across tenants. Forcing it onto the `optiqor_migrator` connection (BYPASSRLS at role level) is dangerous if that connection ever leaks. The flag scopes the bypass to a single transaction, and every flip writes an `audit_log` row so cross-tenant reads are accountable.
+- **No FKs on hypertables.** TimescaleDB chunk routing interacts poorly with FK enforcement at scale. Industry-standard pattern; we compensate with a nightly cross-table sanity check (count of `metric_samples.workload_id` not in `workloads` must be 0; alerts oncall otherwise).
+- **`users` global, no RLS.** A human can belong to many tenants. The `users` table is only ever read/written by the auth subsystem; everything else joins through `memberships` which is RLS-scoped. Enforcement-by-discipline boundary, documented in `internal/platform/db`.
+
+### 4.3 Multi-Tenancy: Row-Level Security Is Non-Negotiable
+
+Every tenant-scoped table has `tenant_id` + `ENABLE ROW LEVEL SECURITY` + a `tenant_isolation` policy that reads through the helpers from §4.2.2. RLS makes cross-tenant leaks impossible at the database layer, even on app-code bugs:
+
+```sql
+-- Pattern, applied to every tenant-scoped table by 0001_baseline.sql and
+-- rewritten to call current_tenant_id() / is_superuser_context() by 0003.
+ALTER TABLE workloads ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON workloads
+    USING (tenant_id = current_tenant_id() OR is_superuser_context());
+```
+
+Before each request, [internal/platform/db](../../internal/platform/db/) opens a transaction and calls `set_config('app.tenant_id', <uuid>, true)`. The variable is `LOCAL` to the transaction, so a bug that forgets to set it returns *zero rows*, never another customer's data. The `is_superuser_context()` branch is opt-in per transaction (`SET LOCAL app.bypass_rls = 'on'`) and writes an `audit_log` row on every flip — reserved for cross-tenant background jobs like the Helm Chart Efficiency Leaderboard aggregation, six-metric health rollups, and cross-customer pattern-library training.
+
+**Two connection roles, not one:**
+
+- `optiqor_app` (NOLOGIN, RLS-subject) — every API request and every Temporal worker activity. Cannot bypass RLS by design.
+- `optiqor_migrator` (NOLOGIN, BYPASSRLS) — schema migrations only. Never used for runtime queries.
+
+For high-tier Enterprise customers we can go further: per-customer Postgres schema or dedicated logical database. The shared-table + RLS + bypass-flag model is the Year-1 default; schema isolation is a Month-15+ enterprise unlock that doesn't change the rest of the code.
 
 ### 4.4 Consistency and Caching
 
@@ -866,7 +951,7 @@ WITH candidate_prs AS (
   JOIN workloads w ON w.source_iac_path = f.path
   WHERE pr.merged_at BETWEEN T - INTERVAL '21 days' AND T
     AND w.namespace = $1
-    AND pr.tenant_id = current_setting('Optiqor.tenant_id')::uuid
+    AND pr.tenant_id = current_tenant_id()
 )
 SELECT id, repo, number, merged_at, predicted_cost_delta_usd_month,
   (CASE 
@@ -921,7 +1006,7 @@ Optiqor reads customer IaC, reads customer cluster state, reads customer billing
 | Layer | Mechanism |
 |-------|-----------|
 | Database | Row-level security policies on every table |
-| API | Every handler sets `SET LOCAL Optiqor.tenant_id` before any query |
+| API | Every handler opens a transaction and calls `set_config('app.tenant_id', <uuid>, true)` before any query (via `internal/platform/db`); RLS policies read through `current_tenant_id()` |
 | LLM workers | Per-tenant prompt contexts; no cross-tenant data in any single inference |
 | Redis | Keys prefixed with `t:<tenant_id>:`; ACL-enforced namespaces |
 | S3 | Per-tenant prefix; IAM policies restrict access by prefix |

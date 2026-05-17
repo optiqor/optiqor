@@ -1,6 +1,6 @@
 package db
 
-import "github.com/optiqor/backend/internal/tenancy"
+import "github.com/optiqor/optiqor/internal/tenancy"
 
 // TenantStmtSQL is the parameterised statement domain code runs at the
 // start of every tenant-scoped transaction. It binds the tenant id to a

@@ -24,7 +24,7 @@ package cost
 import (
 	"fmt"
 
-	"github.com/optiqor/backend/internal/parser"
+	"github.com/optiqor/optiqor/internal/parser"
 )
 
 // Pricer returns per-month USD-cents for a vCPU and a GiB of memory in

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // FakeLLMClient is the deterministic in-process LLMClient used by

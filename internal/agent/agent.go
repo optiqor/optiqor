@@ -30,9 +30,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/optiqor/backend/internal/agent/llm/sanitizer"
-	"github.com/optiqor/backend/internal/tenancy"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
+	"github.com/optiqor/optiqor/internal/agent/llm/sanitizer"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // LLMRequest is the shape every model adapter consumes. Keep it small;

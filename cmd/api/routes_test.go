@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/optiqor/backend/internal/platform/healthz"
+	"github.com/optiqor/optiqor/internal/platform/healthz"
 )
 
 // fullMux mirrors what cmd/api would assemble in production: the

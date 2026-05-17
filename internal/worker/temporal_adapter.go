@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 )

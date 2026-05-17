@@ -15,7 +15,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // Retention windows are committed in todo.md production-readiness

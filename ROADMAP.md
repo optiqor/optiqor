@@ -730,7 +730,7 @@ Phase 6:
 
 - [ ] **Restore drill cadence:** monthly automated workflow restores last night's snapshot to a scratch RDS, runs schema integrity check, reports time-to-restore. Failure pages oncall.
 - [ ] **Backup integrity** — every snapshot's hash signed with the same KMS key as Receipts; integrity verifiable independently of AWS
-- [ ] **Runbook** — `backend/docs/runbooks/disaster-recovery.md` with step-by-step recovery; tested in fire drills
+- [ ] **Runbook** — `docs/runbooks/disaster-recovery.md` with step-by-step recovery; tested in fire drills
 - [ ] **Quarterly fire drill** — actually fail over staging and time recovery; anyone on the team can lead
 
 ---
@@ -940,5 +940,5 @@ Acknowledged here so we don't re-invent later:
 
 - Update phase exit criteria as they ship; check boxes as you go.
 - When a multi-month milestone changes (delayed, accelerated, scrapped), update the date in-line and add a one-line note explaining why.
-- Major architectural or strategic deviations get an ADR in [backend/docs/adr/](backend/docs/adr/) — don't bury them here.
-- Backend-scoped subset is mirrored in [backend/todo.md](backend/todo.md). CLI repo gets its own when it grows beyond Phase 3.
+- Major architectural or strategic deviations get an ADR in [docs/adr/](docs/adr/) — don't bury them here.
+- Backend-scoped subset is mirrored in [todo.md](todo.md). CLI repo gets its own when it grows beyond Phase 3.

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 func TestHandler_RejectsNonPost(t *testing.T) {

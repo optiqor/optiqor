@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // SpikeNotifier delivers the spike notification (Slack DM, email,

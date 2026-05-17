@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/optiqor/backend/internal/parser/gitops"
+	"github.com/optiqor/optiqor/internal/parser/gitops"
 )
 
 const singleSourceManifest = `

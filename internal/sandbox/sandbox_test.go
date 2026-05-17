@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/optiqor/backend/internal/cost"
+	"github.com/optiqor/optiqor/internal/cost"
 )
 
 const exampleChart = `api:

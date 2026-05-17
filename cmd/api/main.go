@@ -23,12 +23,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/optiqor/backend/internal/platform/config"
-	"github.com/optiqor/backend/internal/platform/healthz"
-	"github.com/optiqor/backend/internal/platform/logging"
-	"github.com/optiqor/backend/internal/platform/telemetry"
-	"github.com/optiqor/backend/internal/tenancy"
-	"github.com/optiqor/backend/internal/vcs"
+	"github.com/optiqor/optiqor/internal/platform/config"
+	"github.com/optiqor/optiqor/internal/platform/healthz"
+	"github.com/optiqor/optiqor/internal/platform/logging"
+	"github.com/optiqor/optiqor/internal/platform/telemetry"
+	"github.com/optiqor/optiqor/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/vcs"
 )
 
 var version = "dev"

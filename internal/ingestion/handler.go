@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // MaxIngestBytes caps the size of a single /v1/ingest payload. The

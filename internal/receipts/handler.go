@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // Store is the persistence seam for issued receipts. Production wires

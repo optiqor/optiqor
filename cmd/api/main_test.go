@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/optiqor/backend/internal/platform/healthz"
-	"github.com/optiqor/backend/internal/platform/telemetry"
-	"github.com/optiqor/backend/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/platform/healthz"
+	"github.com/optiqor/optiqor/internal/platform/telemetry"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // silentLogger is a slog logger that drops everything; used in every

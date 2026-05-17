@@ -14,11 +14,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/optiqor/backend/internal/agent"
-	"github.com/optiqor/backend/internal/parser"
-	"github.com/optiqor/backend/internal/prwriter"
-	"github.com/optiqor/backend/internal/tenancy"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
+	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/parser"
+	"github.com/optiqor/optiqor/internal/prwriter"
+	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
 // PRPublisher is the seam between this workflow and the GitHub API.
