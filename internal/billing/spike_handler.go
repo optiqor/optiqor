@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
@@ -36,8 +37,6 @@ type SpikeHandler struct {
 	Dispatcher SpikeDispatcher
 }
 
-const maxSpikeBytes = 64 << 10 // 64 KiB — AWS Cost Anomaly payloads are tiny
-
 // Receive validates the payload and dispatches the spike event.
 func (h *SpikeHandler) Receive(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -48,7 +47,7 @@ func (h *SpikeHandler) Receive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "dispatcher not configured", http.StatusInternalServerError)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxSpikeBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.BillingSpikeWebhookMaxBytes))
 	if err != nil {
 		http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
 		return

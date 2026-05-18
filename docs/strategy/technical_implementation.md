@@ -297,9 +297,34 @@ Optiqor:
 - No hostPath, hostNetwork, or privileged containers
 - No direct internet egress — all traffic flows to `ingest.optiqor.dev` or a customer-controlled egress proxy
 
+**Outbound-only network — the enterprise security promise.** The agent **never accepts inbound connections**, ever. No exposed ports, no NodePort/LoadBalancer service, no firewall rules to open, no peering, no VPN, no port-forward, no inbound webhook receiver. Every byte of agent ↔ SaaS traffic is initiated by the agent over mTLS to a single Optiqor endpoint. The customer's firewall stays closed; their security team approves the install in a one-page review instead of a one-quarter network review. This is how Datadog, New Relic, and Grafana Agent earned enterprise adoption, and it's how we will. Combined with the read-only RBAC above, the worst-case compromise of the agent reads workload metadata; it cannot modify production. **State this on the website, in the SOC 2 prep deck, and in the procurement Q&A response template** — it converts security review from a blocker into a checkbox.
+
 **Agent is open-source (Apache 2.0)** at `github.com/optiqor/agent`. Customers audit source, verify signed binaries (Sigstore), review SBOMs. This is the only repo we make public in Year 1.
 
 **No-Agent Mode** (enterprise security unlock): customers who cannot install the agent provide kubeconfig + Prometheus remote-read endpoint. Optiqor runs a polling worker on our side. Same functionality, ~60% data richness, slightly higher latency.
+
+**Agent footprint SLO:** the agent's steady-state resource use is non-negotiable — **<100m CPU, <128MB memory on a typical 200-workload cluster**. A heavy agent becomes a permanent operational tax customers notice ("the irony of your K8s cost tool itself being a meaningful cost is the kind of detail enterprise buyers flag in G2 reviews"). Bandwidth budget: **<100MB/day** of compressed metric data uploaded to SaaS. These targets are tracked against the agent's own Prometheus metrics and validated post-launch; missing them is a P1 regression.
+
+**Agent update model — customer's GitOps reconciles, not us.** The agent is itself a Helm chart. Optiqor publishes new versions to the agent chart repo (`charts.optiqor.dev/agent`); the customer's ArgoCD or Flux installation reconciles the change on their schedule. We **never** auto-update an agent running in a customer cluster. The architectural reasons:
+- Security teams want to control what runs in production.
+- Optiqor sells GitOps to customers as the change-management primitive; auto-updating our own infrastructure outside that workflow would be hypocritical and operationally risky.
+- The customer can pin to an older version indefinitely; we maintain support windows publicly.
+- New customer onboarding installs via `helm install optiqor/agent` (or equivalent ArgoCD `Application`); the install is the same shape as every other Helm chart the customer manages.
+
+### 3.5 What Optiqor Is — And Isn't (Coexistence with K8s Primitives)
+
+**Optiqor is the intelligence layer above Kubernetes autoscaling primitives. We coexist with VPA, HPA, and Karpenter — we do not replace them.** See ADR-0012 (`docs/adr/0012-coexist-with-primitives.md`) for the architectural commitment.
+
+| Primitive | What it does | How Optiqor relates |
+|---|---|---|
+| **VPA recommender** | Histogram-based per-pod sizing | Read its recommendations as one signal (when in Off mode); produce the canonical recommendation when VPA is absent or off; disable/warn when VPA is in Auto mode for a workload Optiqor would also act on. Never uninstall. |
+| **HPA** | Replica scaling against a metric | Read the HPA spec to know it exists; size accordingly (HPA-aware sizing differs materially from static-replica sizing — this is the "bi-dimensional" insight). Optionally recommend HPA parameter changes (target utilization, custom metrics). Never replace. |
+| **Karpenter** | Node-layer autoscaling, consolidation, Spot interruption | Read NodePool config to ground recommendations; attribute pod cost across the node lifetimes Karpenter manages (consolidation moves pods — this affects 30-day cost calculations); optionally recommend NodePool changes via a separate PR shape (Karpenter CRD, not workload YAML). Never replace. |
+| **VPA in Auto mode** | Actively resizing pods in production (rare) | Optiqor disables itself for that workload, or warns the user explicitly. Two systems sizing the same workload race each other. |
+
+**The one place Optiqor's own logic is genuinely original work:** the **auto-rollback guard**. When a merged Optiqor fix starts misbehaving, none of VPA/HPA/Karpenter knows it was Optiqor's fault — they react to "the pod is failing" in their own ways (HPA scales replicas; VPA in Auto mode increases requests; Karpenter provisions nodes). Optiqor's statistical pre/post-merge anomaly detection + automated rollback PR is the only component that closes that loop. This is the moat that justifies "we don't replace, we add intelligence."
+
+The pitch sentence that lands: *"Optiqor works alongside your existing VPA, HPA, and Karpenter. We don't replace them — we make them smarter by giving them better-calibrated input. Your autoscaling primitives stay where they are; Optiqor decides what values they should run with."*
 
 ---
 
@@ -622,7 +647,132 @@ Events: pull_request, push (default branches only), installation
 
 **Never** read/write on default branches directly. **Never** request `admin`, `actions`, or `deployments` permissions.
 
+**Two-surface PR shape — receipt-signed vs PR-rendered.** Every Optiqor PR has two surfaces with different determinism requirements:
+
+- **Receipt-signed surface** — the numeric values, methodology metadata, commit content hash, recommendation ID. This is what the eventual Receipt cryptographically attests to. Must be deterministic and math-only.
+- **PR-rendered surface** — title, description prose, inline review comments, confidence-band explanation. This is what the customer reads when deciding whether to merge. LLM-helpful prose with deterministic *structured fields embedded*. Passes through the ADR-0007 output validator before reaching GitHub.
+
+Conflating these two leads to either under-validation (LLM hallucinations reach the customer) or over-restriction (the PR reads like a robot, hurting Suggest-mode adoption). The correct split:
+
+| Surface | Determinism | Source | Notes |
+|---|---|---|---|
+| Branch name (`optiqor/<rec-id>`) | Deterministic | UUID v7 from `recommendations` row | Operational hygiene + chronological sort |
+| YAML diff content | Deterministic | Methodology library output | What receipts effectively attest to |
+| Recommended numeric values | Deterministic | Methodology library output | Receipt-signed |
+| Cost projection ($ figure) | Deterministic | Methodology library output | Receipt-signed |
+| Confidence band token (HIGH / MED / LOW) | Deterministic | Methodology library output | Gates Apply Fix dispatch + receipt-signed |
+| Commit body — methodology metadata block | Deterministic template | Templated from the row | Audit chain |
+| Commit subject line | **LLM-helpful** | LLM, validated | `optiqor(<workload>): <subject>` prefix is templated; the `<subject>` is LLM prose, capped at 72 chars |
+| PR title | **LLM-helpful** | LLM, validated | Customers read this in the GitHub PR list |
+| PR description prose (the "What changed" / "Why" narrative) | **LLM-helpful** | LLM, validated | The cost-impact table, methodology link, validation checks are deterministic structured fields *embedded* in the prose |
+| Inline PR comments (per-hunk annotations) | **LLM-helpful** | LLM, validated | Pointers to specific YAML changes, e.g. "this 250m → 180m is based on P95 over the last 14 days" |
+| Confidence band display | Deterministic value + **LLM-helpful prose summary** | Methodology emits the band; LLM explains why | e.g. *"HIGH — 14 days of data, P95 utilization stable at ~72% of request"* |
+
+**Branch naming:**
+
+```
+optiqor/<recommendation-id>
+```
+
+`<recommendation-id>` is the UUID v7 from the `recommendations` table. UUID v7's time-ordered prefix means branch names sort chronologically in `git branch --list optiqor/*` — useful for operators sweeping abandoned branches. Never embed customer-sensitive strings in the branch name.
+
+**Commit message shape:**
+
+```
+optiqor(<workload>): <LLM-generated subject, ≤72 chars>
+
+<LLM-generated 2-3 sentence narrative explaining the change>
+
+----- methodology metadata (deterministic, audit chain) -----
+Recommendation:    <recommendation-id>
+Workload:          <namespace>/<kind>/<name>
+Methodology:       hybrid_v1
+Confidence:        <high|med|low>
+Projected savings: $<usd>/month
+```
+
+The `optiqor(<workload>):` prefix and the methodology-metadata block are templated and deterministic. The subject text after the prefix, and the narrative paragraph, are LLM-generated and pass through output validation (length bounds, no numeric values that contradict the methodology block, no profanity). **The LLM is allowed to write the commit subject and narrative** because the receipt records the commit's SHA after the fact — it doesn't pre-determine the commit text. Reproducibility of the commit text is a nice-to-have for sweep tooling, not a load-bearing audit property.
+
+**PR description template:**
+
+```markdown
+## <LLM-generated title, also used as the PR title>
+
+<LLM-generated 2-3 sentence narrative — "What we found, what we propose,
+what it costs.">
+
+## Cost impact <!-- deterministic structured field, embedded in prose -->
+
+| Before | After | Monthly savings |
+|---|---|---|
+| <current values from methodology> | <recommended values from methodology> | <$X from methodology> |
+
+## Why <!-- LLM-helpful prose, validated -->
+
+<LLM-generated explanation of the finding, written for the customer
+reading on GitHub. Pulls finding detail from the detector library; the
+LLM rewrites it for clarity. Cites the same numbers as the table above —
+output validator confirms.>
+
+## Confidence <!-- deterministic band + LLM-helpful summary -->
+
+**<HIGH | MED | LOW>** — <LLM-generated 1-2 sentence summary referencing
+the observed data window and signal stability. Numeric claims (days of
+data, P95 percentage) come from methodology; LLM writes the framing.>
+
+## How we know <!-- deterministic structured field -->
+
+- Methodology: hybrid_v1 (`optiqor.dev/methodology/hybrid-v1`)
+- Validation: helm template ✓ · kubeconform ✓ · dry-run-server ✓ (per ADR-0010)
+- Observed window: <N> days
+
+## Receipt <!-- deterministic boilerplate -->
+
+A signed Receipt verifying actual savings against your cloud bill will be
+posted 30 days after merge. Track at `optiqor.dev/receipts/<recommendation-id>`.
+
+---
+*PR opened by Optiqor. Comment `/optiqor dismiss` to dismiss (per ADR-0009 lifecycle).*
+```
+
+**Inline review comments.** Where the diff spans multiple files or non-obvious hunks, the PR Writer also leaves inline GitHub review comments on specific lines — "this line: we lowered `requests.cpu` to 180m because observed P95 over the last 14 days was 145m." These are **LLM-helpful prose** with the deterministic value (180m, 145m) interpolated from methodology output. The output validator checks that interpolated numbers match the diff and methodology before posting.
+
+**Determinism rules for the PR shape (corrected):**
+
+1. **The audit chain is deterministic, the customer-facing prose is not.** Branch name, YAML diff content, methodology metadata block, cost-impact table values, confidence band token, the "How we know" + "Receipt" sections — all reproducible from `recommendations` + `findings`. PR title, commit subject, narrative paragraphs, "Why" prose, confidence band explanation — LLM-generated and validated.
+2. **No timestamps in any LLM-generated text.** Use the recommendation's `created_at` only inside deterministic structured fields; never `time.Now()` at render time. Per CLAUDE.md, the `Clock` interface is injected.
+3. **No randomness in branch names or structured fields.** UUID v7 from the row; no salts.
+4. **Output validation is mandatory before posting to GitHub.** Per ADR-0007: prose passes the length-bounds + profanity + numeric-consistency check. The validator strips any LLM-inserted numeric claim that doesn't match the methodology output and substitutes the methodology value.
+5. **Tests pin the deterministic surfaces.** Golden fixtures in `internal/prwriter/testdata/` assert byte-identical output for: branch name, methodology metadata block, cost-impact table, "How we know" section, "Receipt" section. **LLM-generated surfaces are exempt from golden tests** — they're covered by validator tests instead (does the output respect length bounds, contain no contradictory numbers, pass profanity check).
+6. **What the eventual Receipt actually signs over.** `(commit_sha_at_merge, predicted_savings, methodology_version, recommendation_id, timestamp)`. The commit SHA is recorded after the merge, not pre-determined from text reproducibility. The audit chain doesn't depend on PR-text byte-stability — it depends on the diff content (YAML changes) being reproducible from methodology + the commit SHA being faithfully recorded.
+
 Token handling: customer-level installation tokens are short-lived (1 hour). We refresh proactively. The refresh token is stored encrypted (Postgres column encryption with AWS KMS).
+
+**Envelope encryption pattern (DEK / KEK).** Customer secrets in the database — GitHub App installation tokens, customer AWS access keys when supplied for CUR access, Anthropic BYO keys for enterprise tier — use envelope encryption rather than direct KMS-per-row encryption:
+
+```
+KEK (Key Encryption Key)    — lives in AWS KMS, never leaves
+   ↓ wraps
+DEK (Data Encryption Key)   — randomly generated per row, ephemeral
+   ↓ encrypts
+Token / secret              — at rest in Postgres, paired with the wrapped DEK
+```
+
+For every row that stores a customer secret:
+1. Generate a fresh 256-bit DEK with `crypto/rand`.
+2. Encrypt the secret with the DEK (AES-256-GCM).
+3. Call KMS `Encrypt(KEK, DEK)` to wrap the DEK; KMS never sees the secret, only the DEK.
+4. Store `{ciphertext, wrapped_dek, kek_arn, kek_version}` in the row.
+
+At read time, the reverse: fetch the wrapped DEK, call KMS `Decrypt(wrapped_dek)` to unwrap (only this single decrypt happens per read), use the plaintext DEK to decrypt the ciphertext. The DEK exists in process memory only for the duration of one decrypt + use; the KEK never leaves KMS.
+
+Why envelope rather than direct KMS encryption:
+- **KMS rate limits.** Direct KMS encrypt/decrypt is rate-limited per region (~10K req/s). Envelope encryption batches: one KMS call generates a DEK that encrypts many secrets, or wraps one DEK per row but only unwraps on access.
+- **Key rotation independence.** Rotating the KEK doesn't require re-encrypting every ciphertext, only re-wrapping the DEKs. Rotating a DEK doesn't require KMS calls at all — generate a new DEK locally, re-encrypt the affected secrets, wrap with the same KEK.
+- **Smaller blast radius.** A SQL injection or backup leak exposes wrapped DEKs and ciphertexts. Without KMS access (IAM scope), the attacker cannot decrypt anything. A compromised KMS API session can unwrap DEKs only for rows the session reads — not the whole database.
+- **Audit granularity.** Every KMS unwrap produces a CloudTrail entry. Whoever accessed a customer secret leaves a trail with row-level resolution.
+
+The envelope pattern is implemented in `internal/platform/db/crypto/`. Direct `kms.Encrypt(secret)` calls outside the wrapper are a P0 bug.
 
 ### 5.3 Parsing
 
@@ -653,6 +803,15 @@ Finding classified (deterministic)
 ```
 
 All of this runs as a Temporal workflow. Idempotent, resumable on crash, with explicit timeouts at each step.
+
+**The LLM-no-decision invariant.** This is the architectural contract codified by ADR-0007: **the LLM produces prose, not values.** The pipeline above puts the LLM call between deterministic classification and deterministic post-validation precisely to enforce this:
+
+- Findings are **classified** by deterministic rules (cost detector library + agent-mode statistical signals). The LLM does not decide which finding fires or how severe it is.
+- Values are **computed** by the methodology library (`internal/methodology/`, per ADR-0006). The LLM does not decide what CPU request to recommend, what replica count to set, or what cost to project. The values exist before the LLM call; the LLM is given them as inputs.
+- **Diffs are generated by the LLM** because turning structured methodology output into well-formatted Helm YAML is a prose-shaped problem (preserve comments, mirror indentation style, respect anchors, etc.). The LLM's role is *formatting and explanation*, not deciding what to change.
+- **Diffs are validated post-LLM** by deterministic gates (JSON schema, Helm values.schema.json, `kubeconform`, helm template, and the "did this modify anything outside the allowed set of keys" check). If the LLM hallucinates a value change, the validator rejects the diff and the workflow retries with a stricter prompt or escalates to human review.
+
+If the LLM is unreachable, the pipeline degrades gracefully: methodology computes the values, a template-based prose generator produces a less-polished PR description, and the PR opens anyway. **No customer decision waits on an LLM.** This is the structural answer to "what happens when GPT-5 ships" — nothing changes about what Optiqor decides; the explanations get marginally better.
 
 ### 6.2 Model Strategy
 
@@ -696,7 +855,69 @@ The real validation stack runs locally in our backend, in a hardened sandbox:
 4. **Differential analysis** — compare rendered manifests before and after. Confirm only expected fields changed (e.g., only `resources.requests`, not `image` or `command`).
 5. **Constraint checking** — requests within 40% headroom of observed P95, limits ≥ requests, replicas in sensible range.
 
-Total validation time: <500ms. All deterministic. No cluster needed.
+Total backend-side validation time: <500ms. All deterministic. No cluster needed.
+
+#### 6.4.1 The agent round-trip (catches what local validation can't)
+
+Stages 1-5 above run entirely in the backend and catch ~90% of bad diffs. The remaining ~10% are *cluster-specific* admission rejections: a Kyverno policy that requires a specific label, a Gatekeeper constraint, an OPA rule, a custom validating webhook, a PSP/PSS profile binding the customer enabled three months ago and nobody remembered. Backend-side validation cannot predict these — they live in the customer's cluster admission chain.
+
+So Apply Fix gating uses an **agent round-trip** for stage 6:
+
+```
+[Backend]                           [Customer cluster — Optiqor agent]
+1. Build candidate diff
+2. Run stages 1-5 (local sandbox)
+   → if any fail, reject locally
+3. Build signed validation request:
+   {
+     workload_ref,
+     proposed_manifests,
+     methodology_version,
+     nonce,
+     issued_at,
+     signature (Ed25519)
+   }
+4. Send request via mTLS  ─────────►
+                                    5. Verify backend signature
+                                    6. Run `kubectl --dry-run=server`
+                                       against the live cluster API
+                                       (admission webhooks fire here)
+                                    7. Build signed result:
+                                       {
+                                         request_hash,
+                                         outcome: pass | reject,
+                                         rejection_reason?,
+                                         api_version_seen,
+                                         signature (Ed25519, agent key)
+                                       }
+                            ◄────── 8. Return signed result
+9. Verify agent signature
+10. Verify request_hash matches the
+    nonce we issued (replay defense)
+11. If outcome == pass: open the PR
+    If outcome == reject: log the
+    rejection reason, do not open PR,
+    surface in the dashboard
+```
+
+**Why this works security-wise:**
+
+- The agent has **no write access** to the cluster (per ADR-0008). `kubectl --dry-run=server` is a read-only operation that exercises the admission chain without persisting changes.
+- The signed request prevents a compromised backend session from forging "validate this for me" requests at the agent; the agent's signed result prevents a compromised network path from forging "yes, the cluster accepted this."
+- The nonce in the request + the nonce echoed in the result prevent replay: an attacker can't reuse a previous "pass" result against a different diff.
+- mTLS for the transport is the existing agent ↔ backend channel; no new attack surface.
+
+**Latency:** the round-trip adds ~1-3 seconds to PR opening time on a healthy customer cluster (most of that is admission-webhook execution, which is the customer's own infrastructure, not Optiqor). Fail-closed: if the agent doesn't respond within 10s, the PR is not opened. The dashboard surfaces "validation timeout" with the recommendation queued for retry.
+
+**Why the agent, not a backend-side kubeconfig:**
+
+We could ask the customer for a read-only kubeconfig and run `kubectl --dry-run=server` from the backend. We don't, for three reasons:
+
+1. **Customer's security team objects to kubeconfig handoff** more often than to an agent install. Outbound-only mTLS is easier to approve than inbound network access from a SaaS to a private cluster.
+2. **Latency.** Backend ↔ customer cluster is internet round-trip; agent is in-cluster. Admission webhook calls (often 100-500ms each) are local for the agent and trans-WAN for the backend.
+3. **Operational fragility.** Customer kubeconfigs rotate; tokens expire; firewalls change. The agent is the customer-controlled side of the trust boundary and handles its own refresh.
+
+Implementation lives in `internal/applyfix/gate/dryrun/` per [optiqor/todo.md](../../todo.md) line 245 — backend-side signed-request issuer; agent-side handler ships as part of the Phase 5 agent watch loop.
 
 ### 6.5 Confidence Scoring (Year 1)
 
@@ -793,20 +1014,20 @@ Daily aggregation rolls up hour-level attributions → pod-day cost → workload
 - Per-workload trend analysis
 
 **What this captures imperfectly:**
-- Spot instance interruptions (we model them but don't perfectly reconcile)
-- Cross-account Savings Plans (documented in methodology)
+- Spot instance interruptions — we extend the model with explicit interruption windowing (`node_lifetimes.interruption_at`, see §7.3) to attribute partial windows rather than billed hours
+- Cross-account Savings Plans — we apply blended SP rate per usage tier
 - Network data-transfer costs (cluster-level overhead, not pod-attributed in Year 1)
 - GPU attribution (Year 2 — requires nvidia-dcgm-exporter)
 
-**What Receipts always display:**
+**What Receipts display:**
 ```
-Methodology: hybrid_v1 (0.6 × requests + 0.4 × usage)
+Methodology:            Optiqor hybrid_v1
 Attribution confidence: 88% (node-hours where all pods had labels)
-Not attributed: $180 of $19,120 (0.9%) — shared cluster overhead
-Full methodology: optiqor.dev/methodology/hybrid-v1
+Not attributed:         $180 of $19,120 (0.9%) — shared cluster overhead
+Full methodology:       optiqor.dev/methodology/hybrid-v1
 ```
 
-Honesty about what's attributed vs. what's overhead is how we earn trust. The methodology URL is public and versioned.
+Honesty about what's attributed vs. what's overhead is how we earn trust. The methodology URL is public and versioned; the Receipt is Ed25519-signed and reproducible from the public spec.
 
 ### 7.3 Karpenter and Autoscaler Dynamics
 
@@ -850,9 +1071,21 @@ Signing keys rotate quarterly. Old public keys remain available on the verificat
 
 ## 8. Auto-Rollback Guard
 
-### 8.1 The Real Problem: Statistical Rigor
+### 8.1 The Real Problem: Statistical Rigor (and the structural moat)
 
-Naive rollback triggers fire constantly on normal variance. Getting this right is hard signal-processing work, not a feature. Phased rollout protects customers from bad rollback decisions.
+This section is the most architecturally load-bearing part of Optiqor. It's the one component the rest of the K8s ecosystem **structurally cannot** ship — and that's why it's the moat. Engineers building this section should read it with that lens.
+
+**Why the customer's existing autoscalers don't close this loop.** When an Optiqor fix merges and goes wrong, the customer's HPA / VPA / Karpenter all react — but they react to symptoms, not causes:
+
+- HPA sees "pod failing" → scales replicas up. Masks the bug. Bill goes up.
+- VPA in Auto mode sees "OOMKilled" → increases requests. Papers over the cause.
+- Karpenter sees "pods unschedulable" → provisions new nodes. Pays for the masking.
+
+None of them knows the regression started 4 hours ago, correlated with PR #1247, opened by Optiqor. None of them has a pre-merge baseline to compare against. They're stateless reactors. The K8s primitives have no concept of *change attribution*; auto-rollback fundamentally needs change attribution.
+
+**Why this is a moat, not a feature.** Cast AI, ScaleOps, and Sedai could write similar math, but (a) their implementations are closed-source — customers cannot audit the rollback decision; (b) none of them sit in the PR layer, so they have no commit SHA / merge timestamp to anchor the pre/post comparison; (c) Kubecost is a dashboard, not a controller — they have no rollback story at all. The math itself (Box-Cox transform on lognormal cost + STL decomposition for daily/weekly seasonality + PELT change-point detection for locality) is mature signal processing, but applying it to K8s deployment regression with <2% false-positive rate is a 6-12 month engineering effort. Once we ship it, the gap stays open. See [business_strategy.md §8.4 moat #2](../strategy/business_strategy.md) for the positioning angle; the rest of §8 is the engineering spec.
+
+**Naive rollback triggers fire constantly on normal variance.** Getting this right is hard signal-processing work, not a feature. Phased rollout protects customers from bad rollback decisions.
 
 ### 8.2 Phase Progression
 
@@ -916,6 +1149,88 @@ Action:
 ### 8.6 False-Positive Reporting Loop
 
 Customers can mark any rollback alert as "false positive" with one click. This feeds back into our threshold tuning and is reported in our weekly metrics as `auto_rollback_fp_rate`. Target: <5%. Above 10%, we freeze rollback for that customer and investigate.
+
+### 8.7 Statistical math — code shape and interface seam
+
+§8.3 names the math (Box-Cox, STL decomposition, change-point); this section pins how that math lives in code so the watchdog state machine and the math stay independently testable.
+
+**Package layout** (Phase 7, per [optiqor/todo.md](../../todo.md)):
+
+```
+internal/methodology/rollback/
+├── doc.go
+├── stats.go           — Stats interface + struct definitions
+├── boxcox.go          — Box-Cox transform: pure functions, no I/O
+├── boxcox_test.go     — Round-trip + lambda-estimation + golden tests
+├── stl.go             — Seasonal-Trend-Loess decomposition (24h + 168h)
+├── stl_test.go        — Synthetic-series tests with known seasonality
+├── changepoint.go     — CUSUM / Pruned Exact Linear Time change-point
+├── changepoint_test.go
+└── score.go           — Combines transform + decomposition + change-point
+                         into a single PreMergePost comparison; returns a
+                         signed deviation score the watchdog state machine
+                         consumes
+```
+
+Rules from ADR-0006 apply: pure functions, no I/O, no clock reads, no random map iteration. The math takes time-series in, returns deviation scores out. Caller (the watchdog workflow) handles fetching the Prometheus rollup, persisting results, and posting notifications.
+
+**Interface seam:**
+
+```go
+// Stats is the rollback math the watchdog state machine consumes.
+// Phase-6 ships SimpleStats (z-score on raw values); Phase-7 swaps in
+// FullStats (Box-Cox + STL + change-point) without touching the watchdog.
+type Stats interface {
+    // Score compares pre-merge baseline against post-merge observed and
+    // returns a deviation in [0, +∞) where 0 means "indistinguishable"
+    // and 1+ means "statistically significant breach at the configured
+    // threshold." The state machine treats >= 1.0 as a breach signal.
+    Score(baseline, observed []Sample, kind SignalKind) (DeviationScore, error)
+}
+
+type DeviationScore struct {
+    Value             float64  // 0..+∞; ≥1.0 = breach
+    Confidence        float64  // 0..1; how much we trust the signal given sample count, seasonality match, change-point clarity
+    TransformApplied  string   // "boxcox" | "none"
+    SeasonalityModel  string   // "stl_daily" | "stl_weekly" | "none"
+    ChangePointAt     *time.Time
+    MinSamples        int      // input length actually used
+}
+```
+
+**Why the math lives in `internal/methodology/rollback/` not `internal/rollback/`:** the watchdog state machine in `internal/rollback/watchdog.go` is the *decision* (continue / rollback / close window); the math is the *signal*. Splitting them honors the LLM-no-decision invariant's structural cousin: math here, decisions there. The same `Stats` interface gets stubbed (`SandboxStats` returns a fixed deviation for any input) so the state machine can be tested without the math, and the math can be tested without the state machine.
+
+**Math choices and why:**
+
+1. **Box-Cox transform** — Pre-merge cost and latency time-series are lognormal (positive, right-skewed, heavy upper tail). Applying a Box-Cox transform produces an approximately normal distribution where z-scores have meaning. Lambda is estimated per workload from the pre-merge baseline window; lambda=0 collapses to log-transform. Naive z-score on raw values produces ~10% false-positive rate at the 2.5σ threshold; Box-Cox-transformed z-score produces <2% on our pilot data. Reference: NIST e-Handbook 1.3.3.6 "Box-Cox normality plot."
+
+2. **STL decomposition (Seasonal-Trend-Loess)** — Real workloads have daily and weekly seasonality (the API server is busier at 2pm than 2am; Mondays differ from Sundays). Comparing raw post-merge to raw pre-merge confuses seasonal variation with deployment-caused regression. STL separates the signal into trend + seasonal + residual; we compare the residual component pre/post, which is what regression actually moves. Window choices: 24h period for daily, 168h for weekly; both run by default and the stronger of the two is picked per signal.
+
+3. **Change-point detection (PELT)** — Even with Box-Cox + STL, normal variance produces occasional 2.5σ spikes that aren't deployment-caused. A change-point algorithm asks "did the underlying distribution shift, and if so when?" If the change-point is within 2 hours of the deployment time, that's a strong signal it's the deployment's fault. If the change-point is hours/days earlier, the deployment isn't the cause. PELT (Pruned Exact Linear Time) is the standard for this; gonum / robfig/cron have Go ports.
+
+**Math libraries:**
+
+- `gonum.org/v1/gonum/stat` — mean, variance, percentiles, Box-Cox helpers
+- `gonum.org/v1/gonum/fourier` — FFT for autocorrelation in the classifier (§classify) and STL
+- No Python dependency. The Go ecosystem covers the math; ADR-0006 forbids a second language for methodology.
+
+**Phase progression** (matches §8.2):
+
+- **Phase 5 (Months 9-12)** — `SimpleStats` ships: bounds-vs-snapshot comparison, no transform, no decomposition. Watchdog state machine is wired and observable. Auto-rollback in observe-only mode.
+- **Phase 6 (Months 12-15)** — Box-Cox transform lands. Phase-2 rollback PR generation enabled.
+- **Phase 7 (Months 15-18)** — STL + change-point detection. Phase-3 opt-in auto-merge for non-critical paths.
+
+Each phase's math is a drop-in replacement behind the `Stats` interface; the watchdog state machine, the Temporal workflow, and the PR generator do not change.
+
+**False-positive budget per phase:**
+
+| Phase | Math | Target FP rate | Action if exceeded |
+|---|---|---|---|
+| 5 (SimpleStats) | z-score on raw | ≤ 15% | Observe-only; FPs cost nothing |
+| 6 (Box-Cox) | z-score on transformed | ≤ 5% | Rollback PRs gated on FP rate per tenant |
+| 7 (STL + change-point) | residual + locality | ≤ 2% | Opt-in auto-merge gated on FP rate per workload class |
+
+The `auto_rollback_fp_rate` metric from §8.6 is what's measured against these targets.
 
 ---
 

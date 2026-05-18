@@ -6,13 +6,9 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
-
-// MaxIngestBytes caps the size of a single /v1/ingest payload. The
-// agent ships compressed batches; 16 MiB is generous without inviting
-// abuse.
-const MaxIngestBytes = 16 << 20
 
 // IngestRequest is the wire shape the in-cluster agent ships. One
 // request carries either Prometheus matrix bytes, CUR-row bytes, or
@@ -48,13 +44,13 @@ type Handler struct {
 // sinks. Returns counts so the caller can verify lossless ingestion.
 //
 //	400 — malformed JSON / CSV
-//	413 — body exceeds MaxIngestBytes
+//	413 — body exceeds config.IngestMaxBytes
 func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxIngestBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.IngestMaxBytes))
 	if err != nil {
 		http.Error(w, "read: "+err.Error(), http.StatusRequestEntityTooLarge)
 		return

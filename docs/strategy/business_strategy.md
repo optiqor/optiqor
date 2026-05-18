@@ -331,6 +331,8 @@ Previous drafts treated KubeCon + CNCF as the primary GTM channel. That's a bet 
 
 **Channel 6: KubeCon + CNCF community (Month 6 onward)** — still important, still real, but one of six. $150K/year conference budget. Target: 3 talks accepted per year, 500 booth conversations per KubeCon.
 
+**Companion artifact: `works-with/` pages (Month 4 onward).** Per-tool integration/comparison pages that meet engineers where they already are. First and highest-priority: `optiqor.dev/works-with/kubecost` (loop-closer framing — Kubecost customers are pre-qualified buyers, see §8.3). Second tranche by Month 9: `works-with/{datadog,argocd,prometheus,wiz}`. Each page leads with a concrete verified Receipt against a customer running that tool — no Receipt, no page. Published only after Phase 6 exit.
+
 **Distribution moats in parallel:**
 - **Optiqor Community (Discord/Slack)** — free-tier users get access, peer-to-peer help. Once 1,000+ active, switching costs extend beyond features.
 - **"State of Kubernetes Efficiency" annual report** — anonymized customer data, press-cited, becomes reference document. Competitors can't replicate without customer base.
@@ -469,8 +471,7 @@ The Kubernetes cost space has clear incumbents on the cluster-side. The PR-layer
 | Category | Leader | What they own | What they don't do |
 |----------|--------|---------------|---------------------|
 | **K8s cost-per-PR attempt (abandoned)** | **Kubecost GitHub Action** (`cost-prediction-action`) | Shipped v0.1.1 in April 2023, 31 stars, 33 lifetime commits, last updated 2023 | Dormant project. Closed-source container. Does not cover Helm values.yaml, no Apply Fix, no cluster-grounded confidence. Evidence the easy version of this category doesn't earn adoption |
-| **K8s cost visibility** | Kubecost (~$70K–$100K/yr ACV) | Granular allocation, multi-cluster dashboards, Prometheus-native | No PR remediation, no savings verification |
-| **K8s open-source viz** | OpenCost (CNCF) | Free, community-driven, Prometheus metrics | No remediation, no PR integration, no UI beyond basic |
+| **K8s cost visibility** | Kubecost (~$70K–$100K/yr ACV) | Granular allocation, multi-cluster dashboards, Prometheus-native | **Loop-opener; Optiqor is the loop-closer.** Kubecost surfaces waste in the dashboard; Optiqor catches it at PR time before the next regression ships. A team running both is better served than either alone — explicit in `optiqor.dev/works-with/kubecost` (Month 4 GTM). |
 | **K8s autopilot** | Cast AI (~$500M ARR) | Cluster takeover, spot migration, bin-packing | Black-box (opaque to platform teams), K8s-only, scary for risk-averse orgs |
 | **K8s autonomous rightsizing** | ScaleOps, Sedai | Real-time ML-based optimization | Cluster-side not PR-native, limited auditability |
 | **K8s security** | Wiz, Snyk, Kubescape | Broad detection, CVE coverage, compliance | Detection only — fixes sit in Jira |
@@ -490,8 +491,25 @@ Kubecost attempted the basic cost-comment version of this category in 2023 and l
 
 ### 8.3 How We Win Against Each
 
-**vs Kubecost (most critical)**
-*"Kubecost's Action tells you the price. Optiqor writes the fix, verifies the savings, and catches regressions."* Kubecost is the best-in-class dashboard plus a cost-prediction Action. We are the remediation + verification layer. A platform team running Kubecost + Optiqor is better served than one running either alone. **Critical action item: approach Kubecost (IBM) leadership in Month 3 to explore a formal partnership where their Action provides cost data and ours provides Apply Fix. If they're willing to partner, it's our biggest unlock. If they plan to compete, we learn that now and move faster.**
+**vs Kubecost (most critical) — loop-closer, not competitor**
+
+Kubecost customers are our pre-qualified buyer list. Anyone who has installed Kubecost has already (a) decided K8s cost matters, (b) gotten exec buy-in, (c) done the work of wiring Prometheus and installing an agent. That's not "people who might care someday" — that's people who care today.
+
+The observable pain pattern in Kubecost customers (visible in their G2 reviews and the `r/kubernetes` / `r/devops` subreddits):
+1. They have the dashboard.
+2. They see waste in the dashboard every week.
+3. They Slack the relevant team: *"your namespace is over-requesting by 40%."*
+4. The team says *"we'll get to it next sprint."*
+5. Three sprints later, nothing has changed.
+6. Repeat for two years.
+
+That's the gap Optiqor fills. Not *"replace Kubecost"* — *"close the loop Kubecost opens."* Kubecost found the problem; Optiqor catches it before the next one ships. Pitch:
+
+> *"Kubecost showed your team the $19K/mo waste. Optiqor wrote the PR that cut $4,300 of it, you reviewed and merged it, and here's the signed Receipt against your AWS bill 30 days later."*
+
+**Concrete Month 4 GTM commitment: ship `optiqor.dev/works-with/kubecost`.** Two sections: (1) *How they're different* — Kubecost is the dashboard, Optiqor is the PR-time loop-closer. (2) *Use both together* — keep your Kubecost dashboard, install Optiqor's GitHub App for PR-time review. Engineers respect this framing far more than *"switch from Kubecost to us."* It is also accurate. **Hold publication until we have ≥1 verified Cloud Receipt (Phase 6 exit)** so the page leads with proof, not claims.
+
+**Critical action item: approach Kubecost (IBM) leadership in Month 3 to explore a formal partnership where their Action provides cost data and ours provides Apply Fix. If they're willing to partner, it's our biggest unlock. If they plan to compete, we learn that now and move faster.**
 
 **vs Cast AI**
 *"We're what platform teams choose when they've been burned by Cast AI's black box."* Cast AI takes over clusters autonomously. Platform engineers want auditability. Every Optiqor change is a reviewable PR with a Confidence Score. We don't compete on automation depth; we compete on transparency.
@@ -511,10 +529,32 @@ Policy-as-code is admission-time enforcement. We're PR-time analysis + remediati
 ### 8.4 Defensive Moats
 
 1. **Prometheus-grounded Confidence Score.** Our scores use real cluster usage data. Competitors scoring PRs without cluster access cannot match this. Data moat compounds monthly.
-2. **Auto-Rollback Guarantee.** Requires continuous cluster monitoring plus signal analysis plus incident integration. Not a feature — an architecture. Hard to retrofit.
+
+2. **Auto-Rollback Guard — the structural moat nobody else can build.** This is the single piece of Optiqor's architecture that no competitor *can* replicate without first building everything else we built.
+
+   When Optiqor proposes a fix and it merges, the customer's existing autoscaling — HPA, VPA, Karpenter — will respond to whatever happens next. If the workload starts OOM-killing because Optiqor's memory recommendation was too aggressive, **none of those autoscalers knows it was Optiqor's fault.** They see "the pod is failing" and react accordingly:
+   - HPA scales up replicas (masking the bug)
+   - VPA in Auto mode increases requests (papering over it)
+   - Karpenter provisions new nodes (paying for the masking)
+
+   The K8s primitives are reactive to *symptoms*; they have no concept of *cause*. They have no pre-merge baseline to compare against. They cannot say "this regression started 4 hours ago, correlated with a specific change, and the safe move is to revert."
+
+   Optiqor's Auto-Rollback Guard lives exactly there. The statistical pre/post-merge anomaly detection (Box-Cox transform on lognormal cost series + STL decomposition for daily/weekly seasonality + PELT change-point detection for locality) is the only component in the K8s ecosystem that closes that loop. The rollback PR Optiqor opens is ours alone — no K8s component will ever do this for the customer, because no K8s component has the change-attribution context.
+
+   **Why this is a structural moat, not a feature:**
+   - **VPA / HPA / Karpenter cannot ship it.** They're stateless reactors; rollback requires longitudinal change attribution that doesn't fit their model.
+   - **Cast AI / ScaleOps / Sedai have closed-source implementations** of similar ideas at best, none with the PR-attribution + signed-receipt audit chain.
+   - **Kubecost has no rollback story** — they're a dashboard, not a controller.
+   - **The math is the moat-component most likely to slip** if a competitor races to ship. Box-Cox + STL + change-point is mature signal processing, but applying it to K8s deployment regression with <2% FP rate is a 6-12 month engineering effort. Once we ship it, the "we have it, you don't" gap stays open for the duration of their build.
+
+   This is the moat that justifies the entire "coexist, don't replace" architecture. Customers keep their VPA / HPA / Karpenter; we add the one thing those tools structurally cannot give them. See [tech_impl §8.7](../strategy/technical_implementation.md) for the math spec; ADR-0012 for the architectural posture.
+
 3. **Receipt moat.** Verified savings against real cloud billing data. Competitors who don't have cloud access cannot issue receipts. Trust compounds with every signed receipt.
+
 4. **Platform-engineer brand.** Once a platform team loves Optiqor, switching is emotionally expensive. See: Vercel, Linear, Tailscale, HashiCorp's early days.
+
 5. **ArgoCD integration depth.** Every customer's ArgoCD workflow becomes instrumented by Optiqor. Deep integration is sticky.
+
 6. **LLM fine-tunes on Helm values diffs.** By Year 2 we train small models on merged PR outcomes. For common patterns, our proprietary models beat general-purpose Sonnet/GPT on Helm generation at lower cost.
 
 ### 8.5 Why We Win — The Unfair Advantage
@@ -1004,7 +1044,7 @@ The partnership program makes Optiqor indispensable by routing other tools' valu
 | **Wiz / Snyk / Aqua** | K8s security findings | Apply Fix PRs that close the findings |
 | **Datadog / New Relic / Grafana** | SLO breach signals | Auto-Rollback triggers correlated to their alerts |
 | **PagerDuty / Opsgenie** | Incident context | Rollback-to-incident correlation data |
-| **Kubecost / OpenCost** | Cost-allocation data | PR-time cost analysis powered by their attribution |
+| **Kubecost** | Dashboard surface; optional cost-allocation data feed | PR-time cost analysis and Apply Fix as the remediation layer their dashboard alerts call out to |
 | **AWS / GCP / Azure Marketplaces** | Billing integration, marketplace listing | Native deploy of Optiqor via cloud marketplace |
 
 Each partnership either (a) makes Optiqor the remediation surface for their findings — which makes us the stickier product — or (b) removes their incentive to compete because they're getting distribution through us.

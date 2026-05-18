@@ -10,6 +10,16 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 > - **This repo (backend)** — proprietary monorepo: API server, Temporal worker, in-cluster K8s agent, sandbox web frontend, Terraform infra, Receipt issuer, LLM Apply Fix path
 > - **[optiqor/optiqor-cli](https://github.com/optiqor/optiqor-cli)** — Apache-2.0 OSS CLI: deterministic 30-detector rule engine, `analyze`/`demo`/`diff`/`score`/`audit`/`compare`, `--share` HTTPS upload, `@optiqor/cli` npm package
 
+## Open strategic decisions (write before unblocking the dependent phase)
+
+These are decisions, not engineering work. They block phases as listed; without an explicit call, the engineering team will make the call implicitly and the wrong way.
+
+- [ ] **Day-90 scope: single-cloud-ready vs multi-cloud-ready** (blocks Phase 5 hiring plan + seed-round size). README says EKS-only Day 90 with AKS/GitLab/Hetzner as Phases 7-9. Year-1 surface expansion (2026-04-26 amendments) means the codebase has stub adapters for those clouds today. Decision: are we shipping (a) EKS-only Day 90 with abstractions ready but dormant — current 3-engineer team works, OR (b) EKS + AKS parity by Day 90 — requires 5 engineers by Month 3 + larger seed. **Decide explicitly + tell the board.** Decision drives Month-3 hiring + seed-round target.
+- [ ] **ADR-0016 — Recommendation engine scope-and-sequencing for Year 1** (blocks Phase 6 plan finalization). Phase 6's 2-week box treats the recommendation engine as one line item; the actual math is 4-6 engineer-months when written conservatively. Three options laid out in the Phase 6 §scoping reality block below: (1) cut to `hybrid_v0` and ship in 2 wk; (2) extend Phase 6 to 8-12 wk; (3) compress at lower quality. Recommendation: option (1). Land the ADR before Phase 6 starts.
+- [ ] **ADR-0017 — Receipt signing algorithm (Ed25519-via-vault vs ECDSA-P-256-native)** (blocks Phase 4 KMS-Sign early kickoff). AWS KMS does not support Ed25519 directly. Two paths: (a) wrap Ed25519 keys with a KMS-protected envelope (still get audit log + key isolation, lose KMS-native signing simplicity); (b) switch Receipt algorithm to ECDSA P-256, which KMS signs natively (simpler, but every customer-side verification tool changes). Verification tools haven't shipped yet, so the cost of switching is low now and high later. **Decide before the Phase 4 KMS-Sign task starts** (early kickoff is 2 days of work; wrong decision wastes them).
+- [ ] **`optiqor.dev/works-with/kubecost` Month-4 GTM page** (commitment in `business_strategy.md §6.3`). Two sections: (1) How they're different — Kubecost is the dashboard, Optiqor is the PR-time loop-closer; (2) Use both together — keep Kubecost dashboard, install Optiqor's GitHub App. **Hold publication until ≥1 verified Cloud Receipt exists** (Phase 6 exit) so the page leads with proof, not claims. Owner: founders / DevRel; not engineering work. Decision needed: who drafts the page and approves it.
+- [ ] **DR drill cadence** (per ADR-0008 + tech_impl §3.5). Monthly automated restore drills via Temporal cron; oncall paged on failure. Currently in Phase 6 todo list as a single item. **Decide:** does drill #1 happen at Phase 6 exit (passive) or Phase 6 entry (forcing function to find issues early)? Lean entry. Decision lands when the cron is wired.
+
 ## Phase 1 — Weeks 1–2: Foundation
 
 > **Status (2026-05-11):** Phase 1 **CLOSED — production-ready code + infra-as-code surface complete, zero open code gaps.** The remaining `[ ]` items below all require an AWS account and live infrastructure (`terraform apply`, EKS bootstrap, ArgoCD install); they ship in the first sprint after pre-seed funding binds the AWS account. The Terraform code itself is committed and `terraform fmt -check`-clean (wired into `make lint` + CI).
@@ -205,6 +215,17 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [x] ASCII + JSON output with mandatory ±40% accuracy disclosure
 - [x] `--share` opt-in upload to `https://sandbox.optiqor.dev/api/v1/share` over HTTPS with 5 s timeout and graceful offline fallback (overridable via `OPTIQOR_SHARE_URL`)
 
+### Operational scaffolding (folded forward — preempts Phase 5 onboarding friction)
+
+These items move "what blocks the first customer install" out of Phase 5 and into Phase 3, where they can land in parallel with the LLM Apply Fix work. Each is small in isolation; together they remove the cliff between "code works" and "design partner installs."
+
+- [ ] **Helm chart scaffold for the agent** — create `deploy/helm/optiqor-agent/Chart.yaml` + `values.yaml` + `templates/` with placeholder Deployment/SA/ClusterRole (read-only verbs only per ADR-0008) + NetworkPolicy (egress allowlist to `ingest.optiqor.dev` only, no inbound rules) + footprint defaults (<100m CPU / <128Mi memory requests; <500m / <512Mi limits) + mTLS secret references (Phase-5 fills the actual cert material). Chart must pass `helm lint` and `helm template … | kubeconform` in CI as a Phase 3 acceptance gate. Lands **before** Phase 5 watch-loop code so the chart isn't on the critical path of first install (3 days)
+- [ ] **Validation gate skeleton wired** — `internal/applyfix/gate/pipeline.go` declares the four `Validator` interface seams (`template`, `conform`, `dryrun`, `post`) and the chained `Pipeline.Run(ctx, *tenancy.Context, candidate) (Result, error)` shape. **Stages return `NotImplemented` for now** — they fill in per Phase 4 (`render`, `conform`, `post`) and Phase 5 (`dryrun` agent round-trip). Wiring this in Phase 3 means Apply Fix dispatch literally cannot bypass the gate even when stages are stubs; reviewers can't accidentally remove it later (2 days)
+- [ ] **`PHASE.md` per domain package** — every `internal/<pkg>/` and `cmd/<binary>/` gets a `PHASE.md` declaring: status (shipped Phase N / stub for Phase M / not yet started), what's blocking the next milestone, current test coverage. Auto-generated from `go test -cover` + a roadmap-extraction script, refreshed in CI. Closes the "90% aggregate coverage hides scaffold packages" smell from the 2026-05-18 architecture audit (3 hrs to author + script + first-pass population)
+- [ ] **`make verify-docs-sync`** — extends `scripts/check-roadmap-sync.sh` (per ADR-0015) to also assert: (a) every strategy doc's most-recent amendment date in root `/docs/` matches the synced copy in `optiqor/docs/strategy/`; (b) every ADR's "Implementation status" footer references real files or marks "not yet shipped." Catches doc/code drift between sessions. Wired into CI `make lint` (2 hrs)
+- [ ] **Integration tests against stubbed abstractions** — `tests/integration/stubs_test.go` invokes every `internal/billing/{azure,hetzner,capacity}` and `internal/vcs/{gitlab,bitbucket}` implementation through its interface, asserts the stub returns the documented `ErrNotImplemented` (not panics, not silent zeros). Prevents stub bit-rot between now and Phase 7-8 activation; closes the "pluggable abstractions that may never be plugged" smell (1 day)
+- [ ] **Doc-comment at the CLI/backend pricer divergence point** — one comment in `internal/cost/static_pricer.go` and one in `optiqor-cli/internal/analyze/pricer.go` (or wherever the CLI's static price table lives) declaring: *"This stays sandbox-grade (±40%). The backend `LivePricer` is Phase 5; until then both share the static 7-region table. After Phase 5, the CLI remains static for OSS reproducibility while the backend switches to live AWS prices. Don't try to keep these in sync."* Two comments, 15 minutes total.
+
 ---
 
 ## Phase 4 — Weeks 7–8: PR Writer + Apply Fix
@@ -222,7 +243,15 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] `internal/agent/k8s/events` — K8s Events stream ingestion (1 wk)
 - [ ] `internal/agent/k8s/hpa` — HPA state reader, normalize `minReplicas`/`maxReplicas`/current target (1 wk)
 - [ ] `internal/agent/k8s/policy` — PDB + ResourceQuota + LimitRange constraint readers (1 wk)
+- [ ] `internal/agent/k8s/vpa` — VPA recommendations + mode reader (Off / Initial / Auto); feeds the "VPA as one signal" coexistence integration per ADR-0012 (1 wk)
+- [ ] `internal/agent/k8s/karpenter` — Karpenter NodePool config reader + node-lifetime tracking for consolidation-aware cost attribution (1 wk)
 - [ ] `internal/cost/oomkilled` — OOMKilled history scrape from Prometheus, 7-day window (3 days)
+
+#### Agent-mode waste detectors (require cluster state — cannot live in CLI's `pkg/rules`)
+- [ ] `internal/methodology/detectors/orphaned_pvc` — PVCs that exist in-cluster but have no pod referencing them. Reads PVC list + workload volume mounts via `internal/agent/k8s`; emits a finding per orphaned PVC with the projected monthly EBS cost (from CUR attribution) as savings. **Agent-mode only — static Helm analysis cannot detect this; the CLI parser intentionally does not extract volume info.** (1 wk)
+- [ ] `internal/methodology/detectors/stale_namespace` — namespaces with no workload activity (no CPU, no network, no pod restarts) for >30 days. Reads Prometheus rollups + K8s namespace list via `internal/agent/k8s`; emits one finding per stale namespace with projected savings = sum of attributed cost for workloads in that namespace. **Agent-mode only — requires temporal cluster data.** (1 wk)
+- [x] `pkg/rules/idle_workload` (CLI sandbox-mode approximation) — flags `replicas=0 && !HasHPA` as the static-analyzable subset of "idle workload." Shipped in optiqor-cli on 2026-05-18. Agent-mode version (Prometheus-grounded "no traffic, no CPU for 7d") lives in `internal/methodology/detectors/idle_workload_observed` below.
+- [ ] `internal/methodology/detectors/idle_workload_observed` — agent-mode counterpart to the CLI's `idle-workload` heuristic: a workload with `replicas > 0` that has shown no traffic and no CPU over the last 7 days. Replaces sandbox-grade detection with measured P95-from-zero data. (3 days)
 
 ### Algorithmic improvement: Validation Before Recommendation (1 wk)
 - [ ] New package `internal/validator/` — interface `Validate(ctx, *tenancy.Context, candidate) (Result, error)`
@@ -236,6 +265,13 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] `internal/cost/detectors/sec/cis` — CIS Kubernetes Benchmark control IDs attached to each security finding (2 days)
 - [ ] `internal/prwriter/labels` — PR labels-as-policy parser (`optiqor:skip`, `optiqor:budget=$X`, `optiqor:wait-for-prom=Nd`) (2 days)
 - [ ] `internal/ingestion/coalesce` — collapse two PRs against the same chart within 24h into one analysis (2 days)
+
+### Early kickoff — KMS Sign integration (folded forward from Phase 6)
+
+The Receipt-signing path is the single most credibility-load-bearing feature in the product. Don't wait for Phase 6 to start integrating with AWS KMS — by then the schedule is too tight to handle KMS-specific gotchas (IAM scope, region selection, audit-log shape, error semantics). Two days of work now buys a Phase 6 that ships on time.
+
+- [ ] **AWS KMS `kms:Sign` swap in `internal/receipts/`** (2 days) — replace process-local `ed25519.PrivateKey` with a `KMSSigner` implementation of the existing `Issuer` key-source interface. Single-region key for now (`us-east-1`); multi-region + per-tenant keys land Phase 6/Year-2. Integration test against real KMS (dev key); unit test against fake. No transparency log yet — that's still Phase 6. **This is just the signing primitive, not the full Receipt Verification Flow**, but it un-blocks every downstream KMS task.
+- [ ] **Terraform module for the dev KMS key** (`infra/modules/kms-signer/`) — single `aws_kms_key` with `customer_master_key_spec = "ECC_NIST_P256"`... wait, Ed25519 requires `customer_master_key_spec = "ECC_NIST_P256"` is wrong. AWS KMS does not support Ed25519 directly. **Open question for this task:** use Ed25519 with HSM-backed but KMS-wrapped key material (vault pattern) vs. switch the Receipt algorithm to ECDSA P-256 (KMS native). Decision in ADR-0017 before this Terraform module ships. _ADR-0017 is a new tracked decision (see top-level decision tracker below)._
 
 ### Production-readiness — Apply Fix safety + LLM defense + environment classification (Phase 4)
 
@@ -261,10 +297,16 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 ## Phase 5 — Weeks 9–10: Design Partner #1 + Slack + Dashboards
 
-- [ ] `cmd/agent` real watch loop: client-go informers + Prometheus scrape, mTLS to SaaS
-- [ ] Helm chart in `deploy/helm/optiqor-agent/` for customer install
+- [ ] `cmd/agent` real watch loop: client-go informers + Prometheus scrape, mTLS to SaaS. **Critical path** — every "Optiqor reads X from the cluster" claim downstream depends on this binary going live. Engineer assigned by Phase 3 close, not Phase 5 start
+- [ ] **Fill in the Phase-3 agent Helm chart** — replace `values.yaml` placeholders with real defaults; ship mTLS cert provisioning runbook; pre-flight checker invocation; add `helm install` / `helm upgrade` end-to-end test in `tests/e2e/agent/`. Chart-via-customer-GitOps update model per ADR-0008 — Optiqor publishes new chart versions, customer's ArgoCD / Flux reconciles on their schedule
+- [ ] **Customer dashboard `/app/*` ship-list** (parallel-track Phase 5; frontend engineer starts at Phase 3 close, not Phase 5 start, because Auth.js wiring + tenant resolution + Analyses list page are 2 weeks of work that can't compress):
+  - Auth.js + GitHub OAuth (extends Phase 2 shell with real session issuance via `/v1/session/whoami`)
+  - Analyses list page (sortable / filterable React table; ~2 days)
+  - Receipts browser with WebCrypto verifier (~3 days; depends on Phase 6 KMS Receipts but stub-renders against fixtures earlier)
+  - Apply Fix history per workload (~2 days)
+  - Cost spike timeline (~2 days)
+  - Billing / usage panel (depends on Stripe; lands with `0008_stripe_mirror.sql`)
 - [ ] Slack: digest workflow, `/optiqor status` slash command
-- [ ] Customer dashboard pages in `web/` — builds on the Phase 2 dashboard shell. Year-1 pages: cluster fleet view, per-workload Apply Fix timeline, Receipt browser with WebCrypto verifier, billing/usage panel (Stripe integration). Auth via Auth.js GitHub OAuth from Phase 2 → tenant header injection downstream
 - [ ] On-call docs + runbooks in `docs/runbooks/`
 
 ### Schema additions for auth + agent watch (Phase 5)
@@ -274,13 +316,23 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 
 ### Tier-1 data sources (agent-resident — round out the data picture)
 - [ ] `internal/agent/k8s/topology` — Service / Endpoints graph (workload→service→endpoint), exposed to backend for "no live traffic" detection (2 wk)
-- [ ] `internal/agent/nodeprov/` — three-tier `NodeProvisioner` adapter (replaces single `internal/agent/karpenter`); detect at agent install via pre-flight, store class on `tenants.node_provisioner_class`:
+- [ ] `internal/agent/nodeprov/` — `NodeProvisioner` adapter (replaces single `internal/agent/karpenter`); detect at agent install via pre-flight, store class on `tenants.node_provisioner_class`:
   - `nodeprov/karpenter` — T1: NodePool + NodeClaim resource reader; high-confidence node math (1 wk)
-  - `nodeprov/autoscaler` — T2: detect `cluster-autoscaler` Deployment; read ASG configs via AWS API; infer instance shapes from ASG min/max + node labels; medium-confidence (1 wk)
-  - `nodeprov/static` — T3: no autoscaler detected; render manual-step recommendations; cap confidence at Medium (3 days)
+  - `nodeprov/autoscaler` — T2: detect node-scaling shape and read accordingly (1 wk, expanded from the original spec to cover the three EKS shapes most customers actually run):
+    - **(2a)** EKS Managed Node Groups via `eks:DescribeNodegroup` — AWS-managed ASG-with-CAS bundle. **This is the AWS default for new EKS clusters; most Year-1 customers will be on this.** Read instance type, capacity type (`on-demand`/`spot`), AMI version, taints, labels via the EKS API directly, not raw ASG.
+    - **(2b)** Self-managed ASG + Cluster Autoscaler — detect `cluster-autoscaler` Deployment in `kube-system`; read ASG configs via `autoscaling:DescribeAutoScalingGroups` filtered by the `k8s.io/cluster-autoscaler/<cluster>` tag.
+    - **(2c)** Standalone ASG (no CAS, target-tracking scaling policies) — detect ASGs tagged `kubernetes.io/cluster/<name>` without a CAS Deployment present. ASG-driven scaling is still scaling; classify as T2 (medium confidence), not T3.
+  - `nodeprov/static` — T3: no autoscaler detected anywhere; render manual-step recommendations; cap confidence at Medium (3 days)
   - `nodeprov/managed/aks` — Phase 7 (AKS node pools)
   - `nodeprov/managed/hetzner` — Phase 8 (Hetzner Cloud node pools)
+  - `nodeprov/managed/gke` — **Year 2** (GKE Node Auto-Provisioning + Standard node pools). Schema enum `managed-gke` already exists in `migrations/0001_baseline.sql:93` as a placeholder; until the adapter ships, the pre-flight checker (below) **fails closed** rather than routing GKE customers to `static`. ~2 wk based on the AKS adapter's expected scope; needs separate auth path (GCP service account + workload identity), separate API client (`google.golang.org/api/container/v1`), separate billing connector. Lands when GCP customers become a deliberate go-to-market — not before
+- [ ] `internal/onboarding/preflight` — **fail-closed routing for unsupported provisioners** (2 days). When pre-flight detects GKE NAP or any other provisioner without a Year-1 adapter (e.g. OpenShift Machine API, DigitalOcean K8s), the installer rejects the agent install with an explicit error: *"Optiqor doesn't support <provisioner> yet — track at github.com/optiqor/optiqor/issues/<N>. Year-1 supported: Karpenter, EKS MNG, EKS+CAS+ASG, standalone ASG, on-prem/static."* No silent fallback to `static` (that mis-classifies the customer's bill basis and corrupts Receipt accuracy). The `managed-gke` schema enum value stays as a placeholder; the route is the gate.
 - [ ] `internal/cost/strategy` — node-provisioner-class is an input; sizing strategies vary by tier (Karpenter can recommend rapid scale; static node groups cannot)
+
+### Decision/orchestration layer — gaps surfaced by the ADR audit (Phase 5)
+- [ ] `internal/methodology/conflict/` — VPA + HPA conflict resolver (per ADR-0012). Reads VPA's mode (Off / Initial / Auto) from `internal/agent/k8s/vpa` and the HPA spec from `internal/agent/k8s/hpa` for the same workload. Three outcomes: (a) no VPA or VPA Off → Optiqor produces canonical recommendation; (b) VPA Off but configured → Optiqor reads its recommendations as one signal, may override with HPA-aware sizing; (c) VPA Auto → Optiqor disables itself for that workload and surfaces a warning in the dashboard. Pure functions; tests pin every combination (1 wk)
+- [ ] `internal/methodology/hparec/` — HPA target-utilization recommender. When a workload has HPA configured with `targetCPUUtilizationPercentage` and statistical sizing detects memory pressure (not CPU pressure), recommend switching to a custom metric or adjusting the target. PR shape differs from workload PR (modifies HPA spec, not Deployment) — uses the Karpenter-NodePool PR routing planned for Phase 7 (1 wk)
+- [ ] **Spec: trust-spectrum × env-aware composition** (`docs/specs/trust-modes-composition.md`). ADR-0009 introduces Suggest / Propose / Auto-merge as the per-tenant trust spectrum; `internal/safety/environment/` defines env-aware aggressiveness (prod conservative, staging moderate, dev aggressive). These compose orthogonally — and how is currently undocumented. Spec must answer: does "Auto-merge mode" mean Auto for prod, or only for staging/dev? Does "Suggest mode" override env aggressiveness, or layer on top? Resolution lands in this spec before Phase 5 closes — without it, the first Auto-merge customer hits an undefined edge case (3 days)
 
 ### Differentiator additions (folded into Phase 5)
 - [ ] `internal/notify/slack/diff` — render Apply Fix diff inline in Slack thread for mobile-first review (3 days)
@@ -329,6 +381,40 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [x] `internal/receipts` — Ed25519 signing + canonical-JSON encoder + tampered-payload-/sig-/key tests + public verification endpoint `GET /v1/receipts/{id}` ([`internal/receipts/receipts.go`](internal/receipts/receipts.go) + [`internal/receipts/handler.go`](internal/receipts/handler.go)). Production swap to KMS-asymmetric signing replaces only the `Issuer` struct's key source
 - [x] Cost Spike detector workflow ([`internal/worker/workflows/cost_spike.go`](internal/worker/workflows/cost_spike.go)) + `POST /v1/cost-spikes` webhook ([`internal/billing/spike_handler.go`](internal/billing/spike_handler.go)); threshold filter + `SpikeNotifier` seam for the eventual Slack adapter
 - [x] `internal/rollback` — 7-day post-merge metric watchdog ([`internal/rollback/watchdog.go`](internal/rollback/watchdog.go)) + `rollback_watchdog` workflow ([`internal/worker/workflows/rollback_watchdog.go`](internal/worker/workflows/rollback_watchdog.go)); decision logic is pure functions over a snapshot stream so the Phase-7 Prometheus poller can replay history deterministically. Auto-rollback PR opener seam (`RollbackInitiator`) ready for the GitHub adapter
+
+### Engineering hygiene — cost-engine reference reading (private, internal-only)
+
+OpenCost (CNCF Incubating, Apache 2.0) is a useful **private reference** when building `internal/cost/attribution` and the CUR Athena query path. Their codebase has already survived the edge cases we're about to discover (Spot-interruption windowing, idle-capacity partitioning, SP/RI amortization, NAT/ALB line-item shapes). Engineers building the cost engine may read OpenCost source to understand the *concepts*, then write Optiqor's own implementation from a clean slate. This stays internal — it's an accelerant, not a positioning story.
+
+- [ ] **Read, don't copy.** Take the algorithmic concepts. Not the code, not the struct names, not the function signatures, not the control flow. Same way you'd read Postgres source to understand MVCC before building a database — concepts are free, structure is a liability.
+- [ ] **Translate before writing.** Budget one engineer-day between "read OpenCost" and "open editor for `internal/cost/attribution`". Sketch the algorithm in Optiqor idioms (`*tenancy.Context` first arg, `Pricer` interface seam, our struct names) on paper or in a private design doc. Implement from the sketch with the OpenCost tab closed.
+- [ ] **Reviewer's job: flag structural similarity.** During Phase 6 cost-engine PRs, reviewers scan for uncannily similar identifiers and control flow vs. upstream. Apache 2.0 is permissive but structural copying is an optics liability we don't need. If a PR feels too close, the fix is rename + restructure, not commentary.
+- [ ] **Never surfaces in customer-facing artifacts.** Receipts, methodology page (`optiqor.dev/methodology/hybrid-v1`), marketing copy, pitch docs, dashboard tiles, PR comments — all Optiqor branding end to end. The reference reading lives in engineers' heads and possibly a private design doc under `docs/internal/`; nothing about OpenCost lineage ships in any artifact a customer, prospect, or auditor sees. See [docs/strategy/technical_implementation.md §7](docs/strategy/technical_implementation.md) for the customer-facing methodology framing — note the absence of any OpenCost mention.
+- [ ] **No runtime dependency.** `go.mod` must not reference `github.com/opencost/opencost` (or any of its subpackages) at any point. Add `opencost` to the prohibited-imports linter list in the same PR that lands the first `internal/cost/attribution` file; CI grep guard catches accidental re-introduction.
+
+### Recommendation engine — math packages (Phase 6, per ADR-0006)
+
+These ship under `internal/methodology/` (not `pkg/`, per ADR-0006). Pure functions, no I/O, no clock reads — `Clock` interface injected. CI lint guard prevents `internal/methodology/` from importing other `internal/` packages, landing in the same PR as the first methodology file.
+
+- [ ] `internal/methodology/sizing/` — statistical sizing engine (3 wk core, 1 wk integration). For each (workload × time-series), produce a recommended request/limit pair. Algorithm:
+  - **CPU recommendation:** pull 30d hourly P95 from `metric_samples_hourly` continuous aggregate (per `migrations/0006_metric_samples.sql`); branch by class from `internal/methodology/classify/` (steady → P95 + 30% margin; daily-cyclical → max(seasonal-bucket-P95) + 25%; weekly-cyclical → same with 168h bucket; bursty → P99 + 50%); lower-bound at `current × 0.1` (never recommend >10× reduction in one PR); upper-bound at `current × 5` (never recommend >5× increase without human review).
+  - **Memory recommendation:** same shape but P99 not P95 (memory is unforgiving); apply **lognormal correction** — fit a lognormal distribution to the observed series and take the 99th percentile of the fit, not the raw P99 (handles fat tails properly).
+  - **OOMKilled awareness:** consult `internal/cost/oomkilled` 7-day history; if non-zero events, multiply safety margin by 1.5 and refuse to lower the request below the highest observed pre-kill memory value.
+- [ ] `internal/methodology/sizing/lognormal.go` — lognormal-fit helper (gonum/stat); shipped as part of the sizing package but in its own file because the math is the part most worth testing in isolation. Tests: synthetic series with known lambda, observed series from production fixtures, edge cases (zero variance, single sample, large outliers).
+- [ ] `internal/methodology/conflict/` — VPA + HPA reconciliation (cross-references Phase 5 entry above; lands here if the Phase 5 timeline slips, but the design lives in Phase 5).
+- [ ] **Confidence band v2** — replace heuristic Low/Med/High in `internal/confidence/classifier.go` with statistical confidence derived from sample count + signal stability + seasonality match + OOMKilled history. Same `Classifier` interface; v2 is a drop-in. v1 remains for sandbox mode (no observed data). Phase 5 sandbox stub ships as v1; Phase 6 statistical replaces it for cluster-installed customers.
+
+#### Phase 6 — scoping reality
+
+The recommendation engine above is **4-6 engineer-months of work** when written conservatively (good test coverage, OOMKilled handling, lognormal memory math, classifier integration, dashboards). Phase 6's 2-week box currently treats it as a single line item, which is wrong.
+
+Three options, pick before Phase 6 starts:
+
+1. **Cut scope — ship `hybrid_v0` in 2 weeks:** P95 + 30% safety margin for CPU, P99 + 50% for memory, no lognormal correction, no class-aware branching, no OOMKilled multiplier. Sandbox-grade math that is honest about its limits in the Receipt's methodology field. Hybrid_v1 (full math) ships in Year 1 H2 (Phases 7-8). **This is the recommended path** — it gets Receipts shipping at the Phase 6 exit and earns trust on the limits.
+2. **Extend Phase 6** — relabel as "Receipts foundation" (Weeks 11-22, ~3 months). Push Phase 7 onward back accordingly. Honest but expensive against the Year-1 GTM calendar.
+3. **Compress hybrid_v1** — same scope, half the time, ship at lower quality. **Don't do this** — the recommendation engine is what gets signed in Receipts; quality directly maps to customer trust.
+
+Decision goes in a follow-up ADR-0016 ("Recommendation engine scope-and-sequencing for Year 1"). Until that ADR lands, the Phase 6 plan above is **provisional**.
 
 ### Differentiator additions (folded into Phase 6)
 - [ ] Free-tier monthly verified Receipt enabled in `internal/receipts` (no code change beyond plan-gating; ~1 wk to wire billing+plan logic + viral-share marketing copy)
@@ -403,6 +489,17 @@ Backend-scoped subset of the org-level [ROADMAP.md](ROADMAP.md). This file is th
 - [ ] Classification result attached to every recommendation and stored in `recommendations.workload_class` for retrospective accuracy tracking
 - [ ] Migration: backfill existing tenants' workloads in a single Temporal workflow
 - [ ] Metric: `optiqor_recommendation_accuracy_by_class` — weekly accuracy lift dashboard
+
+### Coexistence integration + math depth (Phase 7, per ADR-0012 + ADR-0009)
+
+- [ ] **`internal/methodology/rollback/` — MOAT-CRITICAL.** Auto-rollback statistical math package (per `docs/strategy/technical_implementation.md §8.7` and `docs/strategy/business_strategy.md §8.4 moat #2`). This is the single component the rest of the K8s ecosystem **structurally cannot** ship — VPA / HPA / Karpenter react to symptoms, not causes, and have no pre/post change-attribution baseline. Customer keeps their existing autoscalers; we add the one thing those tools can't give them. **Do not deprioritize, do not compress at lower quality, do not ship without the full math pipeline.** If Phase 7 budget pressure forces a cut, cut something else and protect this. Replaces the Phase-5 `SimpleStats` bound-vs-snapshot comparison with the full statistical pipeline (4 wk):
+  - `boxcox.go` — Box-Cox transform with lambda estimation. Pure functions, golden tests on synthetic series + production fixtures
+  - `stl.go` — Seasonal-Trend-Loess decomposition at 24h and 168h periods. The stronger seasonality wins per signal
+  - `changepoint.go` — PELT (Pruned Exact Linear Time) change-point detection. Used for locality check ("did the underlying distribution shift within 2h of deployment?")
+  - `score.go` — combines transform + decomposition + change-point into a single `DeviationScore`. Watchdog state machine consumes this via the `Stats` interface
+  - `stats.go` — `Stats` interface and `DeviationScore` struct so Phase-5 `SimpleStats` and Phase-7 `FullStats` are drop-in swappable behind the watchdog
+- [ ] `internal/methodology/sequencing/` — fleet-level recommendation sequencer (2 wk). When multiple recommendations across a customer's workloads land in the same window, pick a safe order: (a) batch by repository so fewer PRs land per repo per day; (b) order by blast-radius score ascending so the cheapest-to-rollback ships first; (c) cool-off period per repository (max 3 Optiqor merges per repo per day, customer-configurable per ADR-0009 open question). Cross-workload coordinator workflow in `internal/worker/workflows/sequencer.go`
+- [ ] `internal/prwriter/karpenter` — Karpenter NodePool PR routing. When a recommendation targets `NodePool` CRDs (different repository, different shape, different review needs than workload YAML), open a separate PR with the CRD-targeted template (1 wk). Triggered by recommendations from the Phase-5 `internal/agent/k8s/karpenter` reader; uses the deterministic-PR-shape templates from `tech_impl §5.2` with a NodePool variant
 
 ### Differentiator additions (folded into Phase 7)
 - [ ] `internal/parser/helmfile` — Helmfile reader (declarative state of multiple Helm releases); opens self-managed platform-team segment (2 wk)

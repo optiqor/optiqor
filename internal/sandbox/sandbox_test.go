@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/optiqor/optiqor/internal/cost"
+	"github.com/optiqor/optiqor/internal/platform/config"
 )
 
 const exampleChart = `api:
@@ -134,7 +135,7 @@ func TestAnalyze_BadYAML_400(t *testing.T) {
 
 func TestAnalyze_OversizedBody_413(t *testing.T) {
 	h := newHandler()
-	big := strings.Repeat("a", int(MaxBodyBytes)+1)
+	big := strings.Repeat("a", int(config.SandboxAnalyzeMaxBytes)+1)
 	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(big))
 	w := httptest.NewRecorder()
 	h.Analyze(w, req)
