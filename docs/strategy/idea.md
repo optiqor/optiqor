@@ -83,10 +83,10 @@ Optiqor lives in the PR with hands. Write the diff. Verify the savings. Catch th
 
 ### 4.2 The Existing Tooling Has Structural Gaps
 
-| Tool | What it does well | What it misses |
-|------|-------------------|----------------|
-| **Kubecost / OpenCost** | Cluster-side cost monitoring, dashboards, allocation | No PR remediation, no savings verification |
-| **Kubecost GitHub Action** (`cost-prediction-action`) | Attempted a PR cost-prediction comment in 2023 | Abandoned alpha — v0.1.1, 31 stars, last updated April 2023. Shows Kubecost saw the category but the simple version wasn't enough to earn adoption |
+| Tool | What it does well | Relationship to Optiqor |
+|------|-------------------|--------------------------|
+| **Kubecost** (IBM) | Cluster-side cost dashboard, multi-cluster allocation, Prometheus-native | **Loop-opener; we're the loop-closer.** Kubecost surfaces the waste; Optiqor catches it at PR time before the next regression ships. A team running both is better served than either alone. `optiqor.dev/works-with/kubecost` (Month 4 GTM) makes the complementary story explicit. |
+| **Kubecost GitHub Action** (`cost-prediction-action`) | Attempted a PR cost-prediction comment in 2023 | Abandoned alpha — v0.1.1, 31 stars, last updated April 2023. Shows Kubecost saw the category but the simple version wasn't enough to earn adoption — the easy version is a feature, not a product |
 | **Cast AI** | Autonomous cluster takeover, spot migration, bin-packing | Black-box autopilot, scary for platform teams, K8s-only |
 | **Sedai / ScaleOps** | ML-based autonomous pod management | Cluster-side not PR-native, limited visibility into changes |
 | **Infracost** | Terraform cost PRs, AutoFix for Terraform | Does not parse Helm, Kustomize, or K8s manifests |
@@ -97,7 +97,25 @@ Optiqor lives in the PR with hands. Write the diff. Verify the savings. Catch th
 
 *"Kubecost showed you the price. Optiqor writes the fix, verifies the savings, and catches regressions."*
 
-### 4.3 The Platform Engineer's Lament
+### 4.3 Internal posture on OpenCost (private brain map — do not surface)
+
+> This subsection is internal thinking. It documents how we *use* OpenCost behind the scenes so the team stays aligned. Nothing here ships into a customer-facing surface — not Receipts, not the methodology page, not the pitch deck, not a PR comment, not a sales email, not investor material. If you find yourself about to mention OpenCost outside this doc or [optiqor/todo.md](../optiqor/todo.md) Phase 6, stop.
+
+For our own clarity:
+
+**OpenCost (CNCF Incubating, Apache 2.0) is private engineering reference material.** Nothing more, nothing less. When the cost-engine team builds `internal/cost/attribution` and the CUR Athena query path in Phase 6, they may read OpenCost source to understand how others solved the edge cases — Spot-interruption windowing, idle-capacity partitioning, SP/RI amortization, NAT/ALB line-item shapes — and then write Optiqor's own implementation from a clean slate, in our idioms (`*tenancy.Context` first arg, `Pricer` interface seam, our struct names). Same legitimate engineering pattern as reading Postgres internals to understand MVCC before building a database. Concepts are free; structure is a liability.
+
+Why we deliberately record this here and nowhere else:
+
+1. **Speed.** Saves an estimated 6+ engineer-months vs. discovering every CUR edge case in production. Receipts ship faster, methodology is sharper, the team avoids stepping on rakes someone else already documented.
+2. **Brand.** Customer-facing artifacts stay 100% Optiqor end-to-end. OpenCost is not a "powered by," not a credit line, not a methodology citation. Engineers consult upstream privately; the product is meaningfully ours.
+3. **No runtime dependency.** `go.mod` never references `github.com/opencost/opencost`. CI grep guard enforces this once the cost engine lands — see the *Engineering hygiene — cost-engine reference reading* block in [optiqor/todo.md](../optiqor/todo.md) Phase 6 for the operational rules.
+4. **Hygiene caveat.** "Reference reading" and "structural copying" are different things. The rule is: take concepts, not code. Budget one engineer-day of "translate to Optiqor idioms" between reading and writing. Reviewers flag uncannily similar identifiers, function signatures, or control flow during Phase 6 cost-engine PRs.
+5. **Where this posture is recorded.** Two places only: (a) this internal brain-map subsection, (b) the private Phase-6 hygiene block in `optiqor/todo.md`. It does not appear in `business_strategy.md` (investor + GTM), `technical_implementation.md` §7 (the customer-facing methodology spec is Optiqor-only), `optiqor-cli/` (OSS, independently auditable), or any sales/marketing/methodology-page copy.
+
+The boundary is binary: privately useful as engineering accelerant, publicly invisible as positioning. Both halves matter.
+
+### 4.4 The Platform Engineer's Lament
 
 Talk to any Head of Platform in 2026 and you'll hear the same three complaints:
 1. *"Kubecost tells me where the money went but my engineers won't log into another dashboard."*
@@ -105,6 +123,18 @@ Talk to any Head of Platform in 2026 and you'll hear the same three complaints:
 3. *"Wiz surfaces security issues but the fixes sit in Jira for two months."*
 
 Every one of these complaints is architecturally unfixable by the incumbent. They're structural, not feature gaps.
+
+### 4.5 What Optiqor Is — And Isn't
+
+**Optiqor is the intelligence layer above Kubernetes autoscaling primitives. We coexist with VPA, HPA, and Karpenter — we do not replace them.** Customers keep the autoscaling tools they've already adopted; Optiqor decides what values those tools should run with, surfaces the changes as reviewable PRs, signs the savings as Receipts, and watches the rollout for regressions. See ADR-0012 (`docs/adr/0012-coexist-with-primitives.md`) for the architectural commitment.
+
+Three reasons this matters strategically:
+
+1. **Adoption friction is the moat.** Adopting an alternative autoscaler is a 6–12 month enterprise decision. Adopting a tool that augments existing autoscalers is a 1-week decision. We want to be the second thing, not the first.
+2. **The proprietary engineering cost of replacing Karpenter (multi-year AWS investment) or VPA (Google's production sizing recommender) is dramatically higher than the engineering cost of integrating with them.** That budget is better spent on the recommendation engine, the validation gate, and the auto-rollback math — the four components nobody else has built.
+3. **Repositioning as an autoscaling replacement puts Optiqor in head-to-head competition with the AWS-supported open-source standard (Karpenter) and the Google-supported open-source standard (VPA).** That's a worse market than the PR-time intelligence layer.
+
+The right pitch sentence: *"Optiqor works alongside your existing VPA, HPA, and Karpenter. We don't replace them — we make them smarter by giving them better-calibrated input. Your autoscaling primitives stay where they are; Optiqor decides what values they should run with."*
 
 ---
 
@@ -274,6 +304,8 @@ Every merged Optiqor PR is watched for 7 days. Per-service statistical baselines
 **Opt-in auto-merge:** for explicitly-tagged non-critical workloads (batch jobs, dev namespaces, lower-tier services), Enterprise customers can configure automatic rollback merge after confirmation window. Critical paths (payments, auth, customer-facing APIs) always require human approval — we never let Optiqor act unilaterally on workloads you've marked critical.
 
 **This is the breakthrough feature.** Platform teams have been burned by Cast AI's black-box autopilot. Optiqor gives them the detection speed of automation with the auditability and control of pull requests. Enterprise platform leads can trust it because trust is built into the default, not bolted on as a toggle.
+
+**And it's the structural moat nobody else can ship.** When an Optiqor fix merges and goes wrong, the customer's existing autoscalers — HPA, VPA, Karpenter — all react, but they react to **symptoms**: HPA scales replicas (masks the bug), VPA in Auto increases requests (papers over the cause), Karpenter provisions nodes (pays for the masking). None of them knows the regression started 4 hours ago, correlated with the PR Optiqor opened. The K8s primitives are stateless reactors with no concept of *change attribution* — and change attribution is exactly what auto-rollback needs. We add the one thing the K8s ecosystem structurally cannot give the customer. See business_strategy.md §8.4 moat #2 for the full positioning.
 
 ### 5.5 Cost Spike → PR Mapping (The CFO Feature)
 
@@ -884,13 +916,13 @@ Each partnership either makes Optiqor indispensable (security findings get fixed
 
 Real risks that need engagement in the first 6 months:
 
-1. **Kubecost (IBM) reviving their abandoned Action or shipping something new.** Their cost-prediction-action has been stale since v0.1.1 (April 2023, 31 stars). Reviving it would require reversing a 3-year strategic decision, but IBM has the resources and could decide K8s PR remediation matters again. Mitigation: (a) ship the full stack by Month 4 so any revival would be playing catch-up on Apply Fix + Receipts + Auto-Rollback; (b) explore a Kubecost partnership where their cost-allocation engine feeds our Apply Fix (removes motivation to compete); (c) build moats harder to copy than a simple prediction bot.
+1. **Kubecost (IBM) reviving their abandoned Action or shipping something new.** Their cost-prediction-action has been stale since v0.1.1 (April 2023, 31 stars). Reviving it would require reversing a 3-year strategic decision, but IBM has the resources and could decide K8s PR remediation matters again. Mitigation: (a) ship the full stack by Month 4 so any revival would be playing catch-up on Apply Fix + Receipts + Auto-Rollback; (b) **publish the `optiqor.dev/works-with/kubecost` page in Month 4** so the loop-closer framing is in market before they can reposition; (c) reach out to Kubecost (IBM) leadership in Month 3 to explore a formal data-exchange partnership (their Action provides cost data, ours provides Apply Fix); (d) build moats harder to copy than a simple prediction bot — Receipts, Auto-Rollback, methodology versioning.
 
 2. **Operator-managed workloads (CRDs).** Roughly 40% of production K8s Deployments are generated by operators (Prometheus Operator, Strimzi, cert-manager, Istio, etc.). For these, editing `values.yaml` doesn't help — the CRD instance (`Kafka`, `Prometheus`, `Certificate`) is the real source of truth. Year 1 plan: detect operator-owned workloads, skip Apply Fix with a clear explanation, and add targeted operator support (starting with Prometheus Operator and cert-manager) in Year 2.
 
 3. **StatefulSet safety.** Rightsizing databases, Kafka brokers, and Elasticsearch nodes is fundamentally riskier than rightsizing stateless apps. Year 1 plan: Apply Fix is Deployment-only. StatefulSets get a "suggestion with human review required" flag and never auto-open. DaemonSets excluded entirely.
 
-4. **CUR-to-pod cost attribution is genuinely hard.** AWS CUR gives node-level and EBS-level costs. Attributing "pod X cost $400 this month" requires a cost allocation model — literally what Kubecost sells. Year 1 plan: use a simplified allocation (requests-weighted with idle-overhead distribution), document the methodology clearly in Receipts, and explore a Kubecost integration to use their battle-tested allocation engine.
+4. **CUR-to-pod cost attribution is genuinely hard.** AWS CUR gives node-level and EBS-level costs. Attributing "pod X cost $400 this month" requires a cost allocation model — literally what Kubecost sells. Year 1 plan: ship Optiqor's `hybrid_v1` methodology — Ed25519-signed, versioned, with a public methodology page (`optiqor.dev/methodology/hybrid-v1`). Hybrid requests+usage weighting, idle-overhead distributed by namespace policy, Spot/SP/RI reconciliation tightened for Receipt-grade error bars. Methodology is fully documented and reproducible from the signed payload — no opaque cost allocation magic.
 
 5. **Karpenter and cluster autoscaler dynamics.** Pod rightsizing reduces the bill only when bin-packing catches up or the autoscaler kicks in. On Karpenter-managed clusters, this happens within hours. On traditional Cluster Autoscaler setups, it can take days. Year 1 plan: Receipt waits 30 days precisely because the bill impact takes that long to materialize; clearly communicate the expected lag to customers.
 

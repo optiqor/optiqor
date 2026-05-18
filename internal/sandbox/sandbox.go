@@ -37,14 +37,12 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 	"github.com/optiqor/optiqor/internal/cost"
 	"github.com/optiqor/optiqor/internal/parser"
+	"github.com/optiqor/optiqor/internal/platform/config"
 )
 
 // AccuracyDisclosure is the mandatory ±40% line. Keep byte-identical
 // to the CLI string.
 const AccuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
-
-// MaxBodyBytes caps the size of an /v1/analyze request body.
-const MaxBodyBytes = 1 << 20 // 1 MiB
 
 // ShareTTL is how long a /r/<hash> entry stays fetchable. Long enough
 // to share in a PR comment and review next morning.
@@ -85,14 +83,14 @@ type AnalyzeResponse struct {
 // Analyze parses the body and runs the deterministic rule engine.
 //
 //	400 — malformed YAML / empty body
-//	413 — body exceeds MaxBodyBytes
+//	413 — body exceeds config.SandboxAnalyzeMaxBytes
 //	500 — pricer / store failure
 func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.SandboxAnalyzeMaxBytes))
 	if err != nil {
 		// MaxBytesReader returns its own error type whose Error() string
 		// starts with "http: request body too large".

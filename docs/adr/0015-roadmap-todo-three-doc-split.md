@@ -1,8 +1,10 @@
-# ADR 0001: Three-doc roadmap split (org / optiqor-roadmap / optiqor-todo)
+# ADR-0015: Three-doc roadmap split (org / optiqor-roadmap / optiqor-todo)
 
-- **Status:** Accepted
-- **Date:** 2026-05-17
-- **Authors:** @shivam
+**Status:** Accepted
+**Date:** 2026-05-17 (renumbered 2026-05-18)
+**Domain:** Top-level
+
+> **Renumbered 2026-05-18 from ADR-0001.** Originally numbered before the 0001-0012 architecture batch was written; renumbered to resolve a collision. Decision and date are unchanged; only the file name and header style were updated to match the current ADR template.
 
 ## Context
 
@@ -50,3 +52,9 @@ We keep all three documents. We commit to the following invariants:
 - Audit (2026-05-17) that surfaced this — see commit history of this ADR.
 - `optiqor/scripts/check-roadmap-sync.sh` — the sanity check.
 - `/CLAUDE.md` "Roadmap" section — points readers at the right file for their need.
+
+## Implementation status
+
+**Shipped.** Three roadmap files live at `/todo.md`, `optiqor/ROADMAP.md`, and `optiqor/todo.md` per the canonical split. CI sanity check at `optiqor/scripts/check-roadmap-sync.sh` enforces phase-name parity. Renumbered from ADR-0001 to ADR-0015 on 2026-05-18 to resolve a numbering collision with the architecture ADR batch.
+
+*Last verified: 2026-05-18.*

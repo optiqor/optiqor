@@ -191,7 +191,7 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 	// installed and reach a healthy endpoint during onboarding.
 	gh := vcs.NewGitHub()
 	mux.HandleFunc("POST /webhooks/github", func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8<<20)) // 8 MiB
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.GitHubWebhookMaxBytes))
 		if err != nil {
 			http.Error(w, "read failed", http.StatusBadRequest)
 			return

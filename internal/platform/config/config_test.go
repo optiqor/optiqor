@@ -42,7 +42,7 @@ func TestValidate_ProdRequiresSecrets(t *testing.T) {
 	if err == nil {
 		t.Fatal("prod without secrets must fail")
 	}
-	for _, want := range []string{"POSTGRES_DSN", "ANTHROPIC_API_KEY", "GITHUB_APP_ID"} {
+	for _, want := range []string{"POSTGRES_DSN", "ANTHROPIC_API_KEY", "GITHUB_APP_ID", "GITHUB_APP_WEBHOOK_SECRET"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("missing %q in error: %v", want, err)
 		}

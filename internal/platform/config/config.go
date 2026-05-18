@@ -116,6 +116,9 @@ func (c Config) Validate() error {
 		if c.GitHubAppID == "" {
 			errs = append(errs, "OPTIQOR_GITHUB_APP_ID is required in prod")
 		}
+		if c.GitHubAppWebhookSecret == "" {
+			errs = append(errs, "OPTIQOR_GITHUB_APP_WEBHOOK_SECRET is required in prod")
+		}
 	}
 
 	if c.ShutdownGrace <= 0 {

@@ -7,11 +7,9 @@ import (
 
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
-
-// MaxPreviewBytes caps the size of an /v1/apply-fixes request body.
-const MaxPreviewBytes = 1 << 20
 
 // PreviewRequest is the wire input. The TenantHeader middleware
 // extracts the tenant id and stuffs it in context; this handler
@@ -58,7 +56,7 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing tenant context", http.StatusUnauthorized)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxPreviewBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.PRApplyFixMaxBytes))
 	if err != nil {
 		http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
 		return
