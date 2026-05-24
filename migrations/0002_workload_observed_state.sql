@@ -1,27 +1,17 @@
 -- +goose Up
 -- +goose StatementBegin
 --
--- Additive columns on `workloads` for current observed state.
+-- Additive observed-state columns on workloads. Written by the
+-- in-cluster agent reconcile loop (Phase 5); single-writer denormalised
+-- so the dashboard skips a join. All columns are NULL-able because
+-- workloads from the GitOps parse path won't have observed state until
+-- the agent runs. See backend/todo.md "Design call: denormalised
+-- current-state on workloads".
 --
--- These columns are written by the in-cluster agent reconcile loop
--- (Phase 5). They are populated **per workload** as the agent's K8s
--- informer reports the current pod template; they replace the need
--- for an extra `workload_observed_state` join table by keeping the
--- single-writer denormalised model captured in backend/todo.md §
--- "Design call: denormalised current-state on workloads".
---
--- `container_image` is **non-negotiable from row one** — it powers
--- the Helm Chart Efficiency Leaderboard and the cross-customer
--- pattern-library moat (queried under is_superuser_context() once
--- 0003 lands). It is the single most-expensive retrofit, so it ships
--- in Phase 1 follow-up before the agent writes the first row.
---
--- Default is denormalise (one writer = agent reconciler; dashboard
--- query speed wins; single source of truth = (workload_id, last_observed_at)).
--- Revisit only if dashboard latency budget bites.
---
--- All columns are NULL-able: workloads created from the GitOps parse
--- path (Phase 1) will not have observed state until the agent runs.
+-- container_image ships in row one because it powers the Helm Chart
+-- Efficiency Leaderboard / cross-customer pattern library moat (queried
+-- under is_superuser_context() once 0003 lands), and is the most
+-- expensive column to retrofit after rows exist.
 
 ALTER TABLE workloads
     ADD COLUMN container_image                   TEXT,
@@ -33,20 +23,18 @@ ALTER TABLE workloads
     ADD COLUMN has_hpa                           BOOLEAN,
     ADD COLUMN last_observed_at                  TIMESTAMPTZ;
 
--- Cross-tenant pattern queries (Leaderboard, pattern library) read
--- this index under is_superuser_context() — see 0003. Tenant queries
--- still go through the tenant_idx; this index is the moat-enabler.
+-- Read under is_superuser_context() by Leaderboard / pattern-library
+-- queries (see 0003). Tenant queries keep using tenant_idx.
 CREATE INDEX workloads_container_image_idx ON workloads (container_image)
     WHERE container_image IS NOT NULL;
 
--- Latency-sensitive dashboard query: "workloads observed in the last
--- 10m for this tenant". Partial index keeps it tight.
+-- Backs "workloads observed in the last 10m for this tenant" on the
+-- dashboard hot path.
 CREATE INDEX workloads_last_observed_idx ON workloads (tenant_id, last_observed_at DESC)
     WHERE last_observed_at IS NOT NULL;
 
--- Sanity checks on numeric ranges. Liberal upper bounds so we can
--- store oversized declarations and have the cost engine flag them
--- without the migration rejecting the row.
+-- No upper bound on these checks: oversized declarations are a finding
+-- for the cost engine, not a migration-time reject.
 ALTER TABLE workloads
     ADD CONSTRAINT workloads_current_cpu_request_nonneg
         CHECK (current_cpu_request_millicores IS NULL OR current_cpu_request_millicores >= 0),

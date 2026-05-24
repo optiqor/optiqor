@@ -1,12 +1,7 @@
-// Command agent is the in-cluster Optiqor agent.
-//
-// Runs inside customer Kubernetes clusters. Reads K8s API via client-go
-// informers and scrapes Prometheus, then ships data over mTLS to the Optiqor
-// SaaS using short-lived JWTs.
-//
-// Licensed under Apache 2.0 (see ../../LICENSE-agent). Regulated customers
-// will not run closed-source binaries in production clusters; this binary
-// must remain independently auditable.
+// Command agent is the in-cluster Optiqor agent. Apache 2.0 (see
+// ../../LICENSE-agent) — regulated customers won't run closed-source
+// binaries in prod clusters, so this binary stays independently
+// auditable.
 package main
 
 import (

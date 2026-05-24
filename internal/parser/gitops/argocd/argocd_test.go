@@ -144,8 +144,7 @@ spec:
 }
 
 func TestParse_SourceAndSourcesBothPresent(t *testing.T) {
-	// Edge case: customer migrating from single→multi source. We emit
-	// `source` first, then each entry of `sources`.
+	// Migration case: emit `source` first, then each `sources` entry.
 	doc := `apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata: {name: x}

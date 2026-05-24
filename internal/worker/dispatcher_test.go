@@ -127,8 +127,6 @@ func TestDrain_Idempotent(t *testing.T) {
 	if err := d.Drain(context.Background()); err != nil {
 		t.Fatalf("first Drain: %v", err)
 	}
-	// Second Drain must also succeed; the dispatcher is already in
-	// the draining state but no in-flight work means immediate return.
 	if err := d.Drain(context.Background()); err != nil {
 		t.Fatalf("second Drain: %v", err)
 	}
@@ -157,7 +155,6 @@ func TestSubmit_PropagatesWorkflowError(t *testing.T) {
 	}
 }
 
-// Concurrent Submits should not race on the workflow registry.
 func TestSubmit_RaceSafe(t *testing.T) {
 	d := NewInMemory()
 	var runs int64

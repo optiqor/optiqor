@@ -84,7 +84,6 @@ export function SandboxClient() {
   );
 }
 
-/* ─── editor pane ─────────────────────────────────────────────────── */
 function Editor({
   values,
   setValues,
@@ -158,7 +157,6 @@ function Editor({
   );
 }
 
-/* ─── results pane ────────────────────────────────────────────────── */
 function Results({
   status,
   copied,

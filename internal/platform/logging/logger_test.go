@@ -10,7 +10,6 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// decode parses a single JSON log line into a map.
 func decode(t *testing.T, line []byte) map[string]any {
 	t.Helper()
 	var m map[string]any

@@ -21,8 +21,7 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// silentLogger is a slog logger that drops everything; used in every
-// handler test so output stays clean.
+// silentLogger drops every record so handler tests stay quiet.
 func silentLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
@@ -246,7 +245,7 @@ func TestRequireTenant_Rejects(t *testing.T) {
 	h := requireTenant(HeaderTenantExtractor, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("inner handler should NOT be reached")
 	}))
-	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody) // no tenant header
+	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
@@ -344,7 +343,7 @@ func TestRecordingWriter_DoesNotDoubleWriteHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	rw := &recordingWriter{ResponseWriter: rec, status: 200}
 	rw.WriteHeader(http.StatusBadRequest)
-	rw.WriteHeader(http.StatusInternalServerError) // should be ignored
+	rw.WriteHeader(http.StatusInternalServerError)
 	if rw.status != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", rw.status)
 	}
@@ -376,14 +375,12 @@ func TestPProf_GatedByAdminToken(t *testing.T) {
 	mux := http.NewServeMux()
 	mountPProf(mux, "secret-token")
 
-	// no header → 401
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("missing token: status = %d, want 401", rec.Code)
 	}
 
-	// wrong header → 401
 	rec = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody)
 	req.Header.Set("X-Admin-Token", "wrong")
@@ -392,7 +389,6 @@ func TestPProf_GatedByAdminToken(t *testing.T) {
 		t.Fatalf("wrong token: status = %d, want 401", rec.Code)
 	}
 
-	// correct header → 200 (the index handler)
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody)
 	req.Header.Set("X-Admin-Token", "secret-token")

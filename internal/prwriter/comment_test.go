@@ -33,8 +33,8 @@ func TestRender_NoChart_Errors(t *testing.T) {
 }
 
 func TestRender_DeterministicAcrossRuns(t *testing.T) {
-	// PR-comment renders must be diff-stable so CI doesn't keep
-	// re-posting "different" comments. Same input → identical bytes.
+	// Non-determinism here makes CI re-post "different" comments on
+	// every rerun.
 	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
 	a, err := Render(sample(now))
 	if err != nil {

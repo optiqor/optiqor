@@ -1,8 +1,6 @@
-// Dev / Phase-1 dependency wiring for the worker's registered
-// workflows. The same "noop until Phase-N lands" pattern as
-// cmd/api/routes.go: production replaces each binding with a real
-// implementation behind the same interface; the workflow code stays
-// the same.
+// Phase-1 dev dependency wiring for the worker. Production replaces
+// each binding behind the same interface; the workflow code does not
+// change. Mirrors the noop pattern in cmd/api/routes.go.
 package main
 
 import (
@@ -15,9 +13,9 @@ import (
 	"github.com/optiqor/optiqor/internal/worker/workflows"
 )
 
-// noopLLM matches cmd/api/routes.go's stand-in: returns a canned
-// "EXPLANATION:/DIFF:" pair so the Apply Fix workflow can render an
-// end-to-end markdown body without an Anthropic API key.
+// noopLLM mirrors cmd/api/routes.go's stand-in: returns a canned
+// EXPLANATION/DIFF pair so Apply Fix renders end-to-end without an
+// Anthropic API key.
 type noopLLM struct{}
 
 func (noopLLM) Generate(_ context.Context, _ agent.LLMRequest) (agent.LLMResponse, error) {
@@ -27,9 +25,9 @@ func (noopLLM) Generate(_ context.Context, _ agent.LLMRequest) (agent.LLMRespons
 	}, nil
 }
 
-// loggingPRPublisher / loggingNotifier / loggingInitiator: dev-side
-// implementations that log what *would* have happened. Production
-// swaps them for the real GitHub / Slack / GitHub-rollback wiring.
+// loggingPRPublisher / loggingRollbackInitiator / loggingSpikeNotifier
+// log what *would* have happened. Production swaps them for the real
+// GitHub / Slack / rollback wiring.
 
 type loggingPRPublisher struct{ log *slog.Logger }
 
@@ -57,9 +55,8 @@ func (n *loggingSpikeNotifier) NotifySpike(_ context.Context, t tenancy.Context,
 	return nil
 }
 
-// inMemoryReceiptStore stores issued receipts in-process so the
-// Phase-1 worker can exercise the issuance path end-to-end without a
-// Postgres dependency. Production swaps for the receipts table.
+// inMemoryReceiptStore lets Phase-1 exercise the issuance path
+// end-to-end without Postgres. Production swaps for the receipts table.
 type inMemoryReceiptStore struct {
 	log *slog.Logger
 	m   map[string]struct {

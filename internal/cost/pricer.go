@@ -1,24 +1,10 @@
-// Package cost computes the dollar cost of a [parser.Workload] from
-// its declared resource requests and a region-aware [Pricer].
+// Package cost projects monthly USD-cents for a parser.Workload from
+// its declared requests and a region-aware Pricer. The engine is pure
+// math: the CLI feeds a StaticPricer for sandbox ±40%, the backend
+// feeds a CUR-backed Pricer for agent ±15%.
 //
-// The CLI ships a sandbox-grade ±40% estimate because static files are
-// all it sees; the backend reaches for the same engine but supplies a
-// [Pricer] backed by live data (CUR, Pricing API) to deliver the
-// ±10–15% accuracy the agent customers pay for. The engine itself is
-// pure math — no I/O — so it stays the same regardless of who is
-// asking for the number.
-//
-// Pricing semantics:
-//
-//   - CPU is amortised as $/vCPU·month, computed from the on-demand
-//     hourly rate of the customer-selected instance class.
-//   - Memory is amortised as $/GiB·month, on the same hour basis.
-//   - The estimator multiplies the workload's request by replicas
-//     (declared or HPA min if known). Limits are an upper bound but
-//     never enter the savings calculation — overprovisioning is a CPU
-//     request finding, not a limit finding.
-//   - Cents are the wire format; the JSON layer divides by 100 for
-//     display so the renderer never sees floats.
+// Limits never enter the savings calculation; overprovisioning is a
+// request finding, not a limit finding.
 package cost
 
 import (
@@ -27,19 +13,16 @@ import (
 	"github.com/optiqor/optiqor/internal/parser"
 )
 
-// Pricer returns per-month USD-cents for a vCPU and a GiB of memory in
-// the given region. Implementations must be deterministic for a given
-// region; callers will cache results across many workloads in a single
-// analysis.
+// Pricer returns per-month USD-cents for a vCPU and a GiB of memory.
+// Must be deterministic per region; callers cache results across many
+// workloads in one analysis.
 type Pricer interface {
 	VCPUPerMonthUSDCents(region string) (int64, error)
 	GiBMemoryPerMonthUSDCents(region string) (int64, error)
 }
 
-// Estimate is the result of running [Estimator] on a single workload.
-// Currency is USD-cents to match the rest of the platform; Note is
-// surface-able prose describing what went into the number so users
-// understand the math.
+// Estimate carries USD-cents (platform-wide wire format) plus a Note
+// the renderer surfaces so users see what went into the number.
 type Estimate struct {
 	Workload         string `json:"workload"`
 	Region           string `json:"region"`
@@ -54,31 +37,26 @@ type Estimate struct {
 	UnpriceableField string `json:"unpriceable_field,omitempty"`
 }
 
-// Estimator wraps a [Pricer] and configures how the engine annotates
-// results. Construct once per analysis; reuse across workloads.
+// Estimator is constructed once per analysis and reused across workloads.
 type Estimator struct {
 	Pricer          Pricer
 	Region          string
 	AccuracyBandPct int // ±40 from CLI/sandbox, ±15 from agent
 }
 
-// Bytes per GiB. Used for memory cost normalisation.
 const bytesPerGiB int64 = 1024 * 1024 * 1024
 
-// minutesPerMonth is the standard 730-hour month used by every major
-// cloud's on-demand pricing.
+// 730-hour month is the canonical on-demand pricing basis across AWS,
+// Azure, and GCP.
 const hoursPerMonth int64 = 730
 
-// Estimate returns the per-month cost for w. A workload with no
-// declared request gets a zero estimate and an "unpriceable" note —
-// the engine never invents a number from nothing.
-//
-// Errors here are infrastructure-class (the Pricer failing); a
-// workload missing requests is a normal outcome, not an error.
+// Estimate never invents a number: a workload with no declared request
+// returns a zero estimate plus an unpriceable note, not an error.
+// Errors are infrastructure-class (Pricer failing).
 func (e *Estimator) Estimate(w parser.Workload) (Estimate, error) {
 	band := e.AccuracyBandPct
 	if band <= 0 {
-		band = 40 // CLI/sandbox default — never claim agent accuracy without an agent.
+		band = 40 // never claim agent accuracy without an agent
 	}
 	out := Estimate{
 		Workload:        w.Name,
@@ -88,7 +66,7 @@ func (e *Estimator) Estimate(w parser.Workload) (Estimate, error) {
 	}
 	if !w.Requests.CPU.Set && !w.Requests.Memory.Set {
 		out.UnpriceableField = "requests.cpu+memory"
-		out.Note = "workload declares no resource requests — cannot estimate cost without an agent's measured baseline"
+		out.Note = "workload declares no resource requests; cannot estimate cost without an agent's measured baseline"
 		return out, nil
 	}
 
@@ -98,7 +76,6 @@ func (e *Estimator) Estimate(w parser.Workload) (Estimate, error) {
 		if err != nil {
 			return Estimate{}, fmt.Errorf("cost: pricing vCPU for %s: %w", e.Region, err)
 		}
-		// vcpu cents * (millicores/1000) * replicas
 		out.CPUMonthlyCents = vcpu * w.Requests.CPU.Value * int64(out.Replicas) / 1000
 	}
 	if w.Requests.Memory.Set {
@@ -107,7 +84,6 @@ func (e *Estimator) Estimate(w parser.Workload) (Estimate, error) {
 		if err != nil {
 			return Estimate{}, fmt.Errorf("cost: pricing memory for %s: %w", e.Region, err)
 		}
-		// gib cents * (bytes / bytesPerGiB) * replicas
 		out.MemMonthlyCents = gib * w.Requests.Memory.Value * int64(out.Replicas) / bytesPerGiB
 	}
 	out.MonthlyUSDCents = out.CPUMonthlyCents + out.MemMonthlyCents
@@ -123,7 +99,6 @@ func (e *Estimator) Estimate(w parser.Workload) (Estimate, error) {
 	return out, nil
 }
 
-// Total sums monthly cents across a slice of estimates.
 func Total(es []Estimate) int64 {
 	var sum int64
 	for _, e := range es {
@@ -134,14 +109,13 @@ func Total(es []Estimate) int64 {
 
 func clampReplicas(r int) int {
 	if r <= 0 {
-		return 1 // unset → Kubernetes default
+		return 1 // unset matches the Kubernetes default
 	}
 	return r
 }
 
-// HourlyRateCents converts the canonical $/vCPU·month or $/GiB·month
-// rate into an $/hour figure. Exposed so dashboards can show the
-// hourly anchor next to the monthly number.
+// HourlyRateCents converts $/vCPU·month or $/GiB·month into $/hour so
+// dashboards can show the hourly anchor next to the monthly figure.
 func HourlyRateCents(monthlyCents int64) int64 {
 	return monthlyCents / hoursPerMonth
 }

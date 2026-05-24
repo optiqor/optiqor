@@ -10,10 +10,9 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// SpikeEnvelope is the wire shape of a cost-spike event delivered by
-// AWS Cost Anomaly Detection (SNS payload), Azure Cost Management, or
-// our own internal poller. The fields are deliberately the union of
-// what those upstreams emit so the dispatch logic stays single-path.
+// SpikeEnvelope is the union of fields AWS Cost Anomaly Detection,
+// Azure Cost Management, and our internal poller emit so dispatch
+// stays single-path.
 type SpikeEnvelope struct {
 	Tenant            string    `json:"tenant"`
 	WorkloadID        string    `json:"workload_id"`
@@ -23,21 +22,18 @@ type SpikeEnvelope struct {
 	LikelyPRURL       string    `json:"likely_pr_url,omitempty"`
 }
 
-// SpikeDispatcher is the seam between the webhook and the worker
-// dispatcher. cmd/api wires the worker's CostSpike workflow behind
-// this interface so the handler itself stays test-friendly.
+// SpikeDispatcher is the seam cmd/api uses to wire the worker's
+// CostSpike workflow without the handler depending on the worker.
 type SpikeDispatcher interface {
 	DispatchSpike(t tenancy.Context, ev SpikeEnvelope) error
 }
 
-// SpikeHandler serves POST /v1/cost-spikes. We never trust the
-// upstream signature alone — every event is logged and dispatched,
-// and the worker decides whether to act on it.
+// SpikeHandler serves POST /v1/cost-spikes. The handler always
+// dispatches; the worker decides whether to act on it.
 type SpikeHandler struct {
 	Dispatcher SpikeDispatcher
 }
 
-// Receive validates the payload and dispatches the spike event.
 func (h *SpikeHandler) Receive(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -71,7 +67,6 @@ func (h *SpikeHandler) Receive(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-// Mount registers the route on a mux.
 func (h *SpikeHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/cost-spikes", h.Receive)
 }

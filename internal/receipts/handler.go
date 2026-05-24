@@ -14,17 +14,14 @@ import (
 )
 
 // Store is the persistence seam for issued receipts. Production wires
-// the receipts table behind it; tests + dev mode use [InMemoryStore].
+// the receipts table behind it; tests + dev use [InMemoryStore].
 type Store interface {
 	Save(ctx context.Context, t tenancy.Context, id string, signed string, r Receipt) error
 	Get(ctx context.Context, id string) (signed string, r Receipt, err error)
 }
 
-// ErrReceiptNotFound is returned by Store.Get when the id is unknown.
 var ErrReceiptNotFound = errors.New("receipts: not found")
 
-// InMemoryStore is the in-process [Store] used by tests and dev. Safe
-// for concurrent use.
 type InMemoryStore struct {
 	mu sync.RWMutex
 	m  map[string]entry
@@ -35,10 +32,8 @@ type entry struct {
 	Receipt Receipt
 }
 
-// NewInMemoryStore returns an empty store.
 func NewInMemoryStore() *InMemoryStore { return &InMemoryStore{m: map[string]entry{}} }
 
-// Save stores the receipt under id, overwriting any prior entry.
 func (s *InMemoryStore) Save(_ context.Context, _ tenancy.Context, id, signed string, r Receipt) error {
 	if id == "" {
 		return errors.New("receipts: empty id")
@@ -49,7 +44,6 @@ func (s *InMemoryStore) Save(_ context.Context, _ tenancy.Context, id, signed st
 	return nil
 }
 
-// Get returns the signed + parsed receipt or ErrReceiptNotFound.
 func (s *InMemoryStore) Get(_ context.Context, id string) (string, Receipt, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -60,14 +54,13 @@ func (s *InMemoryStore) Get(_ context.Context, id string) (string, Receipt, erro
 	return e.Signed, e.Receipt, nil
 }
 
-// Handler serves GET /v1/receipts/{id}. Public, unauth: a Receipt is
-// designed to be independently verifiable.
+// Handler serves the public receipt routes. Unauthenticated: a Receipt
+// is designed to be independently verifiable.
 type Handler struct {
 	Store    Store
 	Registry Registry
 }
 
-// VerifyResponse is the JSON envelope returned to the verifier.
 type VerifyResponse struct {
 	Receipt        Receipt `json:"receipt"`
 	Signed         string  `json:"signed"`
@@ -76,13 +69,9 @@ type VerifyResponse struct {
 	VerifierNotice string  `json:"verifier_notice"`
 }
 
-// Get returns the stored receipt with a freshly-computed verification
-// flag so the caller knows whether the Optiqor server itself still
-// trusts the signature today.
-//
-//	400 — missing id
-//	404 — unknown id
-//	500 — store / registry failures
+// Get serves GET /v1/receipts/{id}, returning the stored receipt and a
+// freshly-computed verification flag (this server's view today; keys
+// may have since rotated).
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -117,12 +106,9 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// Verify serves GET /v/{id} — the public Receipt verifier page.
-// Renders an HTML document with the parsed claim, the signed bytes,
-// and the live verification status against the configured Registry.
-// Anonymous, no auth, no telemetry. The verifier client-side then
-// re-verifies with WebCrypto so users don't have to trust this
-// server-side check alone.
+// Verify serves GET /v/{id}, the public verifier page. The client-side
+// JS re-runs the Ed25519 check via WebCrypto so users don't have to
+// trust this server-side verification alone.
 func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -150,9 +136,8 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Pretty-print the canonical JSON payload so the verifier page
-	// shows the signed bytes alongside the signature for offline
-	// re-verification.
+	// Display copy only; not the canonical bytes. Offline verification
+	// must use the b64url payload half of `signed`, not this pretty-print.
 	pretty, _ := json.MarshalIndent(parsed, "", "  ")
 	sigPart, payloadPart, _ := strings.Cut(signed, ".")
 
@@ -177,13 +162,11 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Mount registers both the JSON and HTML routes on a mux.
 func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/receipts/{id}", h.Get)
 	mux.HandleFunc("GET /v/{id}", h.Verify)
 }
 
-// verifyView is the html/template input. Kept small + flat.
 type verifyView struct {
 	ID, TenantID, Workload, ApplyFixID, Observed string
 	Predicted, Realised, CloudBill               string
@@ -228,8 +211,8 @@ func withCommas(n int64) string {
 	return b.String()
 }
 
-// verifyTmpl is the verifier page. Self-contained HTML, inline CSS,
-// same Editorial × Engineering visual language as pkg/htmlrender.
+// verifyTmpl is the verifier page. Self-contained HTML + inline CSS;
+// same visual language as pkg/htmlrender.
 var verifyTmpl = template.Must(template.New("verify").Parse(`<!doctype html>
 <html lang="en">
 <head>

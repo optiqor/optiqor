@@ -10,9 +10,8 @@ import (
 	"github.com/optiqor/optiqor/internal/platform/healthz"
 )
 
-// fullMux mirrors what cmd/api would assemble in production: the
-// platform routes plus every domain handler. Used to verify the
-// end-to-end wiring is correct without spinning a real socket.
+// fullMux mirrors the production assembly: platform routes + every
+// domain handler. Lets the wiring tests skip the real socket.
 func fullMux() *http.ServeMux {
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	mountDomainRoutes(mux, buildDomainDeps())

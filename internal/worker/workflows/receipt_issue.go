@@ -10,30 +10,26 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// ReceiptStore is the persistence seam for issued receipts. Production
-// writes to the receipts table; tests use a fake.
+// ReceiptStore is the persistence seam. Production writes the receipts
+// table; tests use a fake.
 type ReceiptStore interface {
 	Save(ctx context.Context, t tenancy.Context, id string, signed string, receipt receipts.Receipt) error
 }
 
-// ReceiptIssuePayload is the dispatcher input.
 type ReceiptIssuePayload struct {
 	Receipt receipts.Receipt `json:"receipt"`
 }
 
-// ReceiptIssue signs + persists a Verified Receipt.
 type ReceiptIssue struct {
 	Issuer *receipts.Issuer
 	Store  ReceiptStore
 }
 
-// Name is the dispatcher key.
 func (ReceiptIssue) Name() string { return "receipt_issue" }
 
-// Execute runs one issuance. The signer is the only thing that holds
-// the private key; the store records both the canonical wire-format
-// and the parsed Receipt struct so the verification endpoint can
-// return both without re-signing.
+// Execute signs + persists. Store records both the canonical wire form
+// and the parsed Receipt so the verification endpoint can return both
+// without re-signing.
 func (w ReceiptIssue) Execute(ctx context.Context, t tenancy.Context, raw []byte) error {
 	if w.Issuer == nil {
 		return fmt.Errorf("receipt_issue: nil issuer")

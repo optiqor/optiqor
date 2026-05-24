@@ -9,21 +9,18 @@ import (
 	"strings"
 )
 
-// GitHub is the GitHub source. Webhook verification ships now (used
-// by Phase 4 when the GitHub App webhook receiver lands); PostComment
-// and OpenPR use the full go-github client which arrives with Apply
-// Fix in Phase 4.
+// GitHub is the GitHub source. Webhook verification ships now;
+// PostComment / OpenPR wire the go-github client in Phase 4 alongside
+// Apply Fix.
 type GitHub struct{}
 
-// NewGitHub returns the registered-by-default GitHub source.
 func NewGitHub() *GitHub { return &GitHub{} }
 
 func (*GitHub) Provider() Provider { return ProviderGitHub }
 
-// VerifyWebhook validates GitHub's `X-Hub-Signature-256` header using
-// HMAC-SHA256 over the raw body. The header format is
-// "sha256=<hex>". Constant-time comparison guards against timing
-// attacks.
+// VerifyWebhook validates X-Hub-Signature-256 (HMAC-SHA256 over the
+// raw body, "sha256=<hex>"). hmac.Equal is constant-time to keep the
+// secret out of reach of timing attacks.
 func (*GitHub) VerifyWebhook(secret []byte, signatureHeader string, body []byte) error {
 	if !strings.HasPrefix(signatureHeader, "sha256=") {
 		return ErrInvalidSignature
@@ -43,14 +40,12 @@ func (*GitHub) VerifyWebhook(secret []byte, signatureHeader string, body []byte)
 	return nil
 }
 
-// PostComment creates / updates a PR comment. Phase 4 wires go-github;
-// the stub returns ErrNotImplemented so callers can register the
-// source today and gate behavior with a feature flag.
+// Stub so callers can register the source today and gate with a
+// feature flag; Phase 4 wires go-github.
 func (*GitHub) PostComment(_ context.Context, _ PullRequest, _ Comment) (Comment, error) {
 	return Comment{}, ErrNotImplemented
 }
 
-// OpenPR opens a PR with an Apply Fix diff. Phase 4.
 func (*GitHub) OpenPR(_ context.Context, _ OpenPRRequest) (PullRequest, error) {
 	return PullRequest{}, ErrNotImplemented
 }

@@ -80,8 +80,8 @@ func TestNoopService_ReturnsNotImplementedWithValidTenant(t *testing.T) {
 	}
 }
 
-// Sanity check that committed retention windows match the published
-// numbers. Any change requires a coordinated update to docs/legal/.
+// Drift on these constants requires a coordinated update to
+// docs/legal/ — they ship in the public DPA.
 func TestRetentionWindows_Committed(t *testing.T) {
 	if RetentionPrometheus != 90*24*time.Hour {
 		t.Errorf("RetentionPrometheus drift: %v", RetentionPrometheus)

@@ -1,26 +1,9 @@
-// Package agent is the SaaS-side LLM orchestrator that turns a
-// [rules.Finding] into a human-readable explanation and a unified
-// `values.yaml` diff suggesting the fix.
-//
-// Phase 1 contract:
-//
-//   - Inputs are sanitised via internal/agent/llm/sanitizer before
-//     leaving the boundary. Customer secrets, file paths, and prompt
-//     injection markers are stripped or wrapped.
-//   - The LLM call goes through an [LLMClient] interface so:
-//   - tests run against a deterministic [FakeLLMClient];
-//   - the real Anthropic SDK adapter ships behind an env flag
-//     without forcing every test path to depend on it.
-//   - The Composer enforces a per-call cost cap (see [Budget]). Calls
-//     that would exceed the cap return [ErrBudgetExceeded] before any
-//     network egress.
-//   - Every call records the cost via [BudgetRecorder.Record] so the
-//     llm_calls table captures the running total per tenant.
-//
-// The package deliberately does NOT depend on the GitHub API. PR
-// opening lives in cmd/api once the GitHub App credentials are wired;
-// this package is responsible only for the structured outputs that
-// feed into prwriter and into the Apply Fix workflow.
+// Package agent turns a rules.Finding into an explanation + unified
+// values.yaml diff via an LLM. Sanitises input through
+// internal/agent/llm/sanitizer; enforces the per-call $0.40 cap
+// before any network egress; records every call against the
+// llm_calls table. Does not touch the GitHub API — that lives in
+// cmd/api once the Apply Fix workflow opens the PR.
 package agent
 
 import (
@@ -35,8 +18,8 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// LLMRequest is the shape every model adapter consumes. Keep it small;
-// the orchestrator owns prompt construction, not the caller.
+// LLMRequest stays small so adapters only marshal; prompt
+// construction is the orchestrator's job.
 type LLMRequest struct {
 	System    string
 	User      string
@@ -44,8 +27,6 @@ type LLMRequest struct {
 	MaxTokens int
 }
 
-// LLMResponse is what the adapter returns. The orchestrator decides
-// what to do with it; the adapter only marshals the call.
 type LLMResponse struct {
 	Text         string
 	InputTokens  int
@@ -55,14 +36,11 @@ type LLMResponse struct {
 }
 
 // LLMClient is the seam between the orchestrator and any model. Real
-// implementations live behind build tags (`agent_anthropic.go`); tests
-// use [FakeLLMClient].
+// adapters live behind build tags; tests use FakeLLMClient.
 type LLMClient interface {
 	Generate(ctx context.Context, req LLMRequest) (LLMResponse, error)
 }
 
-// FixRequest is the orchestrator's input. A finding + the original
-// chart bytes; everything else is derived.
 type FixRequest struct {
 	Finding    rules.Finding
 	ChartYAML  string
@@ -71,8 +49,6 @@ type FixRequest struct {
 	SystemHint string // optional extra context from the calling workflow
 }
 
-// FixResponse is the orchestrator's output. The PR-writer renders the
-// markdown; this package only commits to the structured fields.
 type FixResponse struct {
 	Explanation  string
 	UnifiedDiff  string
@@ -81,19 +57,18 @@ type FixResponse struct {
 	Sanitised    sanitizer.Result
 }
 
-// Budget enforces the per-call cost cap stated in backend CLAUDE.md
-// ("Cost cap per analysis: $0.40"). Cents are the wire unit.
+// Budget enforces the per-call cost cap from CLAUDE.md ($0.40). Cents
+// are the wire unit.
 type Budget struct {
 	PerCallCents int64
 }
 
-// BudgetRecorder persists every LLM call's cost for attribution. The
-// production implementation writes to the llm_calls table.
+// BudgetRecorder writes every call to the llm_calls table for
+// attribution.
 type BudgetRecorder interface {
 	Record(ctx context.Context, t tenancy.Context, call CallRecord) error
 }
 
-// CallRecord is one row in the llm_calls table.
 type CallRecord struct {
 	Workload     string
 	Model        string
@@ -103,40 +78,25 @@ type CallRecord struct {
 	Suspicious   bool
 }
 
-// Composer wires the sanitizer, LLM client, budget guard, and
-// recorder. Construct once per process; safe for concurrent use as
-// long as the LLMClient and BudgetRecorder are.
+// Composer is safe for concurrent use as long as its dependencies are.
 type Composer struct {
 	LLM      LLMClient
 	Budget   Budget
 	Recorder BudgetRecorder
 }
 
-// ErrNilLLM is returned when Compose is called without an LLM.
 var ErrNilLLM = errors.New("agent: nil LLMClient")
 
-// ErrBudgetExceeded is returned when a call's projected cost would
-// exceed the per-call cap. The composer refuses to call the LLM in
-// this case — the budget gate is the only place that decides whether
-// money gets spent.
+// ErrBudgetExceeded is the one place money-spend decisions happen — if
+// the projected cost exceeds the cap we refuse the call before any
+// network egress.
 var ErrBudgetExceeded = errors.New("agent: per-call budget exceeded")
 
-// ErrInjection is returned when the sanitizer flags injection markers
-// AND the calling workflow has opted to refuse rather than wrap. The
-// default policy is to wrap (so the LLM treats the input as untrusted
-// data); workflows that handle very sensitive material flip the
-// switch.
+// ErrInjection fires only when a workflow has opted out of the default
+// wrap-and-continue policy in favour of fail-closed. Most callers wrap.
 var ErrInjection = errors.New("agent: prompt-injection markers detected")
 
-// GenerateFix orchestrates one call. The Composer is responsible for:
-//
-//  1. sanitising the chart YAML (PII strip + injection wrap);
-//  2. building the system + user prompts;
-//  3. enforcing the budget;
-//  4. invoking the LLMClient;
-//  5. recording the call for attribution.
-//
-// The returned FixResponse is suitable as input to prwriter.Render.
+// GenerateFix returns a FixResponse ready to feed prwriter.Render.
 func (c *Composer) GenerateFix(ctx context.Context, t tenancy.Context, req FixRequest) (FixResponse, error) {
 	if c.LLM == nil {
 		return FixResponse{}, ErrNilLLM
@@ -153,9 +113,8 @@ func (c *Composer) GenerateFix(ctx context.Context, t tenancy.Context, req FixRe
 	system := buildSystem(req)
 	user := buildUser(req, san.Output)
 
-	// Budget gate. We use a worst-case token estimate (input + max
-	// output) and the model's listed rate so we never pay for a call
-	// we've already decided is too expensive.
+	// Worst-case projection — never pay for a call we've already
+	// decided is too expensive.
 	if c.Budget.PerCallCents > 0 {
 		projected := projectedCostCents(req.Model, len(system)+len(user), req.maxTokens())
 		if projected > c.Budget.PerCallCents {
@@ -195,13 +154,12 @@ func (c *Composer) GenerateFix(ctx context.Context, t tenancy.Context, req FixRe
 }
 
 func (r FixRequest) maxTokens() int {
-	// Phase 1 default; per CLAUDE.md, Sonnet is the workhorse and 4k
-	// output handles a unified diff comfortably.
+	// 4k handles a unified diff comfortably on the Sonnet workhorse.
 	return 4096
 }
 
-// buildSystem composes the cached prefix every Anthropic call shares.
-// Keep this stable: Anthropic's prompt caching keys on byte-equality.
+// buildSystem is the cached prefix every Anthropic call shares. Keep
+// it byte-stable: Anthropic prompt caching keys on equality.
 func buildSystem(req FixRequest) string {
 	var b strings.Builder
 	b.WriteString("You are Optiqor, a deterministic Kubernetes cost-and-security review assistant. ")
@@ -231,15 +189,13 @@ func buildUser(req FixRequest, chart string) string {
 	return b.String()
 }
 
-// extractExplanation pulls the `EXPLANATION:` section out of the
-// LLM's response. If the model didn't follow the protocol we fall
-// back to the raw text so the workflow still has something to render.
+// extractExplanation falls back to raw text when the model ignored
+// the EXPLANATION:/DIFF: protocol, so the workflow always has
+// something to render.
 func extractExplanation(s string) string {
 	return cutSection(s, "EXPLANATION:", "DIFF:")
 }
 
-// extractDiff pulls the `DIFF:` section. The diff is everything after
-// the marker, trimmed.
 func extractDiff(s string) string {
 	idx := strings.Index(s, "DIFF:")
 	if idx < 0 {
@@ -261,24 +217,23 @@ func cutSection(s, start, end string) string {
 	return strings.TrimSpace(s[a : a+b])
 }
 
-// projectedCostCents is the budget gate's worst-case estimator. The
-// numbers track the published Anthropic rates for the Phase-1 default
-// model lineup; update when prices change.
+// projectedCostCents is the budget gate's worst-case estimator —
+// update when Anthropic prices change.
 func projectedCostCents(model string, inputChars, maxOutputTokens int) int64 {
-	// Rough heuristic: 1 token ≈ 4 input chars for English.
+	// 1 token ≈ 4 input chars for English.
 	inputTokens := int64(inputChars) / 4
 	outputTokens := int64(maxOutputTokens)
 	in, out := perMillionCents(model)
 	cents := (inputTokens*in + outputTokens*out) / 1_000_000
 	if cents < 1 {
-		return 1 // round up — a $0.00x call still costs the customer credit somewhere
+		return 1
 	}
 	return cents
 }
 
-// perMillionCents returns (input_cents_per_million_tokens, output_cents_per_million_tokens)
-// for the configured model. Unknown models default to Sonnet pricing so
-// the budget gate never silently undercharges.
+// perMillionCents returns input + output cents per million tokens.
+// Unknown models default to Sonnet pricing so the gate never
+// undercharges.
 func perMillionCents(model string) (in, out int64) {
 	switch normaliseModel(model) {
 	case "claude-haiku":
@@ -304,8 +259,7 @@ func normaliseModel(m string) string {
 	return "claude-sonnet"
 }
 
-// SortedModels returns the recognised model identifiers, useful in
-// /v1/models metadata. Stable order for diff stability.
+// SortedModels has stable order for /v1/models metadata diff stability.
 func SortedModels() []string {
 	out := []string{"claude-haiku", "claude-sonnet", "claude-opus"}
 	sort.Strings(out)

@@ -1,21 +1,7 @@
 // Package prwriter renders the Markdown PR comment Optiqor posts on
-// every Helm/Kustomize PR, and prepares the Apply Fix PR body.
-//
-// The renderer is pure functions over [Comment] — no GitHub API calls
-// live here. The HTTP/PR opener lives in cmd/api once the GitHub App
-// integration ships; until then the rendered comment is exposed via
-// POST /v1/apply-fixes for preview.
-//
-// Style choices baked in:
-//
-//   - Cost first, security as a bonus (matches the CLI brand voice).
-//   - Every comment carries the accuracy disclosure; the sandbox-mode
-//     vs agent-mode band is the only thing that varies.
-//   - Findings are stable-sorted so the same input always renders the
-//     same bytes — diffable in code review.
-//
-// The mandatory disclosure string MUST match the CLI exactly so users
-// see the same language end-to-end. Update both in lockstep.
+// every Helm/Kustomize PR. Pure functions over [Comment]; no GitHub
+// API calls. Findings are stable-sorted so the same input renders
+// byte-identical output across runs.
 package prwriter
 
 import (
@@ -30,24 +16,20 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
-// AccuracyDisclosureSandbox matches the CLI verbatim. Don't reflow.
+// AccuracyDisclosureSandbox must match the CLI verbatim — keep both
+// strings in lockstep so users see the same language end-to-end.
 const AccuracyDisclosureSandbox = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
 
-// AccuracyDisclosureAgent is the agent-mode (paid customer) variant.
 const AccuracyDisclosureAgent = "Agent accuracy: ±15%. Backed by 30 days of Prometheus + your AWS bill."
 
-// Mode discriminates which accuracy line a comment renders.
+// Mode selects which accuracy disclosure renders.
 type Mode int
 
 const (
-	// ModeSandbox renders the ±40% disclosure (CLI / unauth sandbox).
 	ModeSandbox Mode = iota
-	// ModeAgent renders the ±15% disclosure (paid agent customer).
 	ModeAgent
 )
 
-// Comment is what callers build and hand to [Render]. Only public
-// fields belong here; rendering logic owns nothing else.
 type Comment struct {
 	Chart                  string
 	Tenant                 string
@@ -57,19 +39,15 @@ type Comment struct {
 	AnnualSavingsUSDCents  int64
 	Mode                   Mode
 	GeneratedAt            time.Time
-	OptiqorAnalysisURL     string // e.g. https://optiqor.dev/r/<hash>
-	ApplyFixURL            string // populated when an Apply Fix PR has been opened
-	// SecurityVisible toggles the bonus security section. Default off;
-	// most customers turn it on after they've cleaned up cost first.
+	OptiqorAnalysisURL     string
+	ApplyFixURL            string
+	// SecurityVisible defaults off; customers opt in after they've
+	// cleaned up cost.
 	SecurityVisible bool
 }
 
-// ErrNoChart is returned when callers forget to set the chart name —
-// the rendered comment would be context-free without it.
 var ErrNoChart = errors.New("prwriter: chart name required")
 
-// Render returns the Markdown comment. Always pure; never errors for
-// reasons beyond invalid input.
 func Render(c Comment) (string, error) {
 	if c.Chart == "" {
 		return "", ErrNoChart
@@ -115,8 +93,8 @@ type view struct {
 	GeneratedAtISO     string
 }
 
-// generatedAt zeros out sub-second resolution so the rendered comment
-// stays diff-stable across CI reruns within the same minute.
+// generatedAt truncates to the minute so renders stay diff-stable
+// across CI reruns within the same minute.
 func generatedAt(t time.Time) time.Time {
 	if t.IsZero() {
 		return time.Now().UTC().Truncate(time.Minute)

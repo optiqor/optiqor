@@ -94,7 +94,6 @@ export default function PricingPage() {
         </Container>
       </section>
 
-      {/* FAQ */}
       <Section border>
         <Container size="md">
           <Eyebrow>FAQ</Eyebrow>

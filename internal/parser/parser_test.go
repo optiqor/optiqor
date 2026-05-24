@@ -48,8 +48,7 @@ func TestParseValues_Malformed_WrapsErrParse(t *testing.T) {
 }
 
 func TestParseValues_Empty_WrapsErrParse(t *testing.T) {
-	// The CLI parser rejects an empty document; backend handlers should
-	// surface that as a 400 via errors.Is(err, ErrParse).
+	// Empty input must surface as 400 via errors.Is(err, ErrParse).
 	_, err := ParseValues(strings.NewReader(""))
 	if err == nil {
 		t.Fatal("empty stream should error")

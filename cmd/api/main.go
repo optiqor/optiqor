@@ -1,9 +1,4 @@
 // Command api is the Optiqor HTTP API server.
-//
-// It serves the GitHub App webhook receiver, sandbox endpoints, and
-// customer dashboard API. Phase 1 wires config + structured logging +
-// readiness checks + graceful shutdown; concrete handlers land in
-// later phases.
 package main
 
 import (
@@ -59,7 +54,6 @@ func run() int {
 
 	checks := healthz.NewRegistry()
 	checks.Register("self", healthz.AlwaysOK)
-	// Future phases register: postgres, redis, temporal, anthropic.
 
 	metrics := telemetry.NewRegistry()
 	httpRequests := metrics.NewCounter("optiqor_http_requests_total",
@@ -118,13 +112,9 @@ func run() int {
 }
 
 // buildMux returns the HTTP routes the api serves. Exposed so tests can
-// hit handlers without spinning a real socket.
-//
-// webhookSecret is the GitHub App secret used to verify inbound webhook
-// signatures. Empty in dev; required in prod (config.Validate enforces).
-//
-// metrics is the Prometheus registry exposed under /metrics; callers
-// wishing to skip the /metrics endpoint may pass nil.
+// hit handlers without spinning a real socket. Empty webhookSecret =
+// dev mode (config.Validate enforces it in prod); nil metrics skips the
+// /metrics endpoint.
 func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byte, metrics *telemetry.Registry) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -152,10 +142,9 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 		mux.Handle("GET /metrics", metrics.Handler())
 	}
 
-	// GitHub OAuth callback. Phase 5 wires the full code-exchange +
-	// session-issuance flow; Phase 1 records the (state, code) pair
-	// to the structured log and returns a deterministic ack so the
-	// app's redirect URI is reachable during onboarding.
+	// Phase 5 wires the code-exchange + session-issuance flow; Phase 1
+	// returns a deterministic ack so the redirect URI is reachable
+	// during onboarding.
 	mux.HandleFunc("GET /oauth/github/callback", func(w http.ResponseWriter, r *http.Request) {
 		state := r.URL.Query().Get("state")
 		code := r.URL.Query().Get("code")
@@ -163,8 +152,8 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 			http.Error(w, "missing ?code", http.StatusBadRequest)
 			return
 		}
-		// We never log the raw code; only that one was received and
-		// the state token (used to bind the redirect to the originator).
+		// Never log the raw code; only that one was received and the
+		// state token (binds the redirect to the originator).
 		logger.InfoContext(r.Context(), "github oauth callback",
 			"state_len", len(state),
 			"code_len", len(code),
@@ -178,17 +167,12 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 		})
 	})
 
-	// pprof endpoints — gated on the OPTIQOR_ADMIN_TOKEN header to
-	// avoid exposing them to unauthenticated traffic. Empty token
-	// disables pprof entirely (the safe default in dev).
+	// pprof gated on OPTIQOR_ADMIN_TOKEN header. Empty token disables
+	// pprof entirely (safe default in dev).
 	if os.Getenv("OPTIQOR_ADMIN_TOKEN") != "" {
 		mountPProf(mux, os.Getenv("OPTIQOR_ADMIN_TOKEN"))
 	}
 
-	// GitHub App webhook receiver: HMAC-verifies the signature and
-	// (in later phases) hands off to a Temporal workflow. Phase 1
-	// returns 202 with a stable ack body so the GitHub App can be
-	// installed and reach a healthy endpoint during onboarding.
 	gh := vcs.NewGitHub()
 	mux.HandleFunc("POST /webhooks/github", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.GitHubWebhookMaxBytes))
@@ -198,8 +182,8 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 		}
 		signature := r.Header.Get("X-Hub-Signature-256")
 		if len(webhookSecret) == 0 {
-			// Dev mode: do not verify, but log loudly so a misconfigured
-			// prod doesn't accidentally accept unsigned events.
+			// Dev mode skips verification but logs loudly so a
+			// misconfigured prod can't quietly accept unsigned events.
 			logger.WarnContext(r.Context(), "github webhook signature not verified (dev mode)")
 		} else if err := gh.VerifyWebhook(webhookSecret, signature, body); err != nil {
 			logger.WarnContext(r.Context(), "github webhook rejected", "err", err)
@@ -222,19 +206,12 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 	return mux
 }
 
-// tenantMiddleware extracts the tenant scope from a request and stashes
-// it in the context so downstream handlers can call tenancy.FromContext
-// without parsing headers themselves.
-//
-// Phase 1: tenant id comes from the `X-Optiqor-Tenant` header. Real auth
-// (JWT-extracted tenant claim) lands in Phase 5 alongside GitHub OAuth;
-// the extractor function is pluggable so the middleware itself doesn't
-// change when auth lands.
+// TenantExtractor is pluggable so the Phase-5 JWT extractor can replace
+// the Phase-1 header reader without touching middleware call sites.
 type TenantExtractor func(r *http.Request) (tenancy.Context, error)
 
-// HeaderTenantExtractor returns the Phase-1 dev extractor that reads
-// X-Optiqor-Tenant. Public endpoints (/healthz, /readyz, /webhooks/*)
-// must be routed AROUND this middleware.
+// HeaderTenantExtractor reads X-Optiqor-Tenant. Public endpoints
+// (/healthz, /readyz, /webhooks/*) must route AROUND this middleware.
 func HeaderTenantExtractor(r *http.Request) (tenancy.Context, error) {
 	id := r.Header.Get("X-Optiqor-Tenant")
 	if id == "" {
@@ -248,8 +225,8 @@ func HeaderTenantExtractor(r *http.Request) (tenancy.Context, error) {
 	}, nil
 }
 
-// requireTenant wraps an http.Handler so every request reaching it has
-// a validated tenant scope in its context.
+// requireTenant guarantees a validated tenant scope in the context of
+// every request reaching next.
 func requireTenant(extract TenantExtractor, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t, err := extract(r)
@@ -266,8 +243,8 @@ func requireTenant(extract TenantExtractor, next http.Handler) http.Handler {
 	})
 }
 
-// withRequestID assigns or echoes an X-Request-ID header and stashes the
-// id in the request context so logs/traces can join on it.
+// withRequestID assigns or echoes X-Request-ID and stashes it on the
+// context so logs/traces can join on it.
 func withRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-ID")
@@ -283,15 +260,16 @@ func withRequestID(next http.Handler) http.Handler {
 func newRequestID() string {
 	var b [12]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// fall back to time-based id; never block requests on entropy.
+		// Never block requests on entropy starvation.
 		return fmt.Sprintf("t-%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b[:])
 }
 
-// withPanicRecovery converts a panicking handler into a 500 response
-// with a structured-log entry that includes the stack trace. The
-// request continues; the surrounding server keeps serving.
+// withPanicRecovery turns a panicking handler into a 500 and keeps the
+// surrounding server alive. Middleware order is request-id →
+// access-log → panic-recovery so panics still carry a request id and
+// the access log records the 500.
 func withPanicRecovery(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -305,20 +283,17 @@ func withPanicRecovery(logger *slog.Logger, next http.Handler) http.Handler {
 				"method", r.Method,
 				"stack", string(debug.Stack()),
 			)
-			// Best-effort write: if the handler already wrote headers
-			// the client is hosed, but we still log. WriteHeader on a
-			// committed response is a no-op + warning in stdlib.
+			// If the handler already committed the response this is a
+			// no-op + stdlib warning; we still want the log line.
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}()
 		next.ServeHTTP(w, r)
 	})
 }
 
-// withAccessLog wraps an http.Handler with structured access logging
-// and Prometheus metrics. Every request emits one info-level slog
-// record carrying method, path, status, duration, bytes, and the
-// request id. Sub-200ms requests are logged at debug for noise control
-// when the api is healthy.
+// withAccessLog emits one log line + Prometheus sample per request.
+// Sub-200ms healthy requests drop to debug to keep info-level noise
+// down when the api is steady.
 func withAccessLog(logger *slog.Logger, requests telemetry.Counter, latency telemetry.Histogram, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -352,17 +327,15 @@ func withAccessLog(logger *slog.Logger, requests telemetry.Counter, latency tele
 	})
 }
 
-// mountPProf wires the standard pprof handlers behind a constant-time
-// header check. Production deploys keep OPTIQOR_ADMIN_TOKEN long and
-// rotated; the operator fetches profiles via:
+// mountPProf wires the stdlib pprof handlers behind a constant-time
+// header check. Operators fetch profiles via:
 //
 //	curl -H "X-Admin-Token: $TOKEN" https://api.optiqor.dev/debug/pprof/heap > heap.pb
 func mountPProf(mux *http.ServeMux, token string) {
 	require := func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			got := r.Header.Get("X-Admin-Token")
-			// Constant-time compare avoids timing-side-channel leakage
-			// when the token is wrong.
+			// Constant-time compare blocks the timing side-channel.
 			if subtleConstantTimeEq(got, token) != 1 {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
@@ -377,8 +350,8 @@ func mountPProf(mux *http.ServeMux, token string) {
 	mux.Handle("GET /debug/pprof/trace", require(http.HandlerFunc(pprofTrace)))
 }
 
-// recordingWriter intercepts the status code and byte count without
-// changing the streaming behaviour of the underlying ResponseWriter.
+// recordingWriter intercepts status + byte count without changing the
+// streaming behaviour of the underlying ResponseWriter.
 type recordingWriter struct {
 	http.ResponseWriter
 	status      int

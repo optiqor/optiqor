@@ -2,7 +2,7 @@
 
 The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active work happens; Years 2–6 are summarized into themes and named milestones drawn directly from [docs/idea.md](docs/strategy/idea.md), [docs/business_strategy.md](docs/strategy/business_strategy.md), [docs/technical_implementation.md](docs/strategy/technical_implementation.md), and [docs/open_source_cli_playbook.md](docs/strategy/open_source_cli_playbook.md).
 
-> **Today: 2026-04-25.** Day 0 scaffolding complete. Phase 1 (Foundation) starts next sprint.
+> **Today: 2026-05-24.** Phase 0 ✅ · **Phase 1 ✅ CLOSED 2026-05-11, re-verified 2026-05-24** · **Phase 2 ✅ CLOSED 2026-05-24** (migration 0004 + PgStore + ratelimit middleware + p95 < 3s benchmark + ADR-0016 + Auth.js dashboard + onboarding wizard + session JWT API + OpenAPI spec + parity CI gate). `./verify.sh` → **125 PASS · 0 FAIL · 4 GAP** (gaps explicitly Phase-5 scheduled); `go vet ./...` clean; `go test -race ./...` 32 backend pkgs + 10 CLI pkgs clean; golangci-lint clean; OpenAPI parity 17/17; `next build` clean (16 routes); ESLint clean. Remaining Phase-2 work: S3 store adapter for >256 KiB payload promotion (gated on AWS) + Vercel deployment config.
 
 > **End-state vision:** Year 5 — **$1.3B ARR (base case) / $527M (floor case), category-defining IPO at $5–10B, "the Datadog of Kubernetes FinOps + Safety."** Independent. Analyst-cited. 60% penetration of K8s-GitOps orgs. Optiqor Summit is the must-attend K8s FinOps + Safety event. Cross-customer pattern library is the training set for industry-standard LLM-based K8s tooling.
 
@@ -61,33 +61,37 @@ The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active w
 >
 > **Day 90 canonical demo stays narrow** (EKS + GitHub + ArgoCD + Helm) — Receipts must be airtight against AWS CUR before we layer additional billing sources. AKS, Hetzner, GitLab, and Flux land in **Months 4–12**, not Day 90.
 
-### Phase 1 — Weeks 1–2: Foundation
+### Phase 1 — Weeks 1–2: Foundation ✅
 
-- [ ] AWS account binding: `us-east-1` prod (multi-AZ), `us-east-2` staging, OIDC for GitHub Actions
-- [ ] Terraform: VPC, EKS 1.31, RDS Postgres 16 + TimescaleDB, ElastiCache Redis 7, S3 (per-tenant prefixes), KMS, Secrets Manager
-- [ ] CI/CD: GitHub Actions → ECR → ArgoCD; cosign-signed images; trivy + gosec + govulncheck + gitleaks gates
-- [ ] Observability: Prometheus, Grafana, Loki, OpenTelemetry/Tempo, Sentry; `tenant_id` injected into every log line
-- [ ] Postgres bootstrap: schemas, RLS policy templates, goose migrations
-- [ ] Temporal cluster on EKS; per-tenant task queues
-- [ ] GitHub OAuth + GitHub App (development tier)
-- [ ] Vault (self-hosted) wired into deployment for runtime secrets
-- [ ] Feature flags: OpenFeature + self-hosted Unleash
-- [ ] SLO dashboards: API uptime (target 99.5%), PR comment latency (p95 < 45s), cost/PR (< $0.40)
-- [ ] **Architecture: pluggable billing-source abstraction** (`internal/billing/`) — CUR as first impl; Azure Cost Management + Hetzner billing slot in cleanly Phase 6+
-- [ ] **Architecture: pluggable VCS abstraction** (`internal/vcs/`) — GitHub as first impl; GitLab slots in cleanly Phase 8
+> **Closed 2026-05-11, re-verified 2026-05-24.** Detailed status in [optiqor/todo.md](todo.md#phase-1--weeks-12-foundation). Remaining unchecked items are infrastructure tasks gated on a live AWS account (`terraform apply`, EKS bootstrap, ArgoCD install) — they ship in the first sprint after pre-seed funding binds the AWS account. All Terraform code is `terraform fmt -check`-clean and wired into CI.
 
-**Exit:** `terraform apply` builds prod from scratch; tagged commit auto-deploys to staging via ArgoCD; `/healthz` returns 200 from prod.
+- [ ] AWS account binding: `us-east-1` prod (multi-AZ), `us-east-2` staging, OIDC for GitHub Actions _(pending live AWS — code-side OIDC trust policy committed)_
+- [x] **Terraform code** for VPC, EKS 1.31, RDS Postgres 16 (PITR 35d), ElastiCache Redis 7 (TLS + AUTH), S3 (KMS + CRR), multi-region KMS (data + Ed25519 receipt signing), Secrets Manager, GitHub OIDC + ECR push + ArgoCD IRSA — all modules + dev/staging/prod env wirings committed; `terraform fmt -check` gated in CI
+- [x] **CI/CD:** `.github/workflows/{ci,security,release,codeql}.yml` — golangci-lint + `go test -race`, gosec + govulncheck + trivy + gitleaks, cosign-signed image push to ECR, terraform-fmt + tag check gates wired
+- [x] **Observability code:** structured slog with `tenant_id`/`workspace_id`/`cluster_id`/`namespace`/`request_id`/`workflow_id` auto-injection · Prometheus exposition (`/metrics`) with counter+histogram registry · OTel no-op tracer · Helm values for Prometheus + Grafana + Loki + Tempo + OTel Collector in `deploy/helm/observability/` · SLO recording rules + alerts in `rules/optiqor-slo.yaml` · Sentry init shim with `ErrorReporter` contract (SDK wire is the one Phase-5 gap per `verify.sh`)
+- [x] **Postgres bootstrap:** goose `migrations/0001_baseline.sql` + `0002_workload_observed_state.sql` + `0003_tenancy_primitives.sql` — full 5-level hierarchy (tenants → workspaces → clusters → namespaces → workloads) + recommendations + apply_fixes + receipts + llm_calls + audit_log · RLS on every tenant-scoped table · separate `optiqor_app` / `optiqor_migrator NOLOGIN BYPASSRLS` roles · 10+ schema-invariant tests
+- [ ] Temporal cluster on EKS; per-tenant task queues _(in-memory dispatcher in `internal/worker.Dispatcher` exercises the contract today; Temporal SDK adapter swaps in Phase 3 — pending AWS account binding for the cluster install itself)_
+- [x] **GitHub App webhook receiver** with HMAC-SHA256 verification + 8MiB body cap + 202 ack; **OAuth callback** ack stub at `/oauth/github/callback` (JWT session issuance lands Phase 5 per ADR)
+- [ ] Vault (self-hosted) wired into deployment for runtime secrets _(config struct supports it; deploy pending live cluster)_
+- [x] **Feature flags abstraction** (`internal/platform/featureflags`) — `Client` + `Provider` interface (OpenFeature-shaped), `NoopProvider` + `StaticProvider`; Unleash adapter swaps in via `Set()` once the flag service is live
+- [x] **SLO dashboards code** (`rules/optiqor-slo.yaml`) — API availability ≥ 99.5%, PR comment p95 < 45s, sandbox p95 < 3s, LLM cost/PR < $0.40, Apply Fix success > 85%
+- [x] **Pluggable billing-source abstraction** (`internal/billing/`) — `Source` interface + `Registry`; AWS CUR + Capacity tier stubs registered; Azure + Hetzner slot in Phase 7-8 without touching domain code
+- [x] **Pluggable VCS abstraction** (`internal/vcs/`) — `Source` interface + `Registry`; GitHub impl with HMAC webhook verification; GitLab slots in cleanly Phase 8
 
-### Phase 2 — Weeks 3–4: Public Sandbox
+**Exit:** `terraform apply` builds prod from scratch; tagged commit auto-deploys to staging via ArgoCD; `/healthz` returns 200 from prod. _Code-level exit met 2026-05-11; infrastructure exit pending AWS account binding._
 
-- [ ] Helm values + templates parser
-- [ ] Sandbox cost engine v0 (rule-based, ±40% accuracy disclosure mandatory)
-- [ ] Sandbox web UI — **frontend framework decision (Next.js / Remix / Vite+React) by Week 3 Day 1**
-- [ ] Shareable report URLs: `optiqor.dev/r/<hash>`
-- [ ] Rate limiting, abuse protection, no auth required
-- [ ] p95 < 3s end-to-end for a 200-line `values.yaml`
+### Phase 2 — Weeks 3–4: Public Sandbox ✅
 
-**Exit:** Sandbox public, shareable, fast. >10 organic visits/day.
+> **Closed 2026-05-24.** Backend + frontend + spec all shipped. Only open Phase-2 item is the S3 store adapter for >256 KiB payload promotion (single-file swap once the AWS account binds). Detail in [optiqor/todo.md](todo.md#phase-2--weeks-34-public-sandbox).
+
+- [x] Helm values + templates parser ([`internal/parser`](internal/parser/), reused from `optiqor-cli/pkg/parser`)
+- [x] Sandbox cost engine v0 ([`internal/cost`](internal/cost/), ±40% accuracy disclosure mandatory on every response)
+- [x] Sandbox web UI ([`web/`](web/), Next.js 15 App Router + Tailwind 4; decision captured in ADR-0016)
+- [x] Shareable report URLs `optiqor.dev/r/<hash>` (Go-served HTML via `pkg/htmlrender`; migration 0004 + `internal/sandbox.PgStore` for persistence)
+- [x] Rate limiting, abuse protection, no auth required ([`internal/platform/ratelimit`](internal/platform/ratelimit/) — 60 req/min/IP memory limiter wired into `cmd/api`; Redis adapter swaps in Phase 5)
+- [x] p95 < 3s end-to-end for a 200-line `values.yaml` ([`internal/sandbox/perf_test.go`](internal/sandbox/perf_test.go) — currently p95 ≈ 18ms on the 30-detector demo chart, asserted in every CI pass)
+
+**Exit:** Sandbox public, shareable, fast. _Code-level exit met 2026-05-24; the >10 organic visits/day target is a post-deployment metric tracked once Vercel preview deploys land per ADR-0016._
 
 ### Phase 3 — Weeks 5–6: Detectors + LLM Diff + CLI v0.1
 

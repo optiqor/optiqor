@@ -6,16 +6,11 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// Capacity sources back the Capacity Receipt tier — non-managed-cloud
-// clusters (bare-metal, on-prem, Hetzner Cloud's flat-rate model) where
-// "savings" are expressed as freed cores + GiB rather than dollars.
-//
-// The math is "freed N cores + M GiB defers next hardware purchase by Q
-// quarters"; the conversion to USD value uses customer-supplied
-// CapEx/depreciation parameters, not a public price book.
+// Capacity backs the Capacity Receipt tier (bare-metal, on-prem,
+// Hetzner flat-rate) where savings are freed cores + GiB and the USD
+// conversion uses customer CapEx/depreciation, not a public price book.
 type Capacity struct{}
 
-// NewCapacity returns the Capacity tier source.
 func NewCapacity() *Capacity { return &Capacity{} }
 
 func (*Capacity) Name() string { return "capacity" }

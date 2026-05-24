@@ -10,32 +10,26 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// RollbackInitiator is the seam between the watchdog and the GitHub
-// rollback-PR opener. Production uses [PRPublisher]; the workflow
-// keeps a narrow interface so tests don't need a full pull-request
-// fixture.
+// RollbackInitiator is narrow on purpose so tests don't need a full
+// pull-request fixture. Production wires PRPublisher behind it.
 type RollbackInitiator interface {
 	OpenRollback(ctx context.Context, t tenancy.Context, applyFixID string, reason string) error
 }
 
-// RollbackWatchdogPayload is the dispatcher input for one poll cycle.
 type RollbackWatchdogPayload struct {
 	State    rollback.State    `json:"state"`
 	Snapshot rollback.Snapshot `json:"snapshot"`
 	Now      time.Time         `json:"now"`
 }
 
-// RollbackWatchdog runs one watchdog step.
 type RollbackWatchdog struct {
 	Initiator RollbackInitiator
 }
 
-// Name is the dispatcher key.
 func (RollbackWatchdog) Name() string { return "rollback_watchdog" }
 
-// Execute decides whether the merged change crossed a bound. If so,
-// it opens a rollback PR via the initiator. The workflow does NOT
-// itself drive the polling cadence — Temporal schedules re-submission.
+// Execute runs one poll cycle. Temporal drives the cadence by
+// scheduling re-submission; the workflow itself is single-shot.
 func (w RollbackWatchdog) Execute(ctx context.Context, t tenancy.Context, raw []byte) error {
 	if w.Initiator == nil {
 		return fmt.Errorf("rollback_watchdog: nil initiator")

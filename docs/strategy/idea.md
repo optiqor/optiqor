@@ -1,6 +1,6 @@
 # Optiqor — The Idea (Kubernetes-First)
 
-> **The GitOps-native cost and security layer for Kubernetes. Every Helm PR, reviewed by an AI that ships the fix.**
+> **Optiqor reviews every Kubernetes PR, ships the cost and security fix, and proves the savings against your cloud bill.**
 
 > ## Amendments — 2026-04-26
 >
@@ -83,19 +83,33 @@ Optiqor lives in the PR with hands. Write the diff. Verify the savings. Catch th
 
 ### 4.2 The Existing Tooling Has Structural Gaps
 
-| Tool | What it does well | Relationship to Optiqor |
-|------|-------------------|--------------------------|
-| **Kubecost** (IBM) | Cluster-side cost dashboard, multi-cluster allocation, Prometheus-native | **Loop-opener; we're the loop-closer.** Kubecost surfaces the waste; Optiqor catches it at PR time before the next regression ships. A team running both is better served than either alone. `optiqor.dev/works-with/kubecost` (Month 4 GTM) makes the complementary story explicit. |
-| **Kubecost GitHub Action** (`cost-prediction-action`) | Attempted a PR cost-prediction comment in 2023 | Abandoned alpha — v0.1.1, 31 stars, last updated April 2023. Shows Kubecost saw the category but the simple version wasn't enough to earn adoption — the easy version is a feature, not a product |
-| **Cast AI** | Autonomous cluster takeover, spot migration, bin-packing | Black-box autopilot, scary for platform teams, K8s-only |
-| **Sedai / ScaleOps** | ML-based autonomous pod management | Cluster-side not PR-native, limited visibility into changes |
-| **Infracost** | Terraform cost PRs, AutoFix for Terraform | Does not parse Helm, Kustomize, or K8s manifests |
-| **Wiz / Snyk** | K8s security detection | Detection only — findings sit in Jira for weeks |
-| **Kubernetes-native (VPA, HPA, Goldilocks)** | Free, built-in rightsizing | No cost visibility, no PR workflow, manual tuning |
+The K8s cost / rightsizing space splits into **two product categories the market often conflates** — but they are architectural opposites, not points on a spectrum:
 
-**Honest positioning:** Optiqor is the first working Kubernetes PR remediation platform. A simple cost-prediction comment (which Kubecost attempted) is not the product — a simple cost-prediction comment without Prometheus-grounded confidence, Apply Fix generation, signed receipts, and Auto-Rollback is precisely what Kubecost tried and shelved. The category exists. The easy version doesn't work. We're building the version that does.
+- **Category A — True GitOps PR-write.** Tool opens a PR in the customer's git repo with the proposed change. Customer reviews + merges. ArgoCD/Flux reconciles the merge to the cluster. **Git stays the single source of truth.** Audit trail is `git log`; rollback is `git revert`.
+- **Category B — Autonomous-with-annotations.** Tool runs a mutating admission webhook or eviction+mutate webhook in-cluster and applies changes directly. ArgoCD is configured with `ignoreDifferences` to mask the resulting drift. **Cluster becomes the source of truth; git goes stale.** Audit trail is tool-internal; rollback is tool-specific.
 
-*"Kubecost showed you the price. Optiqor writes the fix, verifies the savings, and catches regressions."*
+Optiqor sits alone in Category A for Kubernetes. Every other rightsizing vendor sits in Category B, even when their marketing pages say "GitOps integration." See `business_strategy.md §8.1` for the vendor-by-vendor placement.
+
+| Tool | Category | How it applies changes | Relationship to Optiqor |
+|------|----------|------------------------|--------------------------|
+| **Kubecost** (IBM) | Dashboard only | Reports only — no apply path | **Loop-opener; we're the loop-closer.** Kubecost surfaces the waste; Optiqor catches it at PR time before the next regression ships. `optiqor.dev/works-with/kubecost` (Month 4 GTM) makes the complementary story explicit. |
+| **Kubecost GitHub Action** (`cost-prediction-action`) | Category A (abandoned) | PR comment only (no Apply Fix) | Abandoned alpha — v0.1.1, 31 stars, last updated April 2023. The simple version of Category A; evidence that the easy version doesn't earn adoption. |
+| **Cast AI** | Category B | Custom autoscaler replaces Cluster Autoscaler; applies changes directly | Black-box autopilot. Breaks GitOps single-source-of-truth. Scary for platform teams. |
+| **Sedai / ScaleOps** | Category B | Autonomous agent / mutating webhook | Same GitOps-drift problem as PerfectScale/StormForge. Racing toward "fully autonomous, no PR review needed" — the opposite philosophy from Optiqor. |
+| **PerfectScale / StormForge** | Category B (marketed as GitOps-friendly) | Eviction+mutate webhook / mutating admission webhook; ArgoCD `ignoreDifferences` masks drift | **Their "GitOps integration" is "we'll tell ArgoCD to ignore the drift we create"** — confirmed by their own docs. Not Category A. The categorical difference matters to GitOps-disciplined buyers. |
+| **Infracost** | Category A (Terraform domain) | Opens PR with AutoFix patch | Proves the Category A pattern works at Fortune 500 scale for Terraform. Optiqor is the K8s equivalent. No overlap in the K8s parser/cluster surface. |
+| **Wiz / Snyk** | Detection only | Findings to Jira | Detection only — findings sit in Jira for weeks. |
+| **Kubernetes-native (VPA / HPA / Goldilocks / Karpenter)** | Primitives (not products) | Reactive in-cluster controllers; no change attribution | Free, built-in. Optiqor sits **above** these, not against them. Per ADR-0012, we coexist; we don't replace. |
+
+**Honest positioning:** Optiqor is the first working Kubernetes platform in **Category A** — the only one where git stays the single source of truth and rightsizing changes flow through the customer's existing review + merge + GitOps reconcile workflow. The Category-B vendors apply changes to the cluster and ask ArgoCD to ignore the drift; Optiqor writes the change to git and lets the customer's GitOps stack work the way it was designed. **These are product opposites, not variants of the same product.** A platform team that built ArgoCD specifically to enforce "git is the truth" will reject Category B for the same reason they reject Cast AI's black-box autopilot — it breaks the property they built GitOps to preserve.
+
+The single sharpest sentence in the pitch:
+
+> *"PerfectScale and StormForge apply changes to your cluster and tell ArgoCD to ignore them. Optiqor writes the change to your git. Your GitOps single-source-of-truth stays intact, your audit trail stays in git, and your rollback is `git revert`."*
+
+A simple cost-prediction comment (which Kubecost attempted at v0.1.1 and abandoned) is not the product — Category A *plus* Prometheus-grounded confidence, Apply Fix generation, signed receipts, and Auto-Rollback is. The category exists. The easy version doesn't work. We're building the version that does.
+
+*"Kubecost showed you the price. Optiqor writes the fix to your git, verifies the savings against your bill, and catches regressions."*
 
 ### 4.3 Internal posture on OpenCost (private brain map — do not surface)
 

@@ -9,20 +9,15 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
-// ErrNotFound is returned by Store.Get when a hash is not present.
 var ErrNotFound = errors.New("sandbox: share not found")
 
-// SharedAnalysis is what /r/<hash> serves. The structured fields
-// (Source, Workloads, Findings) let the share handler render either
-// JSON (Accept: application/json) or HTML (default, via pkg/htmlrender)
-// without re-parsing the cached body.
+// SharedAnalysis is what /r/<hash> serves. The structured fields let
+// the share handler render JSON or HTML without re-parsing Body.
 type SharedAnalysis struct {
 	Hash      string
-	Body      []byte // canonical JSON representation, ready to stream
+	Body      []byte // canonical JSON, ready to stream
 	MediaType string
 
-	// Structured echo of the analysis so callers can render alternate
-	// formats. Populated by the analyze handler when storing.
 	Source    string
 	Workloads int
 	Findings  []rules.Finding
@@ -31,29 +26,25 @@ type SharedAnalysis struct {
 	ExpiresAt time.Time
 }
 
-// Store persists sanitised analyses under their content hash. The
-// production implementation backs onto Postgres; tests + local dev
-// use [InMemoryStore].
+// Store persists sanitised analyses under their content hash. Prod
+// backs onto Postgres (PgStore); tests and local dev use InMemoryStore.
 type Store interface {
 	Put(ctx context.Context, sa SharedAnalysis) error
 	Get(ctx context.Context, hash string) (SharedAnalysis, error)
 }
 
-// InMemoryStore is the in-process implementation. Safe for concurrent
-// use; entries respect ExpiresAt on read so callers don't see stale
-// data.
+// InMemoryStore is safe for concurrent use; Get respects ExpiresAt so
+// callers never see stale data.
 type InMemoryStore struct {
 	mu  sync.RWMutex
 	now func() time.Time
 	m   map[string]SharedAnalysis
 }
 
-// NewInMemoryStore returns an empty store using time.Now for expiry.
 func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{m: map[string]SharedAnalysis{}, now: time.Now}
 }
 
-// Put stores the entry, overwriting any prior version.
 func (s *InMemoryStore) Put(_ context.Context, sa SharedAnalysis) error {
 	if sa.Hash == "" {
 		return errors.New("sandbox: empty hash")
@@ -64,8 +55,8 @@ func (s *InMemoryStore) Put(_ context.Context, sa SharedAnalysis) error {
 	return nil
 }
 
-// Get returns the entry or ErrNotFound. Expired entries are returned
-// as ErrNotFound so callers can lazily prune.
+// Get returns ErrNotFound for both missing and expired entries so
+// callers can lazily prune.
 func (s *InMemoryStore) Get(_ context.Context, hash string) (SharedAnalysis, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -79,7 +70,6 @@ func (s *InMemoryStore) Get(_ context.Context, hash string) (SharedAnalysis, err
 	return sa, nil
 }
 
-// Len is for tests.
 func (s *InMemoryStore) Len() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

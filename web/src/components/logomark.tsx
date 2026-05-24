@@ -1,13 +1,7 @@
 import { cx } from "@/lib/cx";
 
-/**
- * Logomark — the Q ring + cyan dot/needle. Built as an inline SVG so
- * it stays crisp at every size, theme-aware, and accessible.
- *
- * The mark is geometric: a 60° arc-open ring with a single radial
- * needle terminating in a glowing dot. Mirrors the optiqor-hori.jpg
- * brand asset without depending on it.
- */
+// Logomark mirrors the optiqor-hori.jpg brand asset as inline SVG so it
+// stays crisp at every size and inherits currentColor for theming.
 export function Logomark({
   size = 28,
   className,
@@ -36,14 +30,12 @@ export function Logomark({
           </radialGradient>
         </defs>
       )}
-      {/* outer Q ring — opens at the bottom-right */}
       <path
         d="M32 6 a26 26 0 1 1 -18.4 44.4"
         stroke="currentColor"
         strokeWidth="4"
         strokeLinecap="round"
       />
-      {/* radial needle */}
       <line
         x1="32"
         y1="32"
@@ -56,18 +48,12 @@ export function Logomark({
       {glow && (
         <circle cx="22" cy="32" r="14" fill="url(#opt-dot-glow)" opacity="0.9" />
       )}
-      {/* glowing dot — pinned at the left-of-centre to echo the JPG */}
       <circle cx="22" cy="32" r="4.5" fill="#22D3EE" />
-      {/* small inner dot at needle tip */}
       <circle cx="50" cy="50" r="2.5" fill="#22D3EE" />
     </svg>
   );
 }
 
-/**
- * Wordmark — Q ring + "optiqor" in mono caps. Used in the header and
- * footer. The mono caps are the brand voice: terminal-grade.
- */
 export function Wordmark({
   size = 22,
   className,

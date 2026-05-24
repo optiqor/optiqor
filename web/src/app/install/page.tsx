@@ -2,10 +2,17 @@ import type { Metadata } from "next";
 import { Container } from "@/components/container";
 import { Eyebrow, Section } from "@/components/section";
 import { ButtonLink } from "@/components/button";
+import { auth } from "@/auth";
+import { OnboardingWizard } from "./onboarding-wizard";
 
 export const metadata: Metadata = { title: "Install" };
 
-export default function InstallPage() {
+export default async function InstallPage() {
+  const session = await auth();
+  // Phase 2 uses the Auth.js subject as the tenant id; Phase 5 swaps to
+  // the signed JWT.
+  const tenantId = (session?.user as { id?: string } | undefined)?.id ?? session?.user?.email ?? "";
+
   return (
     <>
       <section className="pt-20 pb-12 md:pt-28 md:pb-16">
@@ -19,6 +26,12 @@ export default function InstallPage() {
             Paid plans add the in-cluster agent for exact-number savings and
             signed Receipts — those instructions live behind the trial.
           </p>
+
+          {tenantId ? (
+            <div className="mt-10">
+              <OnboardingWizard tenantId={tenantId} />
+            </div>
+          ) : null}
         </Container>
       </section>
 

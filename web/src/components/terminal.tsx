@@ -1,14 +1,7 @@
 import { cx } from "@/lib/cx";
 
-/**
- * Terminal — visual frame of a CLI session. Renders children inside a
- * monospace surface with a chrome bar carrying a window title + a
- * caret indicator. Strict in styling so the marketing terminal blocks
- * always look like the real CLI output.
- *
- * Use SeverityToken / Savings / Muted to colour data the way the CLI
- * theme does (hairline borders, colored bg-tints — no rainbow).
- */
+// Terminal frames a CLI session in monospace. Pair with SeverityToken
+// / Savings / Muted so the marketing terminal matches real CLI output.
 export function Terminal({
   title = "optiqor analyze ./charts/api",
   children,

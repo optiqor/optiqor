@@ -1,10 +1,7 @@
-// Package telemetry provides metrics and tracing primitives for Optiqor.
-//
-// Phase 1 ships a minimal in-house Prometheus text-format exposition
-// (counters + histograms only) and a no-op OpenTelemetry tracer
-// interface. The full client_golang and OTel SDK swap in cleanly when
-// the observability stack lands in Phase 6 — every call site goes
-// through the interfaces here so the swap is local to this package.
+// Phase 1: in-house Prometheus text-format exposition (counters +
+// histograms only) and a no-op tracer. client_golang and the OTel SDK
+// land in Phase 6 — call sites go through these interfaces so the swap
+// is local to this package.
 package telemetry
 
 import (
@@ -17,25 +14,21 @@ import (
 	"sync"
 )
 
-// Counter is a monotonically-increasing scalar.
 type Counter interface {
 	Inc()
 	Add(delta float64)
 	Value() float64
 }
 
-// Histogram approximates a distribution. Phase 1 surface is bucket-counts
-// only; quantile estimation arrives with client_golang.
+// Histogram surface is bucket-counts only in Phase 1; quantile
+// estimation arrives with client_golang.
 type Histogram interface {
 	Observe(v float64)
-	// Snapshot returns a deterministic copy of bucket counts in ascending
-	// upper-bound order, plus the running sum and count.
 	Snapshot() HistogramSnapshot
 }
 
-// HistogramSnapshot is a point-in-time view used by the Prometheus
-// text-format renderer. Boundaries are upper bounds (le, in Prometheus
-// terminology); the final +Inf bucket is appended automatically.
+// HistogramSnapshot mirrors Prometheus exposition: Boundaries are le
+// upper bounds; the +Inf bucket is appended by the renderer.
 type HistogramSnapshot struct {
 	Boundaries []float64
 	Counts     []uint64
@@ -43,15 +36,13 @@ type HistogramSnapshot struct {
 	Count      uint64
 }
 
-// Registry holds the metrics this process exports. Construct one per
-// process; share by pointer.
+// Registry is one per process, shared by pointer.
 type Registry struct {
 	mu         sync.Mutex
 	counters   map[string]*counter
 	histograms map[string]*histogram
 }
 
-// NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
 	return &Registry{
 		counters:   map[string]*counter{},
@@ -59,8 +50,8 @@ func NewRegistry() *Registry {
 	}
 }
 
-// NewCounter registers (or returns an existing) counter. Re-registration
-// with the same name+labels is a no-op so cmd/* boot can be re-entrant.
+// NewCounter is idempotent on (name, labels) so cmd/* boot can be
+// re-entrant under fork/exec patterns.
 func (r *Registry) NewCounter(name, help string, labels map[string]string) Counter {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -73,9 +64,8 @@ func (r *Registry) NewCounter(name, help string, labels map[string]string) Count
 	return c
 }
 
-// NewHistogram registers (or returns an existing) histogram with the
-// given upper-bound bucket boundaries. Boundaries must be ascending;
-// the final +Inf bucket is appended internally.
+// NewHistogram is idempotent on (name, labels). Boundaries must be
+// strictly ascending; the +Inf bucket is appended internally.
 func (r *Registry) NewHistogram(name, help string, labels map[string]string, boundaries []float64) Histogram {
 	if !ascending(boundaries) {
 		panic("telemetry: histogram boundaries must be strictly ascending")
@@ -97,8 +87,7 @@ func (r *Registry) NewHistogram(name, help string, labels map[string]string, bou
 	return h
 }
 
-// Handler returns an http.Handler that emits the Prometheus
-// text-format exposition. Mount on /metrics.
+// Handler emits the Prometheus text-format exposition. Mount on /metrics.
 func (r *Registry) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
@@ -106,13 +95,12 @@ func (r *Registry) Handler() http.Handler {
 	})
 }
 
-// WriteText writes the exposition to w. Exposed so tests can assert on
-// raw output without a server roundtrip.
+// WriteText exposes the rendering for tests to assert without an HTTP
+// roundtrip.
 func (r *Registry) WriteText(w io.Writer) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Counters first, deterministic order.
 	cnames := make([]string, 0, len(r.counters))
 	for k := range r.counters {
 		cnames = append(cnames, k)
@@ -139,7 +127,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 		}
 		_, _ = fmt.Fprintf(w, "# TYPE %s histogram\n", h.name)
 		snap := h.Snapshot()
-		// Cumulative counts per Prometheus convention.
+		// Buckets are cumulative per Prometheus convention.
 		var cum uint64
 		for i, b := range snap.Boundaries {
 			cum += snap.Counts[i]
@@ -155,22 +143,19 @@ func (r *Registry) WriteText(w io.Writer) error {
 	return nil
 }
 
-// Tracer is the contract domain code uses for distributed tracing.
-// Phase 1 ships a no-op tracer; the OTel SDK adapter lands with the
-// observability rollout (Phase 6).
+// Tracer is what domain code calls; the OTel SDK adapter lands in
+// Phase 6.
 type Tracer interface {
 	Start(ctx context.Context, name string) (context.Context, Span)
 }
 
-// Span represents an in-flight trace span.
 type Span interface {
 	End()
 	SetAttribute(key string, value any)
 	RecordError(err error)
 }
 
-// NoopTracer returns a tracer that does nothing. Safe default; callers
-// can replace via DI when a real tracer is configured at boot.
+// NoopTracer is the safe default; replaced via DI at boot.
 func NoopTracer() Tracer { return noopTracer{} }
 
 type noopTracer struct{}
@@ -184,8 +169,6 @@ type noopSpan struct{}
 func (noopSpan) End()                         {}
 func (noopSpan) SetAttribute(_ string, _ any) {}
 func (noopSpan) RecordError(_ error)          {}
-
-// ---- internals ----
 
 type counter struct {
 	mu     sync.Mutex
@@ -205,7 +188,7 @@ type histogram struct {
 	help       string
 	labels     map[string]string
 	boundaries []float64
-	counts     []uint64 // len == len(boundaries) + 1; last is the overflow (+Inf) bucket
+	counts     []uint64 // len(boundaries)+1; last is the +Inf overflow bucket
 	sum        float64
 	total      uint64
 }
@@ -290,7 +273,7 @@ func mergeLabels(base map[string]string, k, v string) map[string]string {
 }
 
 func escapeLabelValue(s string) string {
-	// Per Prometheus exposition: backslash, double-quote, newline.
+	// Prometheus exposition escapes: backslash, double-quote, newline.
 	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
 	return r.Replace(s)
 }

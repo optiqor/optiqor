@@ -11,9 +11,8 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// PreviewRequest is the wire input. The TenantHeader middleware
-// extracts the tenant id and stuffs it in context; this handler
-// reads from there.
+// PreviewRequest is the wire input. Tenant id comes from context
+// (TenantHeader middleware), not the body.
 type PreviewRequest struct {
 	Chart     string        `json:"chart"`
 	Workload  string        `json:"workload"`
@@ -22,9 +21,8 @@ type PreviewRequest struct {
 	Finding   rules.Finding `json:"finding"`
 }
 
-// PreviewResponse echoes the rendered PR body + extracted diff + the
-// sanitizer result so the operator can confirm the LLM saw clean
-// input.
+// PreviewResponse surfaces the sanitizer result alongside the rendered
+// body and diff so the operator can confirm the LLM saw clean input.
 type PreviewResponse struct {
 	MarkdownBody string         `json:"markdown_body"`
 	UnifiedDiff  string         `json:"unified_diff"`
@@ -32,16 +30,12 @@ type PreviewResponse struct {
 	Sanitizer    map[string]any `json:"sanitizer"`
 }
 
-// Handler serves POST /v1/apply-fixes. The handler doesn't open a
-// GitHub PR yet — that's a Phase-3 add — it returns what *would* be
-// posted so the customer can review.
+// Handler serves POST /v1/apply-fixes. Doesn't open a GitHub PR yet
+// (Phase 3) — returns what would be posted for customer review.
 type Handler struct {
 	Composer *agent.Composer
 }
 
-// Preview composes the markdown body + LLM-generated diff and
-// returns both so the customer can review before authorising a real
-// PR open.
 func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -110,7 +104,6 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// Mount registers the route on the supplied mux.
 func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/apply-fixes", h.Preview)
 }

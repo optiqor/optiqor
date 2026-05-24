@@ -35,7 +35,7 @@ func TestResult_TotalUSDCentsSkipsNonUSD(t *testing.T) {
 	r := Result{Items: []LineItem{
 		{TotalUSDCents: 100, Currency: "USD"},
 		{TotalUSDCents: 200, Currency: "USD"},
-		{TotalUSDCents: 999, Currency: "EUR"}, // skipped — caller must convert first
+		{TotalUSDCents: 999, Currency: "EUR"}, // caller must convert before aggregation
 		{TotalUSDCents: 50, Currency: ""},     // empty defaults to USD
 	}}
 	if got, want := r.TotalUSDCents(), int64(350); got != want {
@@ -94,15 +94,12 @@ func TestAWSCUR_QueryGuards(t *testing.T) {
 	now := time.Now()
 	good := Window{Start: now.Add(-time.Hour), End: now}
 
-	// no tenant
 	if _, err := src.Query(context.Background(), tenancy.Context{}, good); !errors.Is(err, tenancy.ErrNoTenant) {
 		t.Errorf("expected ErrNoTenant, got %v", err)
 	}
-	// invalid window
 	if _, err := src.Query(context.Background(), tenancy.Context{TenantID: "t1"}, Window{}); err == nil {
 		t.Error("expected window-validation error")
 	}
-	// happy path returns ErrNotImplemented in Phase 1
 	if _, err := src.Query(context.Background(), tenancy.Context{TenantID: "t1"}, good); !errors.Is(err, ErrNotImplemented) {
 		t.Errorf("expected ErrNotImplemented, got %v", err)
 	}

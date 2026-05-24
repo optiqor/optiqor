@@ -1,14 +1,8 @@
-// Package argocd parses ArgoCD `Application` (and `ApplicationSet`)
-// custom resources into the normalised gitops.Source shape.
-//
-// ArgoCD has two manifest layouts in the wild:
-//
-//  1. Single-source: `spec.source` is a map.
-//  2. Multi-source: `spec.sources` is a list (ArgoCD ≥ 2.6).
-//
-// We support both and emit one gitops.Source per inner source so the
-// downstream cost engine treats the multi-source case as N independent
-// chart/dir analyses.
+// Package argocd parses ArgoCD Application manifests (both the legacy
+// single-`source` and the ≥2.6 `sources` list layouts) into
+// gitops.Source values. Multi-source apps emit one Source per inner
+// entry so the cost engine treats them as independent chart/dir
+// analyses.
 package argocd
 
 import (
@@ -21,20 +15,17 @@ import (
 	"github.com/optiqor/optiqor/internal/parser/gitops"
 )
 
-// SupportedAPIVersions lists the ArgoCD API versions this reader
-// accepts. Future ArgoCD versions add fields, not (typically) remove
-// them, so this is conservative.
+// SupportedAPIVersions is intentionally conservative: ArgoCD adds
+// fields across versions but rarely removes them.
 var SupportedAPIVersions = []string{
 	"argoproj.io/v1alpha1",
 }
 
-// SupportedKinds lists the resource kinds this reader recognises.
 var SupportedKinds = []string{"Application"}
 
-// Parse reads one or more YAML documents from r and returns every
-// `Source` extracted from any `Application` it finds. Documents whose
-// kind is not in SupportedKinds are skipped silently — they may be
-// other CRDs, Lists, or comments-only documents.
+// Parse extracts Sources from every recognised Application in r.
+// Unrecognised documents (other CRDs, Lists, comment-only) are skipped
+// silently so a multi-doc bundle still parses.
 func Parse(r io.Reader) ([]gitops.Source, error) {
 	raw, err := io.ReadAll(r)
 	if err != nil {
@@ -58,9 +49,8 @@ func Parse(r io.Reader) ([]gitops.Source, error) {
 	return out, nil
 }
 
-// applicationDoc mirrors the shape of an ArgoCD Application manifest
-// at the depth we care about. Fields outside this set are tolerated
-// but ignored.
+// applicationDoc mirrors an ArgoCD Application at the depth we care
+// about; extra fields are tolerated and ignored.
 type applicationDoc struct {
 	APIVersion string          `yaml:"apiVersion"`
 	Kind       string          `yaml:"kind"`
@@ -135,9 +125,8 @@ func (d applicationDoc) sources() []gitops.Source {
 	return out
 }
 
-// bytesReader is a tiny adapter so yaml.NewDecoder can read from a
-// byte slice without reaching for bytes.NewReader (we want to keep
-// this package's import graph small).
+// bytesReader avoids pulling in bytes.NewReader to keep this package's
+// import graph minimal.
 func bytesReader(b []byte) io.Reader { return &readerImpl{b: b} }
 
 type readerImpl struct {

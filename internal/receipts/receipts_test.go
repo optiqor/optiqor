@@ -69,9 +69,8 @@ func TestSignVerify_RoundTrip(t *testing.T) {
 }
 
 func TestSign_Deterministic(t *testing.T) {
-	// Same input + same key → same wire-format signature.
-	// Property is critical: transparency-log indexes assume signatures
-	// are functionally pure.
+	// Transparency-log indexes assume Sign is functionally pure: same
+	// receipt + same key MUST produce identical wire bytes.
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +104,6 @@ func TestVerify_TamperedPayloadFails(t *testing.T) {
 	reg.Add("k1", pub)
 	signed, _ := iss.Sign(mkReceipt())
 
-	// Flip a byte in the payload half.
 	dot := strings.IndexByte(signed, '.')
 	tampered := signed[:dot+5] + "x" + signed[dot+6:]
 	_, err = Verify(tampered, reg)
@@ -136,7 +134,7 @@ func TestVerify_UnknownKeyIDFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	reg := NewStaticRegistry()
-	reg.Add("k1", pub) // wrong id
+	reg.Add("k1", pub) // issuer signs under "rotated-key"; registry only knows "k1"
 
 	signed, _ := iss.Sign(mkReceipt())
 	if _, err := Verify(signed, reg); err == nil {
@@ -149,8 +147,8 @@ func TestVerify_WrongPublicKeyFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Different keypair under the SAME id — simulates a registry that
-	// was tricked into trusting a wrong pubkey.
+	// Different keypair registered under the same id — simulates a
+	// registry tricked into trusting the wrong pubkey.
 	otherPub, _, _ := ed25519.GenerateKey(nil)
 	reg := NewStaticRegistry()
 	reg.Add("k1", otherPub)
@@ -167,7 +165,7 @@ func TestVerify_MalformedInputFails(t *testing.T) {
 	cases := []string{
 		"",
 		"only-one-part",
-		"!!!.!!!", // invalid base64
+		"!!!.!!!",
 		"AA..BB",
 	}
 	for _, c := range cases {

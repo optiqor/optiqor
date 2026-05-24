@@ -10,11 +10,8 @@ const styles: Record<Severity, string> = {
   OK:   "bg-[color:var(--color-ok)]/12 text-[color:var(--color-ok)]",
 };
 
-/**
- * SeverityBadge — mirrors the CLI's HIGH/MED/LOW badges. Uppercase
- * mono, tight tracking, fixed letter-spacing so a column of badges
- * aligns visually like a table.
- */
+// SeverityBadge mirrors the CLI's HIGH/MED/LOW badges. Fixed min-width
+// + mono tracking so a column of badges aligns like a table column.
 export function SeverityBadge({
   level,
   className,
@@ -37,9 +34,6 @@ export function SeverityBadge({
   );
 }
 
-/**
- * Pill — tag-style label for status, version, "Year 1", etc.
- */
 export function Pill({
   children,
   variant = "default",

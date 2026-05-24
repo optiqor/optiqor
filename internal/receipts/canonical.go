@@ -6,19 +6,13 @@ import (
 	"errors"
 )
 
-// Canonical serialises r into a stable byte sequence suitable for
-// hashing or signing. Two signers presented with the same Receipt MUST
-// produce the same bytes.
+// Canonical serialises r into the byte sequence that gets signed. The
+// determinism properties relied on by Verify and the transparency log:
+//   - struct fields emitted in declaration order (encoding/json guarantee);
+//   - SetEscapeHTML(false) so timestamps and signatures pass through verbatim;
+//   - trailing newline stripped (encoding/json's Encoder appends one).
 //
-// Properties of the encoding:
-//
-//   - struct fields are emitted in declaration order (Go's json package
-//     guarantees this);
-//   - no HTML-escaping (so timestamps + signatures don't get mangled);
-//   - no trailing newline.
-//
-// The function is intentionally tiny so a second-pair audit of the
-// Receipt → bytes path is fast.
+// Two signers given the same Receipt MUST produce identical bytes.
 func Canonical(r Receipt) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)

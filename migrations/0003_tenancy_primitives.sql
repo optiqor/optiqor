@@ -1,35 +1,20 @@
 -- +goose Up
 -- +goose StatementBegin
 --
--- Tenancy primitives — additive helpers + pure refactor of the
--- baseline RLS policies. Semantics are unchanged for tenant-scoped
--- reads: a row is visible iff its tenant_id matches the current
--- session's app.tenant_id setting. The refactor exists to:
+-- Additive tenancy helpers + pure refactor of the baseline RLS
+-- policies. Semantics unchanged for tenant-scoped reads.
 --
---   1. Hide the `current_setting('app.tenant_id', true)` cast behind
---      a single function so the bind contract is owned in one place.
---   2. Add a per-transaction superuser context flag (audited on every
---      flip) so cross-tenant aggregation jobs (Leaderboard, pattern
---      library) can run without forking the schema.
---   3. Add time-ordered UUIDs (v7) for append-heavy hot tables added
---      later (metric_samples, llm_calls follow-ups). Existing v4 IDs
---      stay — this is an *additional* generator, not a rename.
---   4. Add a standard set_updated_at() trigger so every table with an
---      `updated_at` column stays correct without app-level discipline.
---
--- The session variable name stays `app.tenant_id` to match the
--- internal/platform/db bind helper. Do not rename it without
--- updating the Go side in the same commit.
---
--- See docs/strategy/technical_implementation.md §4.2.2 for rationale.
+-- The session variable name stays `app.tenant_id` to match
+-- internal/platform/db.BindTenant. Renaming on either side silently
+-- breaks every tenant-scoped query. See
+-- docs/strategy/technical_implementation.md §4.2.2.
 
 -- ---------------------------------------------------------------
 -- v7 UUID generator (time-ordered).
 -- ---------------------------------------------------------------
--- RFC 9562 §5.7 layout: 48-bit unix-ms timestamp || 4-bit version=7
--- || 12 bits of random || 2-bit variant=10 || 62 bits of random.
--- Pure SQL, no extensions — keeps the migration portable across
--- managed Postgres (RDS, Aurora, Hetzner) without needing pg_uuidv7.
+-- RFC 9562 §5.7. Pure SQL so we stay portable across managed Postgres
+-- (RDS, Aurora, Hetzner) without depending on pg_uuidv7. Existing v4
+-- IDs stay — this is an additional generator, not a rename.
 CREATE OR REPLACE FUNCTION uuid_generate_v7()
 RETURNS UUID
 LANGUAGE plpgsql
@@ -44,7 +29,8 @@ BEGIN
     unix_ms    := (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT;
     rand_bytes := gen_random_bytes(10);
 
-    -- 6 bytes timestamp (big-endian) || 10 bytes random
+    -- Layout: 6-byte big-endian unix-ms || 10 bytes random, then
+    -- version=7 nibble in byte 6 and variant=10 in byte 8.
     uuid_bytes := set_byte(
                     set_byte(
                       set_byte(
@@ -59,10 +45,8 @@ BEGIN
 
     uuid_bytes := substring(uuid_bytes FROM 1 FOR 16);
 
-    -- Version = 7 in the high nibble of byte 6.
     uuid_bytes := set_byte(uuid_bytes, 6,
                     ((get_byte(uuid_bytes, 6) & 15) | 112));
-    -- Variant = 10 in the high two bits of byte 8.
     uuid_bytes := set_byte(uuid_bytes, 8,
                     ((get_byte(uuid_bytes, 8) & 63) | 128));
 
@@ -78,9 +62,7 @@ COMMENT ON FUNCTION uuid_generate_v7() IS
 -- ---------------------------------------------------------------
 -- current_tenant_id() — single source of truth for the bind.
 -- ---------------------------------------------------------------
--- Reads the session variable set by internal/platform/db.BindTenant.
--- Returns NULL if unset, which (combined with the policy) means the
--- query sees zero rows — fail-closed.
+-- Returns NULL when unset so RLS evaluates to deny (fail-closed).
 CREATE OR REPLACE FUNCTION current_tenant_id()
 RETURNS UUID
 LANGUAGE sql
@@ -99,11 +81,10 @@ COMMENT ON FUNCTION current_tenant_id() IS
 -- ---------------------------------------------------------------
 -- is_superuser_context() — per-transaction bypass flag.
 -- ---------------------------------------------------------------
--- Used by cross-tenant aggregation jobs (Helm Chart Efficiency
--- Leaderboard, pattern library, fleet-wide moat queries). The flag
--- must be flipped through set_superuser_context(), which writes an
--- audit_log row on every flip — direct set_config calls bypass the
--- audit and are caught by the gosec lint rule in CI.
+-- Used by cross-tenant aggregations (Leaderboard, pattern library).
+-- Must be flipped through set_superuser_context() so every flip
+-- audits; direct set_config bypasses the audit and is caught by the
+-- gosec lint rule in CI.
 CREATE OR REPLACE FUNCTION is_superuser_context()
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -129,9 +110,8 @@ BEGIN
 
     PERFORM set_config('app.superuser_context', CASE WHEN p_on THEN 'on' ELSE 'off' END, true);
 
-    -- Audit row uses NULL tenant_id intentionally (cross-tenant op).
-    -- The audit_log RLS policy is rewritten below to allow inserts
-    -- with NULL tenant_id when is_superuser_context() is true.
+    -- NULL tenant_id is intentional (cross-tenant op). The audit_log
+    -- policy below admits it under is_superuser_context().
     INSERT INTO audit_log (tenant_id, actor_kind, actor_id, action, resource, metadata)
     VALUES (
         NULL,
@@ -150,12 +130,12 @@ COMMENT ON FUNCTION set_superuser_context(BOOLEAN, TEXT) IS
     'a disable in defer; the session-scoped flag does not survive '
     'commit but defensive disable keeps long transactions safe.';
 
--- Allow NULL tenant_id on audit_log so cross-tenant ops can audit.
 ALTER TABLE audit_log
     ALTER COLUMN tenant_id DROP NOT NULL;
 
 -- ---------------------------------------------------------------
--- set_updated_at() trigger — keep updated_at correct.
+-- set_updated_at() trigger — keep updated_at correct without
+-- per-call-site app discipline.
 -- ---------------------------------------------------------------
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER
@@ -167,7 +147,6 @@ BEGIN
 END
 $$;
 
--- Attach to every baseline table that has an updated_at column.
 CREATE TRIGGER tenants_set_updated_at
     BEFORE UPDATE ON tenants
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -181,11 +160,11 @@ CREATE TRIGGER recommendations_set_updated_at
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------
--- Rewrite tenant_isolation policies to use the helpers.
+-- Rewrite tenant_isolation policies via the helpers.
 -- ---------------------------------------------------------------
--- Semantics: row visible iff tenant matches OR superuser context.
--- The audit_log policy additionally admits NULL tenant_id under
--- superuser context so cross-tenant ops can record themselves.
+-- Row visible iff tenant matches OR superuser context. audit_log also
+-- admits NULL tenant_id under superuser so cross-tenant ops can
+-- record themselves.
 
 DROP POLICY IF EXISTS tenant_isolation ON workspaces;
 DROP POLICY IF EXISTS tenant_isolation ON clusters;
@@ -222,8 +201,7 @@ CREATE POLICY tenant_isolation ON audit_log
         OR is_superuser_context()
     );
 
--- Grant execute on the helpers to the app role; the migrator role
--- already has it via owner privileges.
+-- optiqor_migrator already has EXECUTE via owner privileges.
 GRANT EXECUTE ON FUNCTION uuid_generate_v7()                TO optiqor_app;
 GRANT EXECUTE ON FUNCTION current_tenant_id()               TO optiqor_app;
 GRANT EXECUTE ON FUNCTION is_superuser_context()            TO optiqor_app;
@@ -243,7 +221,7 @@ DROP POLICY IF EXISTS tenant_isolation ON namespaces;
 DROP POLICY IF EXISTS tenant_isolation ON clusters;
 DROP POLICY IF EXISTS tenant_isolation ON workspaces;
 
--- Restore the baseline policies verbatim.
+-- Restore baseline policies verbatim.
 CREATE POLICY tenant_isolation ON workspaces
     USING (tenant_id::text = current_setting('app.tenant_id', true));
 CREATE POLICY tenant_isolation ON clusters

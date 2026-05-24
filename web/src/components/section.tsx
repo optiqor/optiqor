@@ -26,10 +26,7 @@ export function Section({
   );
 }
 
-/**
- * Eyebrow — small all-caps monospace label that sits above a section
- * heading. Mirrors a CLI section marker (`━━ Cost optimizations ━━`).
- */
+// Eyebrow mirrors the CLI section marker (`━━ Cost optimizations ━━`).
 export function Eyebrow({
   children,
   className,
