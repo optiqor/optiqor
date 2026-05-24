@@ -110,6 +110,7 @@ type Validator interface {
 // the first SeverityHard verdict stops the pipeline.
 type Pipeline struct {
 	validators []Validator
+	metrics    *Metrics
 }
 
 func NewPipeline(vs ...Validator) *Pipeline {
@@ -117,6 +118,13 @@ func NewPipeline(vs ...Validator) *Pipeline {
 		panic("validator: NewPipeline: zero validators")
 	}
 	return &Pipeline{validators: vs}
+}
+
+// WithMetrics attaches a metrics sink so hard rejections increment the
+// optiqor_validator_rejects_total counter. nil-safe.
+func (p *Pipeline) WithMetrics(m *Metrics) *Pipeline {
+	p.metrics = m
+	return p
 }
 
 // Run returns the union of every validator's non-nil verdict and the
@@ -137,6 +145,9 @@ func (p *Pipeline) Run(ctx context.Context, t tenancy.Context, c Candidate) (Res
 		if verdict.Severity == SeverityHard && out.Rejected == nil {
 			cp := *verdict
 			out.Rejected = &cp
+			if p.metrics != nil {
+				p.metrics.RecordReject(v.Name())
+			}
 		}
 	}
 	return out, nil
