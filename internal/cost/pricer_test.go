@@ -125,14 +125,13 @@ func TestTotal_SumsAcrossWorkloads(t *testing.T) {
 }
 
 func TestHourlyRateCents(t *testing.T) {
-	// 3504 cents/month / 730 hours = 4.8 → integer 4
+	// 3504 / 730 = 4.8 → 4 with integer division
 	if got := HourlyRateCents(3504); got != 4 {
 		t.Errorf("HourlyRateCents = %d, want 4", got)
 	}
 }
 
-// failingPricer always errors; used to assert the wrapper preserves the
-// inner error chain rather than swallowing it.
+// failingPricer asserts the wrapper preserves the inner error chain.
 type failingPricer struct{}
 
 func (failingPricer) VCPUPerMonthUSDCents(string) (int64, error) {

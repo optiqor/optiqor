@@ -68,9 +68,8 @@ func TestAnalyze_HappyPath(t *testing.T) {
 	if resp.ShareHash == "" {
 		t.Error("share_hash empty")
 	}
-	// Default handler (no PublicBaseURL) derives from request host —
-	// httptest defaults to example.com. The /r/<hash> suffix is the
-	// stable part; we assert that and not the origin.
+	// httptest default host is example.com; the /r/<hash> suffix is
+	// the stable part to assert on.
 	if !strings.Contains(resp.ShareURL, "/r/"+resp.ShareHash) {
 		t.Errorf("share_url = %q, missing /r/<hash> suffix", resp.ShareURL)
 	}
@@ -158,7 +157,6 @@ func TestAnalyze_StoresShareEntry_HTMLByDefault(t *testing.T) {
 	mux := http.NewServeMux()
 	h.Mount(mux)
 
-	// Default Accept → HTML report rendered via pkg/htmlrender.
 	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, http.NoBody)
 	getW := httptest.NewRecorder()
 	mux.ServeHTTP(getW, getReq)
@@ -198,7 +196,6 @@ func TestAnalyze_StoresShareEntry_JSONOnAccept(t *testing.T) {
 		t.Errorf("Accept:application/json branch missing disclosure key")
 	}
 
-	// ?format=json query also opts into JSON.
 	getReq2 := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash+"?format=json", http.NoBody)
 	getW2 := httptest.NewRecorder()
 	mux.ServeHTTP(getW2, getReq2)
@@ -222,7 +219,7 @@ func TestShare_404OnMissing(t *testing.T) {
 func TestShare_RespectsExpiry(t *testing.T) {
 	store := NewInMemoryStore()
 	now := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
-	store.now = func() time.Time { return now.Add(31 * 24 * time.Hour) } // simulate "tomorrow + 30 days"
+	store.now = func() time.Time { return now.Add(31 * 24 * time.Hour) }
 	_ = store.Put(context.Background(), SharedAnalysis{
 		Hash:      "x",
 		Body:      []byte("{}"),
@@ -251,7 +248,7 @@ func TestHashBytes_StableAcrossCalls(t *testing.T) {
 	if a != b {
 		t.Errorf("hash non-deterministic: %s vs %s", a, b)
 	}
-	if len(a) != 24 { // 12 bytes hex
+	if len(a) != 24 { // 12 bytes hex-encoded
 		t.Errorf("hash length = %d, want 24", len(a))
 	}
 }

@@ -1,25 +1,6 @@
-// Package sandbox is the public unauthenticated analysis surface
-// behind optiqor.dev/sandbox.
-//
-// The two HTTP handlers in this package are the operational mirror of
-// the CLI's offline `optiqor analyze`:
-//
-//	POST /v1/analyze    — take a values.yaml body, return findings + savings
-//	GET  /r/{hash}      — fetch a previously-shared sanitised analysis
-//
-// Both ship the mandatory ±40% accuracy disclosure. The handler never
-// reads tenant context — the surface is intentionally unauth.
-//
-// Implementation notes:
-//
-//   - Parser, detector library, and cost engine all live in their own
-//     packages; this file is a thin HTTP shell that composes them.
-//   - Body size is capped at 1MiB to bound the cost of a single
-//     request (paid sandbox traffic is metered separately).
-//   - The shared store is plugged in via interface so the unit tests
-//     don't need a database.
-//   - Content-hash is sha256 over the sanitised JSON body — same
-//     hash function the CLI uses for --share so URLs collide.
+// Package sandbox is the unauthenticated analysis surface behind
+// optiqor.dev/sandbox. Every response carries the mandatory ±40%
+// accuracy disclosure; handlers never read tenant context.
 package sandbox
 
 import (
@@ -40,32 +21,29 @@ import (
 	"github.com/optiqor/optiqor/internal/platform/config"
 )
 
-// AccuracyDisclosure is the mandatory ±40% line. Keep byte-identical
-// to the CLI string.
+// AccuracyDisclosure must stay byte-identical to the CLI string so
+// users see the same language end-to-end.
 const AccuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
 
-// ShareTTL is how long a /r/<hash> entry stays fetchable. Long enough
-// to share in a PR comment and review next morning.
+// ShareTTL is long enough to share in a PR comment and review the
+// next morning.
 const ShareTTL = 30 * 24 * time.Hour
 
-// Handler holds the dependencies needed to serve both routes. Pricer
-// and Region come from cmd/api config; Now is abstracted so tests
-// can pin time. PublicBaseURL builds the share_url surfaced to clients;
-// when empty the handler derives it from the request (Host header +
-// X-Forwarded-Proto), so dev defaults to http://localhost:3000/r/...
-// without any wiring.
+// Handler serves /v1/analyze and /r/{hash}. PublicBaseURL is the
+// user-facing origin for share links; when empty the handler derives
+// it from the request (Host + X-Forwarded-Proto) so dev gets
+// http://localhost:3000/r/... without wiring.
 type Handler struct {
 	Store         Store
 	Detectors     []rules.Detector // defaults to rules.All() when empty
 	Pricer        cost.Pricer
 	Region        string
 	Now           func() time.Time
-	PublicBaseURL string // e.g. "https://optiqor.dev" in prod; "" in dev
+	PublicBaseURL string
 }
 
-// AnalyzeResponse is the JSON shape returned by POST /v1/analyze.
-// Mirrors the CLI's JSON output so the same client library can
-// consume both.
+// AnalyzeResponse mirrors the CLI's JSON output so the same client
+// library consumes both.
 type AnalyzeResponse struct {
 	AccuracyDisclosure    string          `json:"accuracy_disclosure"`
 	Source                string          `json:"source"`
@@ -81,10 +59,8 @@ type AnalyzeResponse struct {
 }
 
 // Analyze parses the body and runs the deterministic rule engine.
-//
-//	400 — malformed YAML / empty body
-//	413 — body exceeds config.SandboxAnalyzeMaxBytes
-//	500 — pricer / store failure
+// 400 on malformed YAML, 413 above config.SandboxAnalyzeMaxBytes,
+// 500 on pricer/store failure.
 func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -92,8 +68,7 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.SandboxAnalyzeMaxBytes))
 	if err != nil {
-		// MaxBytesReader returns its own error type whose Error() string
-		// starts with "http: request body too large".
+		// MaxBytesReader's error Error() starts with "http: request body too large".
 		if strings.Contains(err.Error(), "request body too large") {
 			http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
 			return
@@ -119,7 +94,6 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	findings := rules.Run(ws, dets)
 
-	// Cost estimates per-workload (best effort; never block the response).
 	var costEsts []cost.Estimate
 	if h.Pricer != nil && h.Region != "" {
 		est := &cost.Estimator{Pricer: h.Pricer, Region: h.Region, AccuracyBandPct: 40}
@@ -147,8 +121,8 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 		AnnualSavingsUSD:      float64(totalSavingsCents(findings)*12) / 100,
 	}
 
-	// Hash the *canonical* body so two semantically identical inputs
-	// land at the same share URL.
+	// Hash the canonical body so byte-identical inputs collide on
+	// the same share URL across reanalysis.
 	body = canonicalYAML(body)
 	hash := hashBytes(body)
 	resp.ShareHash = hash
@@ -179,14 +153,11 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(out)
 }
 
-// Share serves GET /r/{hash}. By default it renders a styled HTML
-// page via pkg/htmlrender (Apache-2.0 — same renderer the CLI's
-// --html flag uses, so local files and share pages render
-// byte-identically). With `Accept: application/json` or `?format=json`
-// it returns the cached JSON instead.
-//
-//	200 — share found, body in requested format
-//	404 — unknown / expired hash
+// Share serves GET /r/{hash}. Default renders HTML via pkg/htmlrender
+// (same renderer the CLI's --html flag uses, so share pages and local
+// reports stay byte-identical). `Accept: application/json` or
+// `?format=json` returns the cached JSON instead. 404 covers both
+// missing and expired hashes.
 func (h *Handler) Share(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -218,8 +189,6 @@ func (h *Handler) Share(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default: HTML render. Re-using pkg/htmlrender keeps the share
-	// page and the CLI's local --html report in lockstep.
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = htmlrender.Render(w, htmlrender.Data{
@@ -240,14 +209,12 @@ func wantsJSON(r *http.Request) bool {
 	return strings.Contains(accept, "application/json")
 }
 
-// Mount registers both routes on a mux. cmd/api wraps the result with
-// its own middleware (request id, access log, panic recovery).
+// Mount registers both routes; cmd/api wraps the mux with request id,
+// access log, and panic recovery middleware.
 func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/analyze", h.Analyze)
 	mux.HandleFunc("GET /r/{hash}", h.Share)
 }
-
-// Helpers -------------------------------------------------------------
 
 func splitByCategory(in []rules.Finding) (costF, secF []rules.Finding) {
 	costF = make([]rules.Finding, 0, len(in))
@@ -272,15 +239,14 @@ func totalSavingsCents(in []rules.Finding) int64 {
 
 func hashBytes(b []byte) string {
 	h := sha256.Sum256(b)
-	return hex.EncodeToString(h[:12]) // 96-bit prefix matches CLI --share
+	// 96-bit prefix matches the CLI's --share hash so URLs collide.
+	return hex.EncodeToString(h[:12])
 }
 
-// canonicalYAML strips trailing whitespace + final newline. The full
-// canonicalisation lives in pkg/share on the CLI side; for sandbox
-// purposes we only need a stable byte stream for hashing, not
-// semantically-equal YAML to collide.
+// canonicalYAML only trims trailing whitespace; the full canonicalisation
+// lives in pkg/share on the CLI side. A stable byte stream is enough
+// for hashing — we don't need semantically-equal YAML to collide.
 func canonicalYAML(b []byte) []byte {
-	// Sort top-level keys is too invasive here — keep it cheap.
 	trim := strings.TrimRight(string(b), "\n\t ")
 	return []byte(trim)
 }
@@ -292,17 +258,13 @@ func (h *Handler) nowOrDefault() time.Time {
 	return time.Now().UTC()
 }
 
-// String adds a String() for context propagation logging.
 func (h *Handler) String() string {
 	return fmt.Sprintf("sandbox.Handler(region=%s)", h.Region)
 }
 
-// publicURL returns the user-facing origin for share links. When the
-// operator has configured a fixed PublicBaseURL we use it verbatim
-// (production), otherwise we derive scheme + host from the inbound
-// request — so dev sees http://localhost:3000 automatically via the
-// Next.js proxy, and prod-behind-a-reverse-proxy honours
-// X-Forwarded-Proto / X-Forwarded-Host.
+// publicURL honours PublicBaseURL when set; otherwise derives scheme
+// and host from the request so dev works without wiring and prod
+// behind a reverse proxy picks up X-Forwarded-Proto / X-Forwarded-Host.
 func (h *Handler) publicURL(r *http.Request) string {
 	if h.PublicBaseURL != "" {
 		return strings.TrimRight(h.PublicBaseURL, "/")

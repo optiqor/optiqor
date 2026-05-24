@@ -1,8 +1,6 @@
-// Package migrations is intentionally empty at runtime — its only
-// purpose is to ship the .sql files that goose runs. The test file
-// here pins structural invariants of the baseline so accidental
-// regressions are caught at `go test ./...` time, well before they
-// reach a database.
+// Package migrations ships the .sql files goose runs. The tests pin
+// structural invariants so a regression fails `go test ./...` before
+// it ever reaches a database.
 package migrations
 
 import (
@@ -72,8 +70,8 @@ func TestBaseline_RLSEnabledOnEveryTenantTable(t *testing.T) {
 
 func TestBaseline_StableWorkloadIdentity(t *testing.T) {
 	sql := loadBaseline(t)
-	// We commit to selector-hash identity in the schema body so future
-	// hands cannot silently weaken this contract.
+	// Pin selector-hash identity so a future change can't silently
+	// weaken the workload-identity contract.
 	if !strings.Contains(sql, "workload_hash BYTEA NOT NULL") {
 		t.Error("workloads table is missing workload_hash column")
 	}
@@ -101,7 +99,8 @@ func TestBaseline_NoUpdateDeleteOnAuditLog(t *testing.T) {
 
 func TestBaseline_RegionConstraint(t *testing.T) {
 	sql := loadBaseline(t)
-	// Year-1 deployment regions only; any new region needs an explicit migration.
+	// Year-1 regions only; expanding needs an explicit migration so an
+	// SDK default can't land data in an uncleared region.
 	if !strings.Contains(sql, "region IN ('us-east-1','eu-west-1')") {
 		t.Error("region check constraint should restrict to Y1 regions")
 	}
@@ -166,7 +165,7 @@ func Test0002_AddsAllObservedStateColumns(t *testing.T) {
 		"has_hpa",
 		"last_observed_at",
 	} {
-		// Look for ADD COLUMN <name> so renames in Up don't slip through.
+		// Match ADD COLUMN <name> so a rename in Up doesn't slip past.
 		if !strings.Contains(sql, "ADD COLUMN "+col) {
 			t.Errorf("0002 missing ADD COLUMN for %q", col)
 		}
@@ -193,9 +192,9 @@ func Test0002_DownDropsEveryColumn(t *testing.T) {
 
 func Test0002_ContainerImageIndexForCrossTenantQueries(t *testing.T) {
 	sql := loadMigration(t, "0002_workload_observed_state.sql")
-	// The container_image partial index is the moat enabler (Helm Chart
-	// Efficiency Leaderboard / cross-customer pattern library). Pinning
-	// the index keeps a future refactor from silently dropping it.
+	// Pin the moat-enabling partial index so a future refactor can't
+	// silently drop it (Leaderboard / pattern library queries depend
+	// on it).
 	if !strings.Contains(sql, "CREATE INDEX workloads_container_image_idx") {
 		t.Error("0002 missing workloads_container_image_idx (moat enabler)")
 	}
@@ -230,9 +229,8 @@ func Test0003_DefinesAllTenancyHelpers(t *testing.T) {
 
 func Test0003_BindVariableNameStable(t *testing.T) {
 	sql := loadMigration(t, "0003_tenancy_primitives.sql")
-	// The session variable name must stay app.tenant_id to match the
-	// internal/platform/db bind helper. Renaming it on either side
-	// silently breaks every tenant-scoped query.
+	// app.tenant_id must match internal/platform/db.BindTenant —
+	// renaming on either side silently breaks every tenant query.
 	if !strings.Contains(sql, "current_setting('app.tenant_id', true)") {
 		t.Error("0003 must read current_setting('app.tenant_id', true); variable name is load-bearing")
 	}
@@ -240,9 +238,9 @@ func Test0003_BindVariableNameStable(t *testing.T) {
 
 func Test0003_RewritesPoliciesViaHelpers(t *testing.T) {
 	sql := loadMigration(t, "0003_tenancy_primitives.sql")
-	// Every baseline-RLS-enabled table must get its tenant_isolation
-	// policy rewritten to use current_tenant_id() OR is_superuser_context().
-	// audit_log is the exception (NULL tenant_id under superuser context).
+	// Every baseline-RLS-enabled table gets its policy rewritten via
+	// current_tenant_id() OR is_superuser_context(). audit_log is the
+	// exception — it also admits NULL tenant_id under superuser.
 	tenantScoped := []string{
 		"workspaces", "clusters", "namespaces", "workloads",
 		"recommendations", "recommendation_dismissals",
@@ -254,7 +252,6 @@ func Test0003_RewritesPoliciesViaHelpers(t *testing.T) {
 			t.Errorf("0003 missing rewritten policy on %q", tbl)
 		}
 	}
-	// audit_log has the NULL-tenant_id exception baked in.
 	if !strings.Contains(sql, "tenant_id IS NOT NULL AND tenant_id = current_tenant_id()") {
 		t.Error("0003 audit_log policy must allow NULL tenant_id under superuser context")
 	}
@@ -262,8 +259,8 @@ func Test0003_RewritesPoliciesViaHelpers(t *testing.T) {
 
 func Test0003_DownRestoresBaselinePolicies(t *testing.T) {
 	sql := loadMigration(t, "0003_tenancy_primitives.sql")
-	// The Down block must restore the original baseline policy form
-	// verbatim so a rollback fully reverses the refactor.
+	// Down must restore the baseline policy verbatim so a rollback
+	// fully reverses the refactor.
 	if !strings.Contains(sql, "tenant_id::text = current_setting('app.tenant_id', true)") {
 		t.Error("0003 Down must restore baseline policy form (tenant_id::text = current_setting)")
 	}
@@ -271,8 +268,8 @@ func Test0003_DownRestoresBaselinePolicies(t *testing.T) {
 
 func Test0003_SuperuserSetterRequiresReason(t *testing.T) {
 	sql := loadMigration(t, "0003_tenancy_primitives.sql")
-	// Every flip of superuser context must record an audit_log row with
-	// a non-empty reason. The setter raises if reason is empty.
+	// Every superuser flip must record an audit_log row with a
+	// non-empty reason; the setter raises on empty.
 	if !strings.Contains(sql, "RAISE EXCEPTION 'set_superuser_context: reason is required'") {
 		t.Error("0003 set_superuser_context must reject empty reason")
 	}
@@ -283,12 +280,91 @@ func Test0003_SuperuserSetterRequiresReason(t *testing.T) {
 
 func Test0003_UpdatedAtTriggerAttachedToRightTables(t *testing.T) {
 	sql := loadMigration(t, "0003_tenancy_primitives.sql")
-	// Only baseline tables that have an updated_at column should get the
+	// Only the baseline tables with an updated_at column get the
 	// trigger: tenants, workspaces, recommendations.
 	for _, tbl := range []string{"tenants", "workspaces", "recommendations"} {
 		want := "CREATE TRIGGER " + tbl + "_set_updated_at"
 		if !strings.Contains(sql, want) {
 			t.Errorf("0003 missing set_updated_at trigger on %q", tbl)
+		}
+	}
+}
+
+func Test0004_HasUpAndDown(t *testing.T) {
+	sql := loadMigration(t, "0004_shared_analyses.sql")
+	for _, want := range []string{"-- +goose Up", "-- +goose Down", "-- +goose StatementBegin", "-- +goose StatementEnd"} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0004 missing %q", want)
+		}
+	}
+}
+
+func Test0004_CreatesSharedAnalysesTable(t *testing.T) {
+	sql := loadMigration(t, "0004_shared_analyses.sql")
+	if !strings.Contains(sql, "CREATE TABLE shared_analyses") {
+		t.Error("0004 must CREATE TABLE shared_analyses")
+	}
+	// Public-by-design — no RLS, no policy. Adding either breaks the
+	// public sandbox; this guard catches the accident.
+	if strings.Contains(sql, "ALTER TABLE shared_analyses ENABLE ROW LEVEL SECURITY") {
+		t.Error("0004 shared_analyses must remain public-by-design (no RLS)")
+	}
+	if strings.Contains(sql, "CREATE POLICY tenant_isolation ON shared_analyses") {
+		t.Error("0004 shared_analyses is not tenant-scoped; no policy")
+	}
+}
+
+func Test0004_CoreColumnsPresent(t *testing.T) {
+	sql := loadMigration(t, "0004_shared_analyses.sql")
+	// hash is URL slug + dedup key; payload_sha256 is the full 32-byte
+	// digest (distinct from the 12-byte prefix); expires_at drives the
+	// 30-day TTL contract.
+	for _, want := range []string{
+		"id              UUID PRIMARY KEY DEFAULT uuid_generate_v7()",
+		"hash            TEXT NOT NULL UNIQUE",
+		"payload_sha256  BYTEA NOT NULL",
+		"source          TEXT NOT NULL CHECK (source IN ('cli', 'sandbox'))",
+		"payload         BYTEA",
+		"payload_s3_key  TEXT",
+		"expires_at      TIMESTAMPTZ NOT NULL",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0004 missing column definition: %q", want)
+		}
+	}
+}
+
+func Test0004_PayloadXorS3KeyConstraint(t *testing.T) {
+	sql := loadMigration(t, "0004_shared_analyses.sql")
+	// Server-side guard: a misbehaving writer can't store both or
+	// neither of in-row / S3-promoted payload.
+	if !strings.Contains(sql, "CONSTRAINT payload_xor_s3_key CHECK") {
+		t.Error("0004 must enforce payload XOR payload_s3_key via CHECK constraint")
+	}
+}
+
+func Test0004_HasActiveRowIndex(t *testing.T) {
+	sql := loadMigration(t, "0004_shared_analyses.sql")
+	if !strings.Contains(sql, "CREATE INDEX shared_analyses_expires_at_idx") {
+		t.Error("0004 missing expires_at partial index")
+	}
+}
+
+func Test0004_AppGrantsExplicit(t *testing.T) {
+	sql := loadMigration(t, "0004_shared_analyses.sql")
+	if !strings.Contains(sql, "GRANT SELECT, INSERT, UPDATE ON shared_analyses TO optiqor_app") {
+		t.Error("0004 must grant SELECT/INSERT/UPDATE to optiqor_app (no DELETE — append-only-ish)")
+	}
+}
+
+func Test0004_DownIsClean(t *testing.T) {
+	sql := loadMigration(t, "0004_shared_analyses.sql")
+	for _, want := range []string{
+		"DROP INDEX IF EXISTS shared_analyses_expires_at_idx",
+		"DROP TABLE IF EXISTS shared_analyses",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0004 Down missing %q", want)
 		}
 	}
 }

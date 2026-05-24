@@ -1,9 +1,3 @@
-// Package config loads and validates runtime configuration for all Optiqor
-// binaries (api, worker, agent).
-//
-// Real production secrets come from AWS Secrets Manager and are injected
-// into the environment at boot. This package only knows how to read env
-// vars and validate them — it has no AWS dependency.
 package config
 
 import (
@@ -15,8 +9,6 @@ import (
 	"time"
 )
 
-// Env identifies the runtime environment. Used for environment-aware
-// safety profiles and observability tagging.
 type Env string
 
 const (
@@ -25,7 +17,6 @@ const (
 	EnvProd    Env = "prod"
 )
 
-// Valid reports whether e is a recognised environment.
 func (e Env) Valid() bool {
 	switch e {
 	case EnvDev, EnvStaging, EnvProd:
@@ -34,13 +25,12 @@ func (e Env) Valid() bool {
 	return false
 }
 
-// Config is the typed configuration for a Optiqor binary. Fields are
-// populated from environment variables prefixed with `OPTIQOR_`.
+// Config is populated from OPTIQOR_* env vars.
 type Config struct {
 	Env         Env
 	LogLevel    string // debug | info | warn | error
-	HTTPAddr    string // e.g. ":8080"
-	MetricsAddr string // e.g. ":9090"
+	HTTPAddr    string
+	MetricsAddr string
 
 	PostgresDSN  string
 	RedisAddr    string
@@ -61,10 +51,8 @@ type Config struct {
 	ShutdownGrace time.Duration
 }
 
-// Load reads OPTIQOR_* env vars and returns a validated Config.
-//
-// Returns an error if any required field is missing or invalid. Callers
-// (cmd/*/main.go) should treat this as a fatal startup error.
+// Load returns a validated Config. cmd/*/main.go treats a non-nil err
+// as fatal.
 func Load() (Config, error) {
 	c := Config{
 		Env:                    Env(envOr("OPTIQOR_ENV", "dev")),
@@ -92,8 +80,8 @@ func Load() (Config, error) {
 	return c, nil
 }
 
-// Validate runs all field-level checks. Exposed so tests can build a
-// Config in-memory and validate without going through the env.
+// Validate enforces required fields. If you add a new secret field,
+// add it here in the same commit — prod boot must fail closed.
 func (c Config) Validate() error {
 	var errs []string
 
@@ -106,7 +94,7 @@ func (c Config) Validate() error {
 	}
 
 	if c.Env == EnvProd {
-		// Prod requires the full secret set. Dev/staging may omit them.
+		// Prod requires the full secret set; dev/staging may omit them.
 		if c.PostgresDSN == "" {
 			errs = append(errs, "OPTIQOR_POSTGRES_DSN is required in prod")
 		}
@@ -158,8 +146,6 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 	return d
 }
 
-// envInt is reserved for future numeric config; kept here so the
-// config package is self-contained as more fields land.
 func envInt(key string, fallback int) int { //nolint:unused // reserved for future numeric config fields
 	v := os.Getenv(key)
 	if v == "" {

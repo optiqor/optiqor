@@ -10,8 +10,7 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-// fakeTemporalClient implements the narrow [TemporalClient] interface
-// we depend on. It records every ExecuteWorkflow call so tests can
+// fakeTemporalClient records every ExecuteWorkflow call so tests can
 // assert on task-queue derivation, workflow IDs, and payload routing.
 type fakeTemporalClient struct {
 	mu   sync.Mutex
@@ -50,7 +49,6 @@ func (fakeRun) GetWithOptions(_ context.Context, _ any, _ client.WorkflowRunGetO
 	return nil
 }
 
-// trivialWorkflow is a registrable Workflow stub.
 type trivialWorkflow struct {
 	name string
 	run  func(ctx context.Context, t tenancy.Context, payload []byte) error
@@ -63,8 +61,6 @@ func (w trivialWorkflow) Execute(ctx context.Context, t tenancy.Context, payload
 	}
 	return w.run(ctx, t, payload)
 }
-
-// ---- tests -------------------------------------------------------
 
 func TestTemporal_Register_Duplicate(t *testing.T) {
 	a := NewTemporal(&fakeTemporalClient{})
@@ -183,6 +179,5 @@ func TestNewTemporal_PanicsOnNilClient(t *testing.T) {
 }
 
 func TestTemporal_SatisfiesDispatcher(t *testing.T) {
-	// Compile-time check, expressed as a runtime test for visibility.
 	var _ Dispatcher = NewTemporal(&fakeTemporalClient{})
 }

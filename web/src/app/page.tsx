@@ -16,9 +16,7 @@ import {
 export default function HomePage() {
   return (
     <>
-      {/* ─── Hero ──────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden pt-24 pb-20 md:pt-36 md:pb-28">
-        {/* single cyan glow behind the headline — not a gradient ribbon */}
         <div
           aria-hidden
           className="pointer-events-none absolute -top-32 left-1/2 -z-10 size-[640px] -translate-x-1/2 rounded-full"
@@ -64,8 +62,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Terminal preview anchored below the hero copy — the
-              centrepiece. */}
           <div className="mt-16 md:mt-20">
             <Terminal title="optiqor analyze ./charts/api">
               <span className="text-[color:var(--color-ink-6)]">────────────────────────────────────────────────────────────────────</span>
@@ -140,7 +136,6 @@ export default function HomePage() {
         </Container>
       </section>
 
-      {/* ─── Three pillars ─────────────────────────────────────────────── */}
       <Section border>
         <Container size="xl">
           <Eyebrow>The contract</Eyebrow>
@@ -175,7 +170,6 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ─── Why ───────────────────────────────────────────────────────── */}
       <Section border>
         <Container size="xl">
           <div className="grid gap-16 md:grid-cols-[1fr_1.2fr] md:gap-24">
@@ -210,7 +204,6 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ─── Receipts ──────────────────────────────────────────────────── */}
       <Section border>
         <Container size="xl">
           <Eyebrow>Verified Receipts</Eyebrow>
@@ -275,7 +268,6 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ─── Open source CTA ───────────────────────────────────────────── */}
       <Section border>
         <Container size="xl">
           <div className="flex flex-col items-start gap-8 md:flex-row md:items-end md:justify-between">
@@ -307,7 +299,7 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ─── Accuracy disclosure (mandatory per CLAUDE.md hard rule) ──── */}
+      {/* Accuracy disclosure: mandatory per CLAUDE.md. */}
       <section className="border-t border-[color:var(--color-rule)] py-10">
         <Container size="xl">
           <div className="flex items-start gap-4">

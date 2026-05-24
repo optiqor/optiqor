@@ -14,8 +14,6 @@ const sizes: Record<Size, string> = {
 
 const variants: Record<Variant, string> = {
   primary:
-    // Solid ink-9 button with mono accent on the trailing arrow.
-    // Looks more like a CLI command target than a marketing CTA.
     "bg-[color:var(--color-ink-9)] text-[color:var(--color-ink-0)] hover:bg-white",
   secondary:
     "bg-transparent text-[color:var(--color-ink-9)] hairline hover:hairline-strong hover:bg-[color:var(--color-ink-2)]",

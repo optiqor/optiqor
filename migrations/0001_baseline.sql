@@ -1,37 +1,23 @@
 -- +goose Up
 -- +goose StatementBegin
 --
--- Baseline schema for Optiqor.
+-- Baseline schema. Locks the four-level tenants → workspaces →
+-- clusters → namespaces → workloads hierarchy; retrofitting it
+-- post-launch is a migration we don't want to write.
 --
--- Models the four-level multi-cluster hierarchy that drives every
--- domain query and the audit / receipts surface. The schema is
--- locked in Phase 1 because retrofitting it after 50+ paying
--- customers requires an awful migration window — see
--- docs/strategy/business_strategy.md amendments.
---
---   tenants      legal entity / billing customer
---      ↓
---   workspaces   logical groupings inside a tenant
---      ↓
---   clusters     physical K8s clusters; own provisioner class, region, billing source
---      ↓
---   namespaces   K8s namespace; team mapping comes from labels
---      ↓
---   workloads    Deployment / StatefulSet / DaemonSet, identified by stable selector hash
---
--- Row-Level Security (RLS) is enforced server-side on every
--- tenant-scoped table by reading current_setting('app.tenant_id').
--- App code MUST run inside a transaction that calls
--- set_config('app.tenant_id', $1, true) at start; the
--- internal/platform/db package provides the bind helpers.
+-- RLS is enforced server-side on every tenant-scoped table by reading
+-- current_setting('app.tenant_id'). App code MUST run inside a
+-- transaction that calls set_config('app.tenant_id', $1, true);
+-- internal/platform/db owns the bind helpers. Variable name is
+-- load-bearing — see 0003.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
 
--- Two roles: a privileged migration role (bypasses RLS) and a
--- restricted app role (subject to RLS). Real deployments create
--- these via Terraform; the migration creates them only when
--- absent so local goose runs work too.
+-- optiqor_migrator BYPASSRLS so migrations and platform jobs can read
+-- across tenants; optiqor_app is RLS-subject so app code can't. Real
+-- deployments provision both via Terraform; this DO-block keeps local
+-- goose runs working without it.
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'optiqor_app') THEN
@@ -46,6 +32,9 @@ $$;
 -- ---------------------------------------------------------------
 -- tenants
 -- ---------------------------------------------------------------
+-- Region is restricted to Y1 deploy regions; expanding it needs an
+-- explicit migration so an SDK default can't quietly land customer
+-- data in a region we haven't legally cleared.
 CREATE TABLE tenants (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     slug        CITEXT NOT NULL UNIQUE,
@@ -55,14 +44,13 @@ CREATE TABLE tenants (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at  TIMESTAMPTZ,
-    -- Onboarding state machine; the timestamps live in JSONB so we can
-    -- add intermediate states without a schema migration.
+    -- JSONB so intermediate onboarding states can land without a
+    -- schema migration.
     onboarding_state JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
--- The tenants table itself is NOT RLS-scoped: it's the lookup
--- surface for resolving the scope. Direct queries against it are
--- gated by application-layer authorisation only.
+-- tenants is NOT RLS-scoped — it's the lookup surface for resolving
+-- the scope. App-layer authz gates direct reads.
 
 -- ---------------------------------------------------------------
 -- workspaces
@@ -88,11 +76,9 @@ CREATE TABLE clusters (
     name          TEXT NOT NULL,
     cloud         TEXT NOT NULL CHECK (cloud IN ('aws','azure','hetzner','onprem')),
     region        TEXT NOT NULL,
-    -- Detected at agent install via pre-flight; gates which sizing
-    -- strategy is allowed (Karpenter > CAS+ASG > static > managed).
+    -- Gates sizing strategy: Karpenter > CAS+ASG > static > managed.
     node_provisioner_class TEXT CHECK (node_provisioner_class IN ('karpenter','autoscaler','static','managed-aks','managed-gke','managed-hetzner')),
-    -- Detected from labels and customer-configured rules; "unknown"
-    -- defaults to "prod" treatment server-side (fail-safe).
+    -- "unknown" gets prod treatment server-side (fail-safe).
     environment   TEXT NOT NULL DEFAULT 'unknown' CHECK (environment IN ('prod','staging','dev','unknown')),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen_at  TIMESTAMPTZ,
@@ -109,7 +95,7 @@ CREATE TABLE namespaces (
     tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     cluster_id  UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
-    -- "team" extracted from labels per workspace config.
+    -- Extracted from labels per workspace config.
     team        TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (cluster_id, name)
@@ -119,23 +105,23 @@ CREATE INDEX namespaces_tenant_idx ON namespaces (tenant_id);
 -- ---------------------------------------------------------------
 -- workloads
 -- ---------------------------------------------------------------
+-- workload_hash is the selector-based identity: sha256(cluster_id ||
+-- namespace || kind || canonical(primary_selector_labels)). Survives
+-- renames and recreations, computed by the agent. Changing the input
+-- set silently re-identifies every workload — don't.
 CREATE TABLE workloads (
-    -- Stable identity = sha256(cluster_id || namespace || kind || canonical(primary_selector_labels)).
-    -- Survives renames and recreations.
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     cluster_id    UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
     namespace_id  UUID NOT NULL REFERENCES namespaces(id) ON DELETE CASCADE,
-    -- The hash of the stable selector labels; computed by the agent.
     workload_hash BYTEA NOT NULL,
-    -- Cross-cluster grouping: same `Deployment/api` in 5 clusters
-    -- shares one class group so fleet-wide Apply Fix applies.
+    -- Same Deployment/api across 5 clusters shares one class group so
+    -- fleet-wide Apply Fix applies.
     workload_class_group_id UUID,
     name          TEXT NOT NULL,
     kind          TEXT NOT NULL CHECK (kind IN ('Deployment','StatefulSet','DaemonSet','CronJob','Job','Other')),
-    -- Owner ref chain. NULL for direct workloads; "operator:<group>/<kind>" for operator-owned.
+    -- NULL for direct workloads; "operator:<group>/<kind>" for operator-owned.
     owner_kind    TEXT,
-    -- Workload classification (from internal/workload/classifier).
     workload_class TEXT CHECK (workload_class IN ('web-steady','worker-bursty','batch','stateful-db','ml-inference','unknown')),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen_at  TIMESTAMPTZ,
@@ -177,7 +163,8 @@ CREATE TABLE recommendation_dismissals (
     tenant_id         UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     recommendation_id UUID NOT NULL REFERENCES recommendations(id) ON DELETE CASCADE,
     reason            TEXT NOT NULL,
-    dismissed_by      UUID, -- user id; nullable for auto-expiry
+    -- Nullable for auto-expiry rows that have no human actor.
+    dismissed_by      UUID,
     dismissed_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX rec_dismissals_tenant_idx ON recommendation_dismissals (tenant_id);
@@ -213,11 +200,11 @@ CREATE TABLE receipts (
     window_end      TIMESTAMPTZ NOT NULL,
     predicted_usd_cents BIGINT NOT NULL DEFAULT 0,
     actual_usd_cents    BIGINT NOT NULL DEFAULT 0,
-    -- Receipt YAML payload as canonicalised JSON; signed verbatim.
+    -- Canonicalised JSON; signed verbatim.
     payload         JSONB NOT NULL,
-    signature       BYTEA NOT NULL,           -- ed25519 signature
+    signature       BYTEA NOT NULL,
     signing_key_id  TEXT NOT NULL,
-    tlog_index      BIGINT,                   -- index in transparency log
+    tlog_index      BIGINT,
     issued_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX receipts_tenant_idx ON receipts (tenant_id);
@@ -230,7 +217,7 @@ CREATE TABLE llm_calls (
     id          BIGSERIAL PRIMARY KEY,
     tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     model       TEXT NOT NULL CHECK (model IN ('haiku','sonnet','opus','other')),
-    purpose     TEXT NOT NULL, -- e.g. "diff", "narrative", "qa"
+    purpose     TEXT NOT NULL,
     input_hash  BYTEA NOT NULL,
     output_hash BYTEA NOT NULL,
     input_tokens   INTEGER NOT NULL,
@@ -263,8 +250,9 @@ CREATE INDEX audit_log_occurred_at_idx ON audit_log (occurred_at DESC);
 -- ---------------------------------------------------------------
 -- RLS policies
 -- ---------------------------------------------------------------
--- Apply uniformly to every tenant-scoped table. The migration role
--- bypasses RLS (BYPASSRLS); the app role does not.
+-- Applied uniformly to every tenant-scoped table. optiqor_migrator
+-- bypasses; optiqor_app does not. This is the load-bearing tenant
+-- isolation primitive — see CLAUDE.md "Multi-tenancy".
 
 ALTER TABLE workspaces                   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clusters                     ENABLE ROW LEVEL SECURITY;
@@ -298,12 +286,11 @@ CREATE POLICY tenant_isolation ON llm_calls
 CREATE POLICY tenant_isolation ON audit_log
     USING (tenant_id::text = current_setting('app.tenant_id', true));
 
--- Read-only-by-default insert protection on audit_log: rows can be
--- inserted but not updated or deleted by the app role.
+-- audit_log is append-only for the app role: every state-changing
+-- action should be evidentiary, not editable post-hoc.
 REVOKE UPDATE, DELETE ON audit_log FROM PUBLIC;
 GRANT INSERT, SELECT ON audit_log TO optiqor_app;
 
--- App role only sees what RLS allows.
 GRANT USAGE ON SCHEMA public TO optiqor_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO optiqor_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO optiqor_app;

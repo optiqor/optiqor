@@ -16,8 +16,6 @@ import (
 	"github.com/optiqor/optiqor/internal/worker"
 )
 
-// ---- Apply Fix -------------------------------------------------------
-
 type fakePublisher struct {
 	mu     sync.Mutex
 	called []PullRequest
@@ -105,8 +103,6 @@ func TestApplyFix_BadJSONRejected(t *testing.T) {
 	}
 }
 
-// ---- Receipt Issue ---------------------------------------------------
-
 type fakeReceiptStore struct {
 	mu    sync.Mutex
 	saved []struct {
@@ -158,8 +154,6 @@ func TestReceiptIssue_SignsAndStores(t *testing.T) {
 		t.Errorf("id = %q", store.saved[0].ID)
 	}
 }
-
-// ---- Rollback Watchdog ----------------------------------------------
 
 type fakeInitiator struct {
 	mu         sync.Mutex
@@ -219,8 +213,6 @@ func TestRollbackWatchdog_NoActionWhenWithinBounds(t *testing.T) {
 	}
 }
 
-// ---- Cost Spike -----------------------------------------------------
-
 type fakeNotifier struct{ events []SpikeEvent }
 
 func (f *fakeNotifier) NotifySpike(_ context.Context, _ tenancy.Context, e SpikeEvent) error {
@@ -259,8 +251,6 @@ func TestCostSpike_SilentBelowThreshold(t *testing.T) {
 		t.Errorf("events = %d, want 0 (below threshold)", len(n.events))
 	}
 }
-
-// ---- Registration smoke ---------------------------------------------
 
 func TestAllWorkflows_RegisterableTogether(t *testing.T) {
 	disp := worker.NewInMemory()

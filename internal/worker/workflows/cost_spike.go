@@ -9,13 +9,12 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// SpikeNotifier delivers the spike notification (Slack DM, email,
-// dashboard event). The workflow doesn't care which.
+// SpikeNotifier delivers the notification (Slack DM, email, dashboard
+// event). The workflow doesn't care which.
 type SpikeNotifier interface {
 	NotifySpike(ctx context.Context, t tenancy.Context, ev SpikeEvent) error
 }
 
-// SpikeEvent is the human-readable summary of an anomaly.
 type SpikeEvent struct {
 	WorkloadID        string    `json:"workload_id"`
 	ObservedDeltaUSD  float64   `json:"observed_delta_usd"`
@@ -24,7 +23,6 @@ type SpikeEvent struct {
 	LikelyPRURL       string    `json:"likely_pr_url,omitempty"`
 }
 
-// CostSpikePayload is the dispatcher input.
 type CostSpikePayload struct {
 	WorkloadID        string    `json:"workload_id"`
 	ObservedDeltaUSD  float64   `json:"observed_delta_usd"`
@@ -34,18 +32,14 @@ type CostSpikePayload struct {
 	LikelyPRURL       string    `json:"likely_pr_url,omitempty"`
 }
 
-// CostSpike threshold-filters anomalies and dispatches a notification.
-// Below-threshold events drop silently — the customer chose the
-// floor when they enabled the feature.
+// CostSpike drops below-threshold events silently — the customer chose
+// the floor when they enabled the feature.
 type CostSpike struct {
 	Notifier SpikeNotifier
 }
 
-// Name is the dispatcher key.
 func (CostSpike) Name() string { return "cost_spike" }
 
-// Execute notifies on above-threshold events. Threshold defaults to
-// $0 (always notify) if the caller didn't set one.
 func (w CostSpike) Execute(ctx context.Context, t tenancy.Context, raw []byte) error {
 	if w.Notifier == nil {
 		return fmt.Errorf("cost_spike: nil notifier")

@@ -441,6 +441,104 @@ Body cap: 64 KiB.
 
 ---
 
+### Session
+
+#### `GET /v1/session/whoami`
+
+Returns the caller's identity envelope. Reads, in priority order:
+
+1. `Authorization: Bearer <jwt>` — Phase-5 JWT extractor path.
+2. `Cookie: optiqor_session=<jwt>` — same JWT in cookie form (set by `/v1/session/issue`).
+3. `X-Optiqor-Tenant` header — Phase-2 dev surface; populated by the tenant-context middleware.
+
+```json
+{
+  "tenant_id": "tenant-1",
+  "workspace_id": "ws-1",
+  "subject": "alice@example.test",
+  "name": "Alice",
+  "source": "jwt",
+  "expires_at": "2026-05-25T00:00:00Z"
+}
+```
+
+| | |
+| --- | --- |
+| `200` | identity envelope; `source` is `"jwt"` or `"header"` |
+| `401` | no usable identity |
+
+#### `POST /v1/session/issue`
+
+Mints a backend JWT after Auth.js has authenticated the user on the
+frontend. The dashboard server action calls this with the Auth.js
+session subject + the user's tenant id; the handler issues a 12h JWT
+in the response body and sets an HttpOnly `optiqor_session` cookie.
+Phase 5 ties this to a verified provider callback so the handler can
+fail closed; Phase 2 trusts the dashboard to have validated the
+subject server-side.
+
+```json
+{ "subject": "github|12345", "name": "Alice", "tenant_id": "tenant-1", "workspace_id": "ws-1" }
+```
+
+| | |
+| --- | --- |
+| `200` | token + expires_at; `Set-Cookie: optiqor_session=...` |
+| `400` | missing `subject` / `tenant_id`, or unknown field |
+| `413` | body exceeds 16 KiB |
+
+---
+
+### Onboarding
+
+Tenant-scoped (same X-Optiqor-Tenant middleware as `/v1/apply-fixes`).
+
+#### `GET /v1/onboarding/state`
+
+Returns the tenant's current onboarding state plus the SLO table the
+dashboard renders alongside the timeline. Lazily creates a
+`signed_up` record on first read so the dashboard never sees a 404.
+
+```json
+{
+  "current": "vcs_connected",
+  "reached_at": { "signed_up": "...", "vcs_connected": "..." },
+  "progress_percent": 16,
+  "activated": false,
+  "activation_window": "336h0m0s",
+  "next_stage": "repo_selected",
+  "slos": {
+    "sandbox_latency": "3s",
+    "install_to_first_pr": "10m0s",
+    "install_to_first_reco": "30m0s",
+    "install_to_first_receipt": "840h0m0s"
+  }
+}
+```
+
+| | |
+| --- | --- |
+| `200` | onboarding envelope |
+| `401` | tenant context missing |
+
+#### `POST /v1/onboarding/transition`
+
+Advance the state machine. Forward-only; backwards transitions and
+unknown stages return 400.
+
+```json
+{ "to": "agent_installed" }
+```
+
+| | |
+| --- | --- |
+| `200` | updated state (same shape as `GET /v1/onboarding/state`) |
+| `400` | illegal transition / unknown stage / unknown field |
+| `401` | tenant context missing |
+| `413` | body exceeds 4 KiB |
+
+---
+
 ### GitHub integration
 
 #### `POST /webhooks/github`
@@ -478,11 +576,15 @@ each request must carry that token as a bearer credential via the
 
 | Header | Direction | Purpose |
 | --- | --- | --- |
-| `X-Optiqor-Tenant` | client → server | Phase-1 dev tenant resolution on auth-required routes |
+| `X-Optiqor-Tenant` | client → server | Phase-2 dev tenant resolution on auth-required routes |
 | `X-Optiqor-Workspace`, `X-Optiqor-Cluster`, `X-Optiqor-Namespace` | client → server | optional narrowing of the tenancy scope |
+| `Authorization: Bearer <jwt>` | client → server | Phase-5+ JWT auth; whoami honours it today so the dashboard can swap in JWT issuance without server changes |
+| `Cookie: optiqor_session=<jwt>` | client → server | cookie equivalent of the bearer token; set by `/v1/session/issue` |
+| `Set-Cookie: optiqor_session=...` | server → client | issued by `/v1/session/issue`; `HttpOnly`, `Secure` when behind TLS, `SameSite=Lax` |
 | `X-Request-Id` | server → client | per-request id from the request-id middleware; mirrored back if the client supplied one |
 | `X-Forwarded-Proto`, `X-Forwarded-Host` | reverse proxy → server | honoured when constructing `share_url` and verifier links |
 | `X-Hub-Signature-256` | GitHub → server | webhook HMAC; verified server-side |
+| `Retry-After` | server → client | seconds-until-retry on 429 responses from the rate-limited sandbox routes |
 
 ## Tenancy
 
@@ -504,6 +606,8 @@ Workflow dispatch uses per-tenant Temporal task queues
 | `POST /v1/apply-fixes` | 1 MiB | same upper bound; matches analyze |
 | `POST /v1/ingest` | 16 MiB | agent batches with 30 days of Prometheus + a daily CUR row count |
 | `POST /v1/cost-spikes` | 64 KiB | Cost Anomaly payloads are tiny |
+| `POST /v1/session/issue` | 16 KiB | tiny JSON envelope; fits in one TCP segment |
+| `POST /v1/onboarding/transition` | 4 KiB | one JSON field |
 | `POST /webhooks/github` | 8 MiB | GitHub's documented worst case |
 
 ## Status code matrix
@@ -534,7 +638,10 @@ A condensed view for ops dashboards:
 | `/v1/apply-fixes` | [`internal/prwriter/handler.go`](../internal/prwriter/handler.go) | `internal/prwriter/handler_test.go` |
 | `/v1/ingest` | [`internal/ingestion/handler.go`](../internal/ingestion/handler.go) | `internal/ingestion/handler_test.go` |
 | `/v1/cost-spikes` | [`internal/billing/spike_handler.go`](../internal/billing/spike_handler.go) | `internal/billing/spike_handler_test.go` |
+| `/v1/session/whoami`, `/v1/session/issue` | [`internal/auth/handler.go`](../internal/auth/handler.go) | `internal/auth/handler_test.go` |
+| `/v1/onboarding/state`, `/v1/onboarding/transition` | [`internal/onboarding/handler.go`](../internal/onboarding/handler.go) | `internal/onboarding/handler_test.go` |
 | `/v1/meta`, `/healthz`, `/readyz`, `/metrics`, `/webhooks/github`, `/oauth/github/callback`, `/debug/pprof/*` | [`cmd/api/main.go`](../cmd/api/main.go) + [`cmd/api/routes.go`](../cmd/api/routes.go) | `cmd/api/main_test.go` + `cmd/api/routes_test.go` |
+| spec (single source of truth for the public surface) | [`optiqor-cli/docs/api/openapi.yaml`](../../optiqor-cli/docs/api/openapi.yaml) | `scripts/check-openapi-parity.sh` (CI gate) |
 
 The wire shapes are the Go structs — `AnalyzeResponse`, `VerifyResponse`,
 `PreviewRequest`, `IngestRequest`, `SpikeEnvelope`. If those drift from this

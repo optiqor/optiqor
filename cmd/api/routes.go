@@ -15,9 +15,12 @@ import (
 	"time"
 
 	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/auth"
 	"github.com/optiqor/optiqor/internal/billing"
 	"github.com/optiqor/optiqor/internal/cost"
 	"github.com/optiqor/optiqor/internal/ingestion"
+	"github.com/optiqor/optiqor/internal/onboarding"
+	"github.com/optiqor/optiqor/internal/platform/ratelimit"
 	"github.com/optiqor/optiqor/internal/prwriter"
 	"github.com/optiqor/optiqor/internal/receipts"
 	"github.com/optiqor/optiqor/internal/sandbox"
@@ -25,15 +28,25 @@ import (
 	"github.com/optiqor/optiqor/internal/worker/workflows"
 )
 
+// 60/min/IP covers a developer iterating in a browser while pinning the
+// $0.40/PR LLM cap and the 3s p95 budget against a runaway script.
+// Redis-backed limiter swaps in Phase 5 with the same Middleware shape.
+const (
+	sandboxRateLimit  = 60
+	sandboxRateWindow = time.Minute
+)
+
 // domainDeps is the set of constructed handlers + stores threaded
 // through to main(). One owner per surface; cmd/api/main.go reaches
 // into this struct rather than building handlers itself.
 type domainDeps struct {
-	Sandbox  *sandbox.Handler
-	Receipts *receipts.Handler
-	PRWriter *prwriter.Handler
-	Ingest   *ingestion.Handler
-	Spike    *billing.SpikeHandler
+	Sandbox    *sandbox.Handler
+	Receipts   *receipts.Handler
+	PRWriter   *prwriter.Handler
+	Ingest     *ingestion.Handler
+	Spike      *billing.SpikeHandler
+	Auth       *auth.Handler
+	Onboarding *onboarding.Handler
 }
 
 // noopLLM is a Phase-1 default LLMClient. It returns an empty diff
@@ -88,30 +101,57 @@ func buildDomainDeps() *domainDeps {
 
 	spikeH := &billing.SpikeHandler{Dispatcher: noopSpikeDispatcher{}}
 
+	authH := &auth.Handler{Signer: buildSessionSigner()}
+	onboardingH := &onboarding.Handler{Service: onboarding.NewService(onboarding.NewInMemoryStore())}
+
 	return &domainDeps{
-		Sandbox:  sandboxH,
-		Receipts: receiptsH,
-		PRWriter: prH,
-		Ingest:   ingestH,
-		Spike:    spikeH,
+		Sandbox:    sandboxH,
+		Receipts:   receiptsH,
+		PRWriter:   prH,
+		Ingest:     ingestH,
+		Spike:      spikeH,
+		Auth:       authH,
+		Onboarding: onboardingH,
 	}
 }
 
-// mountDomainRoutes registers every domain HTTP route on mux. Public
-// routes (analyze, share, receipts, ingest, cost-spikes) are exposed
-// unauth. Tenant-scoped routes (apply-fixes) are wrapped in the
-// tenant-context middleware.
+// buildSessionSigner reads OPTIQOR_SESSION_SECRET, falling back to a
+// dev-only secret so the dashboard runs without a config step. Phase-5
+// flips it to config.Validate-enforced so prod boots fail closed.
+func buildSessionSigner() *auth.Signer {
+	secret := os.Getenv("OPTIQOR_SESSION_SECRET")
+	if secret == "" {
+		// The "-dev" suffix surfaces in token inspection so a leaked
+		// dev token is unambiguous.
+		secret = "00000000000000000000000000000-dev"
+	}
+	return auth.NewSigner([]byte(secret))
+}
+
+// mountDomainRoutes wires every domain route on mux. Sandbox is
+// IP-rate-limited; apply-fixes + onboarding go through the tenant
+// extractor; everything else is unauth public.
 func mountDomainRoutes(mux *http.ServeMux, deps *domainDeps) {
-	deps.Sandbox.Mount(mux)
+	// Bypass Handler.Mount so the limiter gets in front of the unauth
+	// sandbox routes. FailOpen so a limiter blip can't 503 the sandbox.
+	sandboxMW := ratelimit.Middleware(ratelimit.Options{
+		Limiter:  ratelimit.NewMemory(sandboxRateLimit, sandboxRateWindow),
+		FailOpen: true,
+	})
+	mux.Handle("POST /v1/analyze", sandboxMW(http.HandlerFunc(deps.Sandbox.Analyze)))
+	mux.Handle("GET /r/{hash}", sandboxMW(http.HandlerFunc(deps.Sandbox.Share)))
+
 	deps.Receipts.Mount(mux)
 	deps.Ingest.Mount(mux)
 	deps.Spike.Mount(mux)
+	deps.Auth.Mount(mux)
 
-	// apply-fixes requires tenant context — use the header extractor.
 	tenantMW := func(next http.Handler) http.Handler {
 		return requireTenant(HeaderTenantExtractor, next)
 	}
 	mux.Handle("POST /v1/apply-fixes", tenantMW(http.HandlerFunc(deps.PRWriter.Preview)))
+	mux.Handle("GET /v1/onboarding/state", tenantMW(http.HandlerFunc(deps.Onboarding.GetState)))
+	mux.Handle("POST /v1/onboarding/transition", tenantMW(http.HandlerFunc(deps.Onboarding.Transition)))
 }
 
 // Compile-time ensure the workflows package is wired so its
@@ -141,6 +181,10 @@ func metaHandler(w http.ResponseWriter, _ *http.Request) {
 			{Method: "POST", Path: "/v1/apply-fixes", Notes: "preview the Apply Fix PR body + diff"},
 			{Method: "POST", Path: "/v1/ingest", Notes: "agent → SaaS metrics ingestion"},
 			{Method: "POST", Path: "/v1/cost-spikes", Notes: "bill anomaly webhook"},
+			{Method: "GET", Path: "/v1/session/whoami", Notes: "dashboard: identity + tenant context"},
+			{Method: "POST", Path: "/v1/session/issue", Notes: "Auth.js bridge: mint a backend JWT"},
+			{Method: "GET", Path: "/v1/onboarding/state", Notes: "dashboard: tenant onboarding progress"},
+			{Method: "POST", Path: "/v1/onboarding/transition", Notes: "dashboard: advance onboarding stage"},
 			{Method: "GET", Path: "/healthz", Notes: "liveness"},
 			{Method: "GET", Path: "/readyz", Notes: "readiness"},
 			{Method: "GET", Path: "/metrics", Notes: "prometheus metrics"},

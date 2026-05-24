@@ -1,12 +1,9 @@
-// Package sanitizer hardens LLM input against prompt-injection attacks
-// from customer-controlled Helm values. It strips comments, detects
-// injection markers, enforces per-field length limits, and wraps any
-// remaining suspect text in <USER_DATA> boundaries that the LLM is
-// instructed (in the system prompt) to never trust.
-//
-// This is Layer 1 of the LLM defence stack from todo.md
-// production-readiness gap #6. Layer 2 (output validation) reuses the
-// same render/conform/dryrun gate that Apply Fix uses.
+// Package sanitizer hardens LLM input from customer-controlled Helm
+// values: strip comments, flag injection markers, cap field length,
+// and wrap any remaining suspect text in <USER_DATA> boundaries the
+// system prompt instructs the LLM never to trust. Layer 1 of the LLM
+// defence stack; Layer 2 (output validation) reuses the Apply Fix
+// render/conform/dryrun gate.
 package sanitizer
 
 import (
@@ -15,16 +12,14 @@ import (
 	"strings"
 )
 
-// Defaults that match production budgets. Tunable per-tenant later.
+// Defaults match production budgets; tunable per-tenant later.
 const (
 	DefaultMaxFieldLen = 8 * 1024 // 8 KiB per Helm value field
 	DefaultMaxTotalLen = 256 * 1024
 )
 
-// Result is the output of a sanitisation pass. The caller feeds Output
-// to the prompt builder; if Suspicious is set, it should also surface
-// the reason to the audit log and may down-rank the recommendation
-// confidence one band per the LLM defense plan.
+// Result.Suspicious=true should also be surfaced to the audit log and
+// down-rank recommendation confidence one band per the LLM defense plan.
 type Result struct {
 	Output     string
 	Suspicious bool
@@ -32,17 +27,14 @@ type Result struct {
 	Truncated  bool
 }
 
-// Options tune the pass. Zero values default to the production budget.
 type Options struct {
 	MaxFieldLen int
 	MaxTotalLen int
-	// WrapSuspicious wraps the output in <USER_DATA>...</USER_DATA>
-	// when injection markers are detected, so the LLM's system prompt
-	// can treat it as untrusted text. Defaults to true.
+	// WrapSuspicious defaults to true.
 	WrapSuspicious *bool
 }
 
-// Sanitize runs the pass. It is deterministic and side-effect free.
+// Sanitize is deterministic and side-effect free.
 func Sanitize(input string, opts Options) (Result, error) {
 	if opts.MaxFieldLen <= 0 {
 		opts.MaxFieldLen = DefaultMaxFieldLen
@@ -61,22 +53,15 @@ func Sanitize(input string, opts Options) (Result, error) {
 
 	r := Result{}
 
-	// Injection-marker scan FIRST, against the raw input. Stripping
-	// comments later would otherwise neutralise injections that
-	// happened to sit in `#` comments — and we still want to flag
-	// those because (a) it's evidence of intent, and (b) we should
-	// down-rank confidence even when the output looks clean.
+	// Scan injections BEFORE stripping comments — markers hiding in
+	// `#` comments are evidence of intent and should down-rank
+	// confidence even when the output ends up clean.
 	if reasons := scanInjections(input); len(reasons) > 0 {
 		r.Suspicious = true
 		r.Reasons = append(r.Reasons, reasons...)
 	}
 
-	// Strip Helm-style line comments and block comments. We don't try
-	// to be a full YAML parser; we operate line-wise.
 	stripped := stripComments(input)
-
-	// Field-length enforcement: any single line longer than MaxFieldLen
-	// is truncated and flagged.
 	stripped, truncated := truncateLongFields(stripped, opts.MaxFieldLen)
 	if truncated {
 		r.Truncated = true
@@ -91,14 +76,8 @@ func Sanitize(input string, opts Options) (Result, error) {
 	return r, nil
 }
 
-// injectionPatterns are case-insensitive regexes matching the most
-// common prompt-injection markers. Customer-controlled comments
-// containing these almost always indicate either a hostile actor or
-// an honest mistake — both warrant the down-rank.
-// Matchers are intentionally lenient about adjectives/connectives between
-// the verb and the noun — real injection attempts vary widely in
-// phrasing. False positives are acceptable here; they only down-rank
-// confidence and surface a flag, never fail the analysis.
+// Patterns are intentionally lenient: real injection phrasing varies,
+// false positives only down-rank confidence (never fail the analysis).
 var injectionPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(ignore|disregard|forget|override)\b[^\n]{0,60}\b(instructions?|prompts?|context|directives?|rules?)\b`),
 	regexp.MustCompile(`(?i)\bnow do\b`),
@@ -120,13 +99,9 @@ func scanInjections(s string) []string {
 	return reasons
 }
 
-// stripComments removes:
-//   - YAML / Helm `#` line comments (preserving the rest of the line)
-//   - Helm `{{/* ... */}}` block comments
-//   - Go-template `{{- /* ... */ -}}` variants
-//
-// Leaves the content otherwise intact so subsequent passes can keep
-// operating on the original whitespace structure.
+// stripComments removes YAML `#` lines and Helm `{{/* */}}` blocks
+// (including go-template `{{- /* */ -}}` variants), preserving the
+// surrounding whitespace structure for later passes.
 func stripComments(s string) string {
 	// Block comments first; greedy across lines.
 	blockRe := regexp.MustCompile(`(?s)\{\{-?\s*/\*.*?\*/\s*-?\}\}`)
@@ -167,9 +142,8 @@ func stripComments(s string) string {
 	return out
 }
 
-// truncateLongFields walks line by line; any line whose length exceeds
-// maxLen is cut to maxLen + " …<truncated>". Returns the modified string
-// and whether any truncation happened.
+// truncateLongFields cuts any line over maxLen with a " …<truncated>"
+// suffix and signals whether a cut happened.
 func truncateLongFields(s string, maxLen int) (string, bool) {
 	if maxLen <= 0 {
 		return s, false
@@ -191,9 +165,8 @@ func truncateLongFields(s string, maxLen int) (string, bool) {
 	return b.String(), truncated
 }
 
-// wrapUserData wraps suspicious content in <USER_DATA>...</USER_DATA>
-// markers. The system prompt instructs the LLM to treat anything
-// inside these markers as untrusted plain text.
+// wrapUserData pairs with the system-prompt instruction to treat the
+// wrapped content as untrusted plain text.
 func wrapUserData(s string) string {
 	return "<USER_DATA>\n" + s + "\n</USER_DATA>"
 }

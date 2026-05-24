@@ -76,7 +76,6 @@ func TestGitHub_VerifyWebhook_Tampered(t *testing.T) {
 	mac.Write(body)
 	header := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
-	// Body tampered after signing — verification must fail.
 	tampered := []byte(`{"action":"closed"}`)
 	if err := NewGitHub().VerifyWebhook(secret, header, tampered); !errors.Is(err, ErrInvalidSignature) {
 		t.Fatalf("expected ErrInvalidSignature, got %v", err)
@@ -85,10 +84,10 @@ func TestGitHub_VerifyWebhook_Tampered(t *testing.T) {
 
 func TestGitHub_VerifyWebhook_BadHeader(t *testing.T) {
 	cases := []string{
-		"",               // empty
-		"md5=abc",        // wrong algo
-		"sha256=not-hex", // unhex
-		"sha256=",        // empty digest
+		"",
+		"md5=abc",
+		"sha256=not-hex",
+		"sha256=",
 	}
 	for _, h := range cases {
 		err := NewGitHub().VerifyWebhook([]byte("s"), h, []byte("b"))

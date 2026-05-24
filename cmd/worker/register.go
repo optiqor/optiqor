@@ -9,22 +9,17 @@ import (
 	"github.com/optiqor/optiqor/internal/worker/workflows"
 )
 
-// registerWorkflows binds every Year-1 workflow to the dispatcher
-// with Phase-1 dev dependencies (logging publisher, in-memory
-// receipt store, fresh ephemeral signing key). Production cmd/worker
-// wires the real adapters; the dispatcher API stays the same.
-//
-// Failing to register any one workflow returns immediately — partial
-// registration would silently leak request-handling for the missing
-// surface.
+// registerWorkflows binds every Year-1 workflow with Phase-1 dev
+// deps. A registration failure aborts the whole binding so we never
+// boot with a partial surface.
 func registerWorkflows(d *worker.InMemory, log *slog.Logger) error {
 	composer := &agent.Composer{
 		LLM:    noopLLM{},
 		Budget: agent.Budget{PerCallCents: 40},
 	}
 
-	// Ephemeral Ed25519 signer for dev. Restarting the worker rotates
-	// the key — fine for local; production loads from KMS.
+	// Ephemeral Ed25519 signer; restart rotates the key. Production
+	// loads from KMS.
 	issuer, _, err := receipts.GenerateIssuer("worker-dev")
 	if err != nil {
 		return err

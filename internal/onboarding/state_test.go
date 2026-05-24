@@ -131,8 +131,7 @@ func TestProgressPercent(t *testing.T) {
 }
 
 func TestStages_KeysMatchSchema(t *testing.T) {
-	// Regression guard: any change to the stage list must remain in
-	// sync with tenants.onboarding_state JSONB readers.
+	// Drift here breaks tenants.onboarding_state JSONB readers.
 	want := []Stage{
 		StageSignedUp,
 		StageVCSConnected,

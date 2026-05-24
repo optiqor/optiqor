@@ -10,9 +10,8 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// IngestRequest is the wire shape the in-cluster agent ships. One
-// request carries either Prometheus matrix bytes, CUR-row bytes, or
-// both — but never neither.
+// IngestRequest carries Prometheus bytes, CUR bytes, or both. Requests
+// with neither are rejected (see ErrEmptyIngest).
 type IngestRequest struct {
 	Tenant         string `json:"tenant"`
 	ClusterID      string `json:"cluster_id"`
@@ -20,31 +19,20 @@ type IngestRequest struct {
 	CURRowsCSV     []byte `json:"cur_rows_csv,omitempty"`
 }
 
-// IngestResponse acks the parse. The series + row counts are echoed
-// so the agent can decide whether to retry on a count mismatch.
+// IngestResponse echoes parse counts so the agent can detect count
+// mismatches and retry.
 type IngestResponse struct {
 	PromSeries int `json:"prom_series"`
 	CURRows    int `json:"cur_rows"`
 }
 
-// ErrEmptyIngest is returned when a request carries neither
-// Prometheus nor CUR bytes.
-var ErrEmptyIngest = errors.New("ingestion: empty request — supply prometheus_json or cur_rows_csv")
+var ErrEmptyIngest = errors.New("ingestion: empty request, supply prometheus_json or cur_rows_csv")
 
-// Handler serves POST /v1/ingest.
 type Handler struct {
-	// PromSink and CURSink are where parsed records land. Phase 1
-	// implementations just write to Postgres; tests use in-memory
-	// sinks to assert on the parsed shape.
 	PromSink func(t tenancy.Context, series []PromSeries) error
 	CURSink  func(t tenancy.Context, rows []CURRow) error
 }
 
-// Ingest parses incoming bytes and routes them to the configured
-// sinks. Returns counts so the caller can verify lossless ingestion.
-//
-//	400 — malformed JSON / CSV
-//	413 — body exceeds config.IngestMaxBytes
 func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -107,7 +95,6 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// Mount registers the route on a mux.
 func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/ingest", h.Ingest)
 }

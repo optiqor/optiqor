@@ -1,18 +1,6 @@
-// Package billing defines the pluggable cost-source contract.
-//
-// Optiqor issues three Receipt tiers (cloud / capacity / hybrid). Each
-// tier is backed by a concrete BillingSource implementation:
-//
-//   - AWS CUR (Phase 6, first impl) — Cloud Receipt
-//   - Azure Cost Management (Phase 7) — Cloud Receipt
-//   - Hetzner Cloud invoices (Phase 8) — Cloud Receipt
-//   - Capacity (any K8s without managed cloud billing) — Capacity Receipt
-//   - Aggregator combining the above for one tenant — Hybrid Receipt
-//
-// The interface in this package is what the receipt issuer, cost
-// engine, and dashboards consume. Adding a new cloud is a matter of
-// implementing BillingSource and registering it via Register; nothing
-// in domain code changes.
+// Package billing is the pluggable cost-source contract behind the
+// three Receipt tiers. Adding a cloud means implementing Source +
+// Register; domain code stays untouched.
 package billing
 
 import (
@@ -25,7 +13,7 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// Tier names map 1-to-1 to the receipts.tier CHECK constraint in
+// Tier values must match the receipts.tier CHECK in
 // migrations/0001_baseline.sql.
 type Tier string
 
@@ -35,8 +23,7 @@ const (
 	TierHybrid   Tier = "hybrid"
 )
 
-// Cloud names a managed-cloud billing surface. "" → not a managed
-// cloud (used by Capacity sources running on bare-metal / on-prem).
+// Cloud is empty for Capacity sources (bare-metal / on-prem).
 type Cloud string
 
 const (
@@ -46,14 +33,12 @@ const (
 	CloudGCP     Cloud = "gcp"
 )
 
-// Window is the closed-open time range a query covers.
+// Window is closed-open: [Start, End).
 type Window struct {
 	Start time.Time
 	End   time.Time
 }
 
-// Validate returns an error if the window is unusable. Used by every
-// concrete source's Query implementation as the first thing.
 func (w Window) Validate() error {
 	if w.End.Before(w.Start) || w.End.Equal(w.Start) {
 		return fmt.Errorf("billing: invalid window %s..%s", w.Start, w.End)
@@ -61,19 +46,16 @@ func (w Window) Validate() error {
 	return nil
 }
 
-// LineItem is a normalised view of one bill row, regardless of cloud.
-// Concrete sources translate their native shape into LineItems.
 type LineItem struct {
 	ClusterID     string
-	WorkloadID    string // optional; "" if attribution is below cluster level
-	Resource      string // e.g. "ec2:m5.large", "hetzner:CCX13", "capacity:cpu"
+	WorkloadID    string // "" if attribution sits above the workload
+	Resource      string // "ec2:m5.large", "hetzner:CCX13", "capacity:cpu"
 	UsageQty      float64
-	UnitUSDCents  int64 // unit cost in cents; 0 if not priced (Capacity tier)
+	UnitUSDCents  int64 // 0 for Capacity tier (unpriced)
 	TotalUSDCents int64
-	Currency      string // ISO 4217; "USD" by default; non-USD only for non-AWS sources
+	Currency      string // ISO 4217; defaults to USD
 }
 
-// Result is what a Source returns for a query window.
 type Result struct {
 	Source   string // implementation name, e.g. "aws-cur"
 	Cloud    Cloud  // empty for Capacity sources
@@ -83,16 +65,11 @@ type Result struct {
 	Currency string
 }
 
-// TotalUSDCents converts non-USD currencies via the FX hint stored on
-// each item; for now we only accept USD-billed sources, so this just
-// sums TotalUSDCents on items in USD and panics otherwise. Callers
-// must ensure currency consistency before invoking.
+// TotalUSDCents skips non-USD items; callers convert before aggregating.
 func (r Result) TotalUSDCents() int64 {
 	var sum int64
 	for _, it := range r.Items {
 		if it.Currency != "" && it.Currency != "USD" {
-			// Non-USD items must be converted by the caller before
-			// being fed back into a USD aggregation.
 			continue
 		}
 		sum += it.TotalUSDCents
@@ -100,25 +77,17 @@ func (r Result) TotalUSDCents() int64 {
 	return sum
 }
 
-// Source is the contract every billing implementation satisfies.
 type Source interface {
-	// Name is the stable identifier ("aws-cur", "azure-cm", "hetzner",
-	// "capacity", "hybrid"). Used for telemetry and Receipt provenance.
+	// Name is the stable id used in telemetry and Receipt provenance.
 	Name() string
-
-	// Cloud is the cloud this source bills for; "" for Capacity sources.
+	// Cloud is "" for Capacity sources.
 	Cloud() Cloud
-
-	// Tier is the Receipt tier this source produces.
 	Tier() Tier
-
-	// Query returns billing line items for the window. Implementations
-	// must enforce tenant isolation before reading any external data.
+	// Query must enforce tenant isolation before any external read.
 	Query(ctx context.Context, t tenancy.Context, w Window) (Result, error)
 }
 
-// Registry holds the set of registered sources, keyed by Name. One
-// registry per process; use Default() unless you have a reason.
+// Registry is process-wide; prefer Default().
 type Registry struct {
 	mu      sync.RWMutex
 	sources map[string]Source
@@ -128,12 +97,9 @@ func newRegistry() *Registry { return &Registry{sources: map[string]Source{}} }
 
 var defaultRegistry = newRegistry()
 
-// Default returns the process-wide registry. Production wiring at boot
-// adds the AWS CUR / Azure / Hetzner / Capacity sources.
 func Default() *Registry { return defaultRegistry }
 
-// Register adds a source. Duplicates panic to surface configuration
-// bugs at startup, not at first query.
+// Register panics on duplicates so config bugs surface at startup.
 func (r *Registry) Register(s Source) {
 	if s == nil || s.Name() == "" {
 		panic("billing: nil source or empty name")
@@ -146,8 +112,7 @@ func (r *Registry) Register(s Source) {
 	r.sources[s.Name()] = s
 }
 
-// Lookup returns a registered source. Caller is responsible for
-// tenant validation; the Source impl re-validates inside Query.
+// Lookup skips tenant validation; Source.Query re-validates inside.
 func (r *Registry) Lookup(name string) (Source, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -158,8 +123,7 @@ func (r *Registry) Lookup(name string) (Source, error) {
 	return s, nil
 }
 
-// Names returns the registered source names in insertion-stable order
-// for deterministic Result ordering when aggregating.
+// Names returns sorted source names so aggregation order is deterministic.
 func (r *Registry) Names() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -171,8 +135,7 @@ func (r *Registry) Names() []string {
 	return out
 }
 
-// ErrNotImplemented is returned by stub sources whose query path
-// hasn't been wired yet (Phase 6+ for AWS CUR, Phase 7+ for Azure).
+// ErrNotImplemented marks stub sources (AWS CUR lands Phase 6, Azure Phase 7).
 var ErrNotImplemented = errors.New("billing: not implemented in this phase")
 
 func sortStrings(s []string) {

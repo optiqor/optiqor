@@ -47,8 +47,7 @@ func TestFromContext_Empty(t *testing.T) {
 }
 
 func TestFromContext_InvalidStored(t *testing.T) {
-	// A context value with an empty tenant must still report ErrNoTenant
-	// even though the type-assertion succeeds — Validate() catches it.
+	// Type assertion succeeds but Validate must still trip ErrNoTenant.
 	ctx := context.WithValue(context.Background(), ctxKey{}, Context{WorkspaceID: "w1"})
 	_, err := FromContext(ctx)
 	if !errors.Is(err, ErrNoTenant) {

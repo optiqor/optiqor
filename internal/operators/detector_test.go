@@ -2,8 +2,7 @@ package operators
 
 import "testing"
 
-// resolverFromMap returns a Resolve func backed by a name→owner map.
-// Keys are "<APIVersion>/<Kind>/<Name>".
+// resolverFromMap keys are "<APIVersion>/<Kind>/<Name>".
 func resolverFromMap(m map[string]OwnerRef) func(OwnerRef) (OwnerRef, bool) {
 	return func(o OwnerRef) (OwnerRef, bool) {
 		key := o.APIVersion + "/" + o.Kind + "/" + o.Name
@@ -23,8 +22,7 @@ func TestClassify_DirectDeployment(t *testing.T) {
 	}
 	resolve := resolverFromMap(map[string]OwnerRef{
 		"apps/v1/ReplicaSet/api-7c5d": {APIVersion: "apps/v1", Kind: "Deployment", Name: "api", Controller: true},
-		// Deployment has no owner.
-		"apps/v1/Deployment/api": {},
+		"apps/v1/Deployment/api":      {},
 	})
 	got := Classify(w, resolve)
 	if !got.Direct {

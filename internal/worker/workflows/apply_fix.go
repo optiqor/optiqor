@@ -1,11 +1,3 @@
-// Package workflows wires per-business-workflow logic onto the
-// dispatcher. Each workflow is independently testable: tests submit
-// a payload through the in-memory dispatcher and assert on the side
-// effects the workflow exposes via injectable interfaces.
-//
-// The Apply Fix workflow runs the deterministic CLI rule engine + the
-// LLM-driven diff generator + the prwriter renderer, and stages an
-// Apply Fix payload for the GitHub layer to open as a PR.
 package workflows
 
 import (
@@ -21,14 +13,12 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// PRPublisher is the seam between this workflow and the GitHub API.
-// Production wires the real github.com/google/go-github client;
-// tests use a fake.
+// PRPublisher is the seam to the GitHub API. Production wires
+// google/go-github; tests use a fake.
 type PRPublisher interface {
 	Publish(ctx context.Context, t tenancy.Context, p PullRequest) (PRResult, error)
 }
 
-// PullRequest is what the workflow asks the publisher to open.
 type PullRequest struct {
 	RepoOwner   string
 	RepoName    string
@@ -40,13 +30,11 @@ type PullRequest struct {
 	ApplyFixID  string
 }
 
-// PRResult is what the publisher returns.
 type PRResult struct {
 	URL    string
 	Number int
 }
 
-// ApplyFixPayload is the JSON the dispatcher receives on Submit.
 type ApplyFixPayload struct {
 	RepoOwner  string        `json:"repo_owner"`
 	RepoName   string        `json:"repo_name"`
@@ -59,24 +47,16 @@ type ApplyFixPayload struct {
 	Now        time.Time     `json:"now"`
 }
 
-// ApplyFix is the workflow shape the dispatcher registers.
-//
-// Construct one per process and Register it with [worker.Dispatcher].
+// ApplyFix runs the deterministic CLI rule engine, the LLM diff
+// generator, and the prwriter renderer, then hands a PR payload to the
+// GitHub layer. One per process, registered with worker.Dispatcher.
 type ApplyFix struct {
 	Composer  *agent.Composer
 	Publisher PRPublisher
 }
 
-// Name is the dispatcher key.
 func (ApplyFix) Name() string { return "apply_fix" }
 
-// Execute runs one Apply Fix. Steps:
-//
-//  1. Decode payload + revalidate tenant.
-//  2. Parse the chart so we can attach the precise workload name.
-//  3. Run the agent composer to get an explanation + unified diff.
-//  4. Render the PR markdown body via prwriter.
-//  5. Hand off to the PRPublisher.
 func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) error {
 	var p ApplyFixPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -89,14 +69,12 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 		return fmt.Errorf("apply_fix: nil publisher")
 	}
 
-	// (2) Parse the chart so the prwriter Body shows the workload name.
 	workloads, err := parser.ParseValues(stringReader(p.ChartYAML))
 	if err != nil {
 		return fmt.Errorf("apply_fix: parse chart: %w", err)
 	}
 	primary := primaryWorkload(workloads, p.Finding.Workload)
 
-	// (3) LLM-driven fix.
 	resp, err := w.Composer.GenerateFix(ctx, t, agent.FixRequest{
 		Finding:   p.Finding,
 		ChartYAML: p.ChartYAML,
@@ -107,7 +85,6 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 		return fmt.Errorf("apply_fix: compose: %w", err)
 	}
 
-	// (4) Markdown body.
 	body, err := prwriter.Render(prwriter.Comment{
 		Chart:                  fmt.Sprintf("%s/%s/%s", p.RepoOwner, p.RepoName, p.ChartPath),
 		Tenant:                 t.TenantID,
@@ -123,7 +100,6 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 		return fmt.Errorf("apply_fix: render: %w", err)
 	}
 
-	// (5) PR open.
 	_, err = w.Publisher.Publish(ctx, t, PullRequest{
 		RepoOwner:   p.RepoOwner,
 		RepoName:    p.RepoName,

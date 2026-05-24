@@ -1,37 +1,28 @@
 package config
 
-// HTTP request body-size caps for every public ingress.
-//
-// Each ingress sets its own cap because the payloads differ in nature:
-//
-//   - GitHub webhooks carry large marketplace and push events. 8 MiB
-//     covers the upper tail of legitimate deliveries.
-//   - /v1/ingest is the agent uploading a 30-day Prometheus snapshot
-//     for a medium tenant. 16 MiB matches the observed ceiling.
-//   - /v1/analyze takes a Helm values.yaml. Files past 1 MiB are
-//     pathological (a values.yaml is config, not data).
-//   - /v1/apply-fixes takes a preview body the size of a few diffs.
-//     1 MiB is comfortable.
-//   - AWS Cost Anomaly Detection webhooks are tiny. 64 KiB is plenty.
-//
-// All five live in one file so a future bump is a single grep and the
-// reasoning is colocated. Add new endpoints here, not as bare literals
-// at the call site.
+// Per-endpoint body-size caps. All caps live here so a future bump is
+// one grep; never put a bare literal at the call site.
 const (
-	// GitHubWebhookMaxBytes caps inbound GitHub App webhook bodies.
-	GitHubWebhookMaxBytes = 8 << 20 // 8 MiB
+	// 8 MiB covers the upper tail of legitimate GitHub webhook deliveries
+	// (marketplace + push events).
+	GitHubWebhookMaxBytes = 8 << 20
 
-	// IngestMaxBytes caps the /v1/ingest payload from the in-cluster
-	// agent (Prometheus snapshot + workload inventory).
-	IngestMaxBytes = 16 << 20 // 16 MiB
+	// 16 MiB matches the observed ceiling of a 30-day Prometheus
+	// snapshot from a medium tenant.
+	IngestMaxBytes = 16 << 20
 
-	// SandboxAnalyzeMaxBytes caps /v1/analyze input (Helm values.yaml).
-	SandboxAnalyzeMaxBytes = 1 << 20 // 1 MiB
+	// values.yaml is config, not data — past 1 MiB is pathological.
+	SandboxAnalyzeMaxBytes = 1 << 20
 
-	// PRApplyFixMaxBytes caps the /v1/apply-fixes preview body.
-	PRApplyFixMaxBytes = 1 << 20 // 1 MiB
+	PRApplyFixMaxBytes = 1 << 20
 
-	// BillingSpikeWebhookMaxBytes caps AWS Cost Anomaly Detection
-	// webhook deliveries.
-	BillingSpikeWebhookMaxBytes = 64 << 10 // 64 KiB
+	// AWS Cost Anomaly Detection webhooks are tiny.
+	BillingSpikeWebhookMaxBytes = 64 << 10
+
+	// /v1/session/issue is subject + tenant id + name — fits in one
+	// TCP segment.
+	SessionIssueMaxBytes = 16 << 10
+
+	// /v1/onboarding/transition body is {"to": <stage>}.
+	OnboardingTransitionMaxBytes = 4 << 10
 )

@@ -1,10 +1,3 @@
-// Package logging provides the slog handler that injects tenant_id,
-// request_id, and workflow_id from context into every log line.
-//
-// The handler is a thin wrapper around the stdlib slog.JSONHandler. It
-// reads context-attached IDs and adds them as structured attributes on
-// every record automatically — domain code never needs to remember to
-// log them by hand.
 package logging
 
 import (
@@ -16,8 +9,7 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// Field names emitted on every record. Stable so log indexing in Loki
-// can be aliased to these keys.
+// Attribute names. Stable so Loki indexers can alias to them.
 const (
 	AttrTenantID   = "tenant_id"
 	AttrWorkspace  = "workspace_id"
@@ -34,8 +26,8 @@ const (
 	workflowIDKey
 )
 
-// WithRequestID attaches an HTTP request ID. Middleware sets this once
-// per request; downstream handlers, DB calls, LLM calls all inherit it.
+// WithRequestID is set once by middleware; downstream handlers, DB
+// calls, and LLM calls inherit it through context.
 func WithRequestID(ctx context.Context, id string) context.Context {
 	if id == "" {
 		return ctx
@@ -43,8 +35,7 @@ func WithRequestID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, requestIDKey, id)
 }
 
-// WithWorkflowID attaches a Temporal workflow ID. The worker sets this
-// once per workflow invocation.
+// WithWorkflowID is set once per workflow invocation by the worker.
 func WithWorkflowID(ctx context.Context, id string) context.Context {
 	if id == "" {
 		return ctx
@@ -52,16 +43,14 @@ func WithWorkflowID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, workflowIDKey, id)
 }
 
-// New returns a slog.Logger that emits JSON to w and auto-injects
-// tenant + request + workflow IDs from context. lvl is "debug" |
-// "info" | "warn" | "error" (case-insensitive).
+// New returns a JSON slog.Logger with the context auto-injection
+// handler. lvl is debug|info|warn|error (case-insensitive).
 func New(w io.Writer, lvl string) *slog.Logger {
 	base := slog.NewJSONHandler(w, &slog.HandlerOptions{Level: parseLevel(lvl)})
 	return slog.New(&contextHandler{Handler: base})
 }
 
-// contextHandler enriches every record with attributes pulled from the
-// context. It does not allocate when the context carries no IDs.
+// contextHandler is allocation-free when the context carries no IDs.
 type contextHandler struct {
 	slog.Handler
 }

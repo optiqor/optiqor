@@ -1,17 +1,7 @@
-// Package ingestion parses the two upstream telemetry sources Optiqor
-// trusts for cost + utilization data:
-//
-//   - Prometheus `/api/v1/query_range` responses (the in-cluster agent
-//     ships these from the customer's Prometheus into the SaaS).
-//   - AWS Cost & Usage Report (CUR) rows (read off Athena once the
-//     daily CUR drop lands in S3).
-//
-// The parsers are pure functions over JSON / CSV bytes; the live HTTP
-// + S3 clients live elsewhere. Splitting it this way means we can
-// unit-test every parse path against fixture bytes — production-grade
-// CUR ingestion has historically been a graveyard for off-by-one
-// bugs, and the safer pattern is "parsers are deterministic, callers
-// are integration-tested."
+// Package ingestion parses Prometheus query_range matrices and AWS CUR
+// rows into normalised shapes the cost + confidence engines consume.
+// Parsers are pure over bytes; the HTTP / S3 / Athena clients live
+// elsewhere so every parse path can be unit-tested against fixtures.
 package ingestion
 
 import (
@@ -26,24 +16,20 @@ import (
 	"time"
 )
 
-// ---- Prometheus query_range ------------------------------------------
-
-// PromSeries is the normalised representation of a Prometheus
-// `query_range` matrix result for one series. The samples are
-// chronologically ordered and floats are kept verbatim — the cost +
-// confidence engines accept whatever resolution Prometheus ships.
+// PromSeries is the normalised matrix result for one series. Floats
+// are kept verbatim; downstream engines accept whatever resolution
+// Prometheus ships.
 type PromSeries struct {
 	Metric  map[string]string
 	Samples []PromSample
 }
 
-// PromSample is one (timestamp, value) pair.
 type PromSample struct {
 	At    time.Time
 	Value float64
 }
 
-// promResponse mirrors the on-the-wire shape Prometheus 2.x returns.
+// promResponse mirrors the Prometheus 2.x query_range wire shape.
 type promResponse struct {
 	Status string         `json:"status"`
 	Data   promResultData `json:"data"`
@@ -59,16 +45,13 @@ type promMatrixEntry struct {
 	Values [][2]any          `json:"values"`
 }
 
-// ErrPromBadStatus is returned when Prometheus' top-level status is
-// not "success" — usually means the query syntax was wrong.
 var ErrPromBadStatus = errors.New("ingestion: prometheus status != success")
 
-// ErrPromUnsupportedType is returned when the result is not a matrix
-// (e.g. an instant `vector`). We deliberately don't auto-promote.
+// ErrPromUnsupportedType rejects non-matrix results. Auto-promoting an
+// instant vector to a matrix would hide query-shape bugs upstream.
 var ErrPromUnsupportedType = errors.New("ingestion: prometheus result is not a matrix")
 
-// ParsePrometheusMatrix decodes one Prometheus matrix response into a
-// slice of normalised series. Samples within each series are sorted
+// ParsePrometheusMatrix returns series with samples sorted
 // chronologically. Empty matrices return (nil, nil).
 func ParsePrometheusMatrix(r io.Reader) ([]PromSeries, error) {
 	var raw promResponse
@@ -105,11 +88,12 @@ func ParsePrometheusMatrix(r io.Reader) ([]PromSeries, error) {
 }
 
 func promPairToSample(p [2]any) (PromSample, error) {
-	tsRaw, ok := p[0].(float64) // Prometheus emits seconds-since-epoch as a JSON number
+	// Prometheus emits [seconds-since-epoch-as-number, value-as-string].
+	tsRaw, ok := p[0].(float64)
 	if !ok {
 		return PromSample{}, fmt.Errorf("expected float ts, got %T", p[0])
 	}
-	valStr, ok := p[1].(string) // and stringified values
+	valStr, ok := p[1].(string)
 	if !ok {
 		return PromSample{}, fmt.Errorf("expected string value, got %T", p[1])
 	}
@@ -125,26 +109,21 @@ func promPairToSample(p [2]any) (PromSample, error) {
 	}, nil
 }
 
-// ---- AWS CUR row ----------------------------------------------------
-
-// CURRow is the subset of the AWS Cost & Usage Report that Optiqor
-// trusts. The full CUR has hundreds of columns; we deliberately
-// narrow to the few we sign into Receipts so future widening doesn't
-// quietly change the signature surface.
+// CURRow is the narrowed projection of an AWS CUR row that Optiqor
+// signs into Receipts. The full CUR has hundreds of columns; widening
+// this struct changes the signature surface, so add fields deliberately.
 type CURRow struct {
 	UsageStartUTC    time.Time
 	UsageEndUTC      time.Time
 	ServiceCode      string // e.g. AmazonEC2
 	UsageType        string // e.g. BoxUsage:m6i.large
 	Region           string
-	ResourceID       string // optional but typical for K8s nodes
+	ResourceID       string // optional; typically present for K8s nodes
 	UsageQuantity    float64
 	UnblendedCostUSD float64
 }
 
-// ParseCURRows reads a CUR CSV stream and returns rows projected onto
-// CURRow. Unknown headers are tolerated; missing required ones return
-// an error.
+// ParseCURRows tolerates unknown columns; missing required ones fail.
 func ParseCURRows(r io.Reader) ([]CURRow, error) {
 	rd := csv.NewReader(r)
 	header, err := rd.Read()
@@ -178,7 +157,7 @@ func ParseCURRows(r io.Reader) ([]CURRow, error) {
 	return out, nil
 }
 
-// Required CUR columns. The strings are the verbatim AWS column names.
+// requiredCURColumns are the verbatim AWS CUR column names we depend on.
 var requiredCURColumns = []string{
 	"lineItem/UsageStartDate",
 	"lineItem/UsageEndDate",

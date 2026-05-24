@@ -6,7 +6,6 @@ import (
 	"net/http/pprof"
 )
 
-// pprof handler aliases — kept here so main.go imports stay focused.
 var (
 	pprofIndex   = pprof.Index
 	pprofCmdline = pprof.Cmdline
@@ -15,9 +14,9 @@ var (
 	pprofTrace   = pprof.Trace
 )
 
-// subtleConstantTimeEq is a fixed-time string equality check.
-// Returns 1 when equal, 0 otherwise. Wraps subtle.ConstantTimeCompare
-// with a length check that itself runs in constant time.
+// subtleConstantTimeEq returns 1 when a == b, 0 otherwise. The length
+// check is also constant-time so a length mismatch doesn't leak via
+// timing on the admin-token gate (cmd/api/main.go mountPProf).
 func subtleConstantTimeEq(a, b string) int {
 	if len(a) != len(b) {
 		return 0
@@ -25,6 +24,4 @@ func subtleConstantTimeEq(a, b string) int {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b))
 }
 
-// _ ensures the pprof package is imported even when no one calls the
-// handlers — this keeps the import meaningful for go vet.
 var _ = http.NotFound

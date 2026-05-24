@@ -1,10 +1,6 @@
-// Command worker runs the Optiqor Temporal worker.
-//
-// Workflows: PR analysis, Apply Fix generation, Receipt issuance,
-// Auto-Rollback monitoring, Cost Spike detection. Phase 1 wires
-// config + structured logging + an in-memory dispatcher; the
-// production Temporal SDK adapter swaps in at Phase 3 by replacing
-// the Dispatcher implementation — call sites do not change.
+// Command worker runs the Optiqor Temporal worker. Phase 1 uses an
+// in-memory dispatcher; Phase 3 swaps the Dispatcher implementation
+// for the Temporal SDK adapter without touching call sites.
 package main
 
 import (

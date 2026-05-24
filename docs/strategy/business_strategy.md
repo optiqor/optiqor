@@ -466,17 +466,39 @@ Internal raw scores map to customer-facing bands: **Low** (< 0.65), **Medium** (
 
 ### 8.1 Competitive Landscape (Honest)
 
-The Kubernetes cost space has clear incumbents on the cluster-side. The PR-layer is effectively empty — Kubecost's one attempt has been dormant for 3 years.
+The Kubernetes cost space has clear incumbents on the cluster-side. The **true PR-write layer** is effectively empty — Kubecost's one attempt has been dormant for 3 years, and the vendors who advertise "GitOps integration" do something fundamentally different.
 
-| Category | Leader | What they own | What they don't do |
-|----------|--------|---------------|---------------------|
-| **K8s cost-per-PR attempt (abandoned)** | **Kubecost GitHub Action** (`cost-prediction-action`) | Shipped v0.1.1 in April 2023, 31 stars, 33 lifetime commits, last updated 2023 | Dormant project. Closed-source container. Does not cover Helm values.yaml, no Apply Fix, no cluster-grounded confidence. Evidence the easy version of this category doesn't earn adoption |
-| **K8s cost visibility** | Kubecost (~$70K–$100K/yr ACV) | Granular allocation, multi-cluster dashboards, Prometheus-native | **Loop-opener; Optiqor is the loop-closer.** Kubecost surfaces waste in the dashboard; Optiqor catches it at PR time before the next regression ships. A team running both is better served than either alone — explicit in `optiqor.dev/works-with/kubecost` (Month 4 GTM). |
-| **K8s autopilot** | Cast AI (~$500M ARR) | Cluster takeover, spot migration, bin-packing | Black-box (opaque to platform teams), K8s-only, scary for risk-averse orgs |
-| **K8s autonomous rightsizing** | ScaleOps, Sedai | Real-time ML-based optimization | Cluster-side not PR-native, limited auditability |
-| **K8s security** | Wiz, Snyk, Kubescape | Broad detection, CVE coverage, compliance | Detection only — fixes sit in Jira |
-| **Terraform cost PRs** | Infracost (3,000+ customers) | Excellent Terraform PR experience, SOC 2, AutoFix, Claude Code plugins | Does not parse Helm / Kustomize / K8s manifests |
-| **K8s configuration validation** | Datree, OPA, Kyverno | Policy-as-code, admission webhooks | Detection only, no cost dimension, no auto-fix |
+#### The two product categories the market often conflates
+
+These are **antonymous patterns**, not points on a spectrum. Customers buying for GitOps discipline will reject Category B for the same reason they reject Cast AI's autopilot — it breaks the property they built GitOps to preserve.
+
+| | **Category A — True GitOps PR-write** | **Category B — Autonomous-with-annotations** |
+|---|---|---|
+| How changes apply | Tool opens PR in customer git → customer merges → ArgoCD/Flux reconciles from git | Tool runs mutating webhook or eviction+mutate webhook in-cluster → applies changes directly → ArgoCD configured with `ignoreDifferences` to mask resulting drift |
+| Source of truth | **Git stays authoritative** | Cluster becomes authoritative; git is now stale |
+| ArgoCD drift status | Always "Synced" (changes flow through merge) | Always "OutOfSync" by design — `ignoreDifferences` masks it |
+| Customer audit trail | `git log` + PR history | Tool-internal dashboard |
+| Rollback | `git revert` → reconciliation handles it | Tool-specific procedure |
+| Trust model | Customer reviews every change | Customer trusts tool autonomy |
+| Sits here | **Optiqor. Empty category.** | PerfectScale, StormForge, Cast AI, ScaleOps, Sedai |
+
+PerfectScale's own docs: *"The Autoscaler doesn't patch the resources section in the parent manifest. Instead, for the evict+mutate flow, it patches the annotations section… To ignore these annotations in ArgoCD, configure the ignoreDifferences key."* StormForge's own docs: mutating admission webhook + "Continuous reconciliation mode" that maintains recommended values "and not overwritten during CI/CD." Both confirm Category B explicitly.
+
+#### Vendor-by-vendor placement
+
+| Category | Leader | How they apply changes | What they own | What they don't do |
+|----------|--------|------------------------|---------------|---------------------|
+| **True PR-write (Category A)** | **Optiqor** | **Opens PR in customer git; customer merges; ArgoCD reconciles** | The only vendor that preserves git as the single source of truth while shipping rightsizing recommendations. Receipts + Auto-Rollback in PRs are novel. | — |
+| **K8s cost-per-PR attempt (abandoned, Category A)** | **Kubecost GitHub Action** (`cost-prediction-action`) | PR comment only (no Apply Fix) | Shipped v0.1.1 April 2023, 31 stars, 33 lifetime commits, last updated 2023 | Dormant project. Closed-source container. Does not cover Helm values.yaml, no Apply Fix, no cluster-grounded confidence. Evidence the easy version of this category doesn't earn adoption |
+| **K8s cost visibility** | Kubecost (~$70K–$100K/yr ACV) | Dashboard only (no apply) | Granular allocation, multi-cluster dashboards, Prometheus-native | **Loop-opener; Optiqor is the loop-closer.** Kubecost surfaces waste in the dashboard; Optiqor catches it at PR time before the next regression ships. A team running both is better served than either alone — explicit in `optiqor.dev/works-with/kubecost` (Month 4 GTM). |
+| **K8s autopilot (Category B)** | Cast AI ($272M raised, ~$900M valuation, 2,100+ customers, Series C Apr 2025) | Custom autoscaler replaces Cluster Autoscaler; bin-packing applied directly | Cluster takeover, spot migration, bin-packing | Black-box (opaque to platform teams); breaks GitOps single-source-of-truth; scary for risk-averse orgs |
+| **K8s autonomous rightsizing (Category B)** | ScaleOps ($130M Series C, $800M val, 450% YoY), Sedai ($20M Series B, 7x rev growth 2024) | Mutating webhook / autonomous agent | Real-time ML-based optimization | Cluster-side not PR-native; limited auditability; same GitOps-drift problem as PerfectScale/StormForge |
+| **K8s rightsizing with "GitOps integration" (Category B)** | PerfectScale, StormForge | Eviction-mutate webhook or mutating admission webhook; ArgoCD `ignoreDifferences` masks drift | Production-grade autonomous sizing with ML | **Not Category A.** Their "GitOps integration" is "we'll tell ArgoCD to ignore the drift we create." Source of truth is the cluster, not git. |
+| **K8s security** | Wiz, Snyk, Kubescape | Detection only (no apply) | Broad detection, CVE coverage, compliance | Detection only — fixes sit in Jira |
+| **Terraform cost PRs (Category A, adjacent domain)** | Infracost (3,000+ customers) | PR comment + AutoFix PR write | Excellent Terraform PR experience, SOC 2, AutoFix, Claude Code plugins | Does not parse Helm / Kustomize / K8s manifests. Proves the Category A pattern works at Fortune 500 scale for Terraform; Optiqor is the K8s equivalent. |
+| **K8s configuration validation** | Datree, OPA, Kyverno | Admission webhook (policy-as-code, blocks not fixes) | Policy-as-code, admission webhooks | Detection only, no cost dimension, no auto-fix |
+
+**Key takeaway:** Optiqor sits alone in Category A for Kubernetes. The vendors that look like competitors on a surface read (PerfectScale, StormForge) are in Category B and the categorical difference matters to the GitOps-disciplined platform-engineering buyer.
 
 ### 8.2 The Wedge Is Real And Empty
 

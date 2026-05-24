@@ -118,6 +118,23 @@ jobs:
       - name: Verify default_tags block on every env
         run: bash scripts/check-terraform-tags.sh
 
+  openapi-parity:
+    name: OpenAPI ↔ handler parity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out optiqor backend
+        uses: actions/checkout@v5
+        with:
+          path: optiqor
+      - name: Check out optiqor-cli sibling (carries the spec)
+        uses: actions/checkout@v5
+        with:
+          repository: optiqor/optiqor-cli
+          path: optiqor-cli
+          token: ${{ secrets.OPTIQOR_BOT_TOKEN || github.token }}
+      - name: Assert every spec path is wired and vice versa
+        run: bash scripts/check-openapi-parity.sh
+
   terraform-fmt:
     name: Terraform fmt
     runs-on: ubuntu-latest

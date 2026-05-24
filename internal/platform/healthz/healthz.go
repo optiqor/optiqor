@@ -1,10 +1,7 @@
-// Package healthz provides a small registry of named readiness checks.
-//
-// Liveness ("is the process alive?") is trivial — if the HTTP server can
-// answer at all, the process is alive. Readiness ("can this instance
-// serve traffic right now?") is a composite of dependent-service pings:
-// Postgres, Redis, Temporal, etc. Each domain registers its own checks
-// here at boot; the API server iterates them on /readyz.
+// Package healthz is a registry of named readiness checks. Liveness is
+// trivial (server answers => process alive); readiness is the composite
+// of dependent pings (Postgres, Redis, Temporal). Domains register at
+// boot; /readyz iterates.
 package healthz
 
 import (
@@ -14,11 +11,10 @@ import (
 	"time"
 )
 
-// CheckFunc returns nil when the dependency is reachable. Any error is
-// surfaced verbatim to the /readyz response.
+// CheckFunc returns nil when the dependency is reachable; any error is
+// surfaced verbatim to /readyz.
 type CheckFunc func(context.Context) error
 
-// Result is the outcome of one named check.
 type Result struct {
 	Name    string        `json:"name"`
 	OK      bool          `json:"ok"`
@@ -26,18 +22,15 @@ type Result struct {
 	Latency time.Duration `json:"latency_ns"`
 }
 
-// Registry is a thread-safe set of named checks. Construct one per
-// process; share by pointer.
+// Registry is concurrent-safe; one per process, shared by pointer.
 type Registry struct {
 	mu     sync.RWMutex
 	checks map[string]CheckFunc
 }
 
-// NewRegistry returns an empty Registry.
 func NewRegistry() *Registry { return &Registry{checks: map[string]CheckFunc{}} }
 
-// Register adds a check. The name must be unique; duplicates panic to
-// catch programming errors at boot.
+// Register adds a check. Duplicates panic — programmer error at boot.
 func (r *Registry) Register(name string, fn CheckFunc) {
 	if name == "" || fn == nil {
 		panic("healthz: empty name or nil func")
@@ -50,8 +43,8 @@ func (r *Registry) Register(name string, fn CheckFunc) {
 	r.checks[name] = fn
 }
 
-// Run executes every registered check with the given timeout. Returns
-// (results, allOK). Results are deterministic-ordered by name.
+// Run executes every check with per-check timeout. Results are sorted
+// by name so /readyz output is deterministic.
 func (r *Registry) Run(ctx context.Context, perCheckTimeout time.Duration) ([]Result, bool) {
 	r.mu.RLock()
 	names := make([]string, 0, len(r.checks))
@@ -84,8 +77,7 @@ func (r *Registry) Run(ctx context.Context, perCheckTimeout time.Duration) ([]Re
 	return results, allOK
 }
 
-// Names returns the registered names in deterministic order. Useful for
-// tests and operator inspection.
+// Names returns registered names sorted.
 func (r *Registry) Names() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -97,17 +89,16 @@ func (r *Registry) Names() []string {
 	return names
 }
 
-// AlwaysOK is a placeholder check that succeeds. Used during local dev
-// before real driver wiring lands; remove from production registry.
+// AlwaysOK is a placeholder for local dev; never register in prod.
 func AlwaysOK(_ context.Context) error { return nil }
 
-// AlwaysFail is the inverse, useful in tests.
+// AlwaysFail is the test-only inverse.
 func AlwaysFail(reason string) CheckFunc {
 	return func(_ context.Context) error { return fmt.Errorf("%s", reason) }
 }
 
 func sortStrings(s []string) {
-	// insertion sort; n is tiny (≤ a dozen checks)
+	// insertion sort — n is a dozen at most
 	for i := 1; i < len(s); i++ {
 		for j := i; j > 0 && s[j-1] > s[j]; j-- {
 			s[j-1], s[j] = s[j], s[j-1]
