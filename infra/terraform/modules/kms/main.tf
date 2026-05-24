@@ -1,6 +1,7 @@
-# KMS module — multi-region key for Receipt signing (HSM-backed
-# Ed25519 SIGN_VERIFY key) plus a separate symmetric key for
-# at-rest encryption.
+# KMS module — symmetric data-at-rest key + an ECDSA P-256 receipt
+# signing key kept around for backwards compatibility. New deployments
+# should pick up the signer key from modules/kms-signer (ADR-0017,
+# scoped IAM per ADR-0011 §"Signer service isolation").
 
 terraform {
   required_version = ">= 1.7"
@@ -23,12 +24,13 @@ resource "aws_kms_alias" "data" {
   target_key_id = aws_kms_key.data.key_id
 }
 
-# Receipt signing key — asymmetric SIGN_VERIFY, never extractable.
+# Receipt signing key — ECDSA P-256 per ADR-0017. Never extractable.
 # Yearly rotation handled out-of-band: a new key is created and the
 # transparency log records the rollover. Old keys remain enabled for
-# verification of historical Receipts.
+# verification of historical Receipts. Prefer modules/kms-signer for
+# new deployments — that module scopes IAM tighter.
 resource "aws_kms_key" "receipt_signing" {
-  description              = "${var.name} Receipt Ed25519 signing key"
+  description              = "${var.name} Receipt ECDSA P-256 signing key (legacy; prefer modules/kms-signer)"
   customer_master_key_spec = "ECC_NIST_P256"
   key_usage                = "SIGN_VERIFY"
   multi_region             = var.multi_region

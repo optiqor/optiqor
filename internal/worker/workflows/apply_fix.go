@@ -9,6 +9,7 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 	"github.com/optiqor/optiqor/internal/agent"
 	"github.com/optiqor/optiqor/internal/applyfix/gate"
+	"github.com/optiqor/optiqor/internal/applyfix/latency"
 	"github.com/optiqor/optiqor/internal/operators"
 	"github.com/optiqor/optiqor/internal/parser"
 	"github.com/optiqor/optiqor/internal/prwriter"
@@ -67,6 +68,15 @@ type ApplyFix struct {
 	Gate      *gate.Pipeline
 	Validator *validator.Pipeline // optional; nil skips Validation-Before-Recommendation
 	Publisher PRPublisher
+	Latency   *latency.Recorder // optional; nil disables histogram recording
+
+	// SkepticMode forces the strictest possible safety floor. Maps to:
+	// validator becomes mandatory (returns an error if not configured),
+	// gate must reach Passed (NotImplemented stages are rejected), and
+	// any non-empty warn-level verdict is treated as a hard rejection.
+	// Use for new tenants + new clusters until the analysis surface
+	// has earned trust.
+	SkepticMode bool
 
 	// OwnerResolve is the function the operator detector uses to walk
 	// the owner-chain. Production wires it to the agent's informer
@@ -77,6 +87,11 @@ type ApplyFix struct {
 func (ApplyFix) Name() string { return "apply_fix" }
 
 func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) error {
+	totalStart := time.Now()
+	defer func() {
+		w.Latency.Observe(latency.StepTotal, time.Since(totalStart))
+	}()
+
 	var p ApplyFixPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return fmt.Errorf("apply_fix: decode: %w", err)
@@ -90,45 +105,65 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 	if w.Publisher == nil {
 		return fmt.Errorf("apply_fix: nil publisher")
 	}
+	if w.SkepticMode && w.Validator == nil {
+		return fmt.Errorf("apply_fix: skeptic mode requires a Validator")
+	}
 
+	parseStart := time.Now()
 	workloads, err := parser.ParseValues(stringReader(p.ChartYAML))
+	w.Latency.Observe(latency.StepParse, time.Since(parseStart))
 	if err != nil {
 		return fmt.Errorf("apply_fix: parse chart: %w", err)
 	}
 	primary := primaryWorkload(workloads, p.Finding.Workload)
 
 	if w.OwnerResolve != nil && len(p.WorkloadOwners) > 0 {
+		gateStart := time.Now()
 		cls := operators.Classify(operators.Workload{
 			Namespace: "",
 			Kind:      "Deployment",
 			Name:      primary,
 			Owners:    p.WorkloadOwners,
 		}, w.OwnerResolve)
+		w.Latency.Observe(latency.StepOperatorGate, time.Since(gateStart))
 		if !cls.Direct {
 			return fmt.Errorf("apply_fix: operator-owned workload %s rejected (%s)", primary, cls.String())
 		}
 	}
 
+	composeStart := time.Now()
 	resp, err := w.Composer.GenerateFix(ctx, t, agent.FixRequest{
 		Finding:   p.Finding,
 		ChartYAML: p.ChartYAML,
 		Workload:  primary,
 		Model:     p.Model,
 	})
+	w.Latency.Observe(latency.StepCompose, time.Since(composeStart))
 	if err != nil {
 		return fmt.Errorf("apply_fix: compose: %w", err)
 	}
 
-	if _, err := w.Gate.Run(ctx, t, gate.Candidate{
+	gateStart := time.Now()
+	gateRes, err := w.Gate.Run(ctx, t, gate.Candidate{
 		ApplyFixID:  p.ApplyFixID,
 		ChartYAML:   p.ChartYAML,
 		UnifiedDiff: resp.UnifiedDiff,
 		Workload:    primary,
-	}); err != nil {
+	})
+	w.Latency.Observe(latency.StepGate, time.Since(gateStart))
+	if err != nil {
 		return fmt.Errorf("apply_fix: gate: %w", err)
+	}
+	if w.SkepticMode {
+		for _, sr := range gateRes.Stages {
+			if sr.Status != gate.StatusPassed {
+				return fmt.Errorf("apply_fix: skeptic mode rejects stage %s %s", sr.Stage, sr.Status)
+			}
+		}
 	}
 
 	if w.Validator != nil {
+		valStart := time.Now()
 		res, err := w.Validator.Run(ctx, t, validator.Candidate{
 			WorkloadID:       primary,
 			DetectorID:       p.Finding.DetectorID,
@@ -139,14 +174,23 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 			MonthlyUSDCents:  p.Finding.MonthlyUSDCents,
 			Signals:          p.ClusterSignals,
 		})
+		w.Latency.Observe(latency.StepValidator, time.Since(valStart))
 		if err != nil {
 			return fmt.Errorf("apply_fix: validator: %w", err)
 		}
 		if res.Rejected != nil {
 			return fmt.Errorf("apply_fix: validator rejected: %s — %s", res.Rejected.Validator, res.Rejected.Reason)
 		}
+		if w.SkepticMode {
+			for _, v := range res.Verdicts {
+				if v.Severity == validator.SeverityWarn {
+					return fmt.Errorf("apply_fix: skeptic mode rejects warn-level verdict from %s: %s", v.Validator, v.Reason)
+				}
+			}
+		}
 	}
 
+	renderStart := time.Now()
 	body, err := prwriter.Render(prwriter.Comment{
 		Chart:                  fmt.Sprintf("%s/%s/%s", p.RepoOwner, p.RepoName, p.ChartPath),
 		Tenant:                 t.TenantID,
@@ -158,10 +202,12 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 		GeneratedAt:            p.Now,
 		SecurityVisible:        p.Finding.Category == rules.CategorySecurity,
 	})
+	w.Latency.Observe(latency.StepRender, time.Since(renderStart))
 	if err != nil {
 		return fmt.Errorf("apply_fix: render: %w", err)
 	}
 
+	publishStart := time.Now()
 	_, err = w.Publisher.Publish(ctx, t, PullRequest{
 		RepoOwner:   p.RepoOwner,
 		RepoName:    p.RepoName,
@@ -172,6 +218,7 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 		UnifiedDiff: resp.UnifiedDiff,
 		ApplyFixID:  p.ApplyFixID,
 	})
+	w.Latency.Observe(latency.StepPublish, time.Since(publishStart))
 	if err != nil {
 		return fmt.Errorf("apply_fix: publish: %w", err)
 	}
