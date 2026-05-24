@@ -240,7 +240,7 @@ These items move "what blocks the first customer install" out of Phase 5 and int
 > **Status (2026-05-11):** `internal/prwriter` markdown renderer + Apply Fix preview endpoint + `apply_fix` workflow are live ahead of schedule (folded forward from Phase 4 to give Phase 2's sandbox a real "what would the Apply Fix PR look like?" surface). The remaining `[ ]` items are real-PR-opening + the multi-stage gate that requires a live K8s cluster.
 
 - [x] `internal/prwriter` — PR comment markdown renderer ([`internal/prwriter/comment.go`](internal/prwriter/comment.go)) + Apply Fix preview endpoint `POST /v1/apply-fixes` ([`internal/prwriter/handler.go`](internal/prwriter/handler.go)) + `apply_fix` workflow ([`internal/worker/workflows/apply_fix.go`](internal/worker/workflows/apply_fix.go)) wired into the in-memory dispatcher with a `PRPublisher` interface seam. Cost-first body layout matches the CLI brand voice; security findings render as a bonus subsection
-- [ ] **`migrations/0009_vcs_installations.sql`** — one row per GitHub/GitLab App installation per tenant (multi-VCS + multi-org enterprise both need many installations per tenant): `id` DEFAULT `uuid_generate_v7()`, `tenant_id`, `provider TEXT CHECK ('github','gitlab')`, `installation_id BIGINT`, `account_login TEXT`, `access_token_ciphertext BYTEA` (KMS-encrypted via the existing data key — tokens expire hourly and are refreshed in-place), `token_expires_at TIMESTAMPTZ`, `installed_at`, `revoked_at`, `status TEXT CHECK ('active','suspended','revoked')`, `UNIQUE (provider, installation_id)`. RLS-scoped. **Gates real PR-opening — without this the webhook handler can't refresh the GitHub App token after the first hour.** Deployed alongside `0005_auth` / `0006_metric_samples` / etc. when Phase 4 first needs it (migrations apply in numeric order, but the unused tables sit empty until their consumers come online)
+- [x] **`migrations/0005_vcs_installations.sql`** — shipped 2026-05-24 (PR #17). Numbered 0005 (next free slot) since 0005-0008 placeholders for auth/metric_samples hadn't been used yet. Schema as described: `uuid_generate_v7()` id, `tenant_id` (RLS-scoped), `provider TEXT CHECK ('github','gitlab')`, `installation_id BIGINT`, `account_login`, `access_token_ciphertext BYTEA` (KMS-encrypted), `token_expires_at`, `installed_at`, `revoked_at`, `status` (active|suspended|revoked), `UNIQUE (provider, installation_id)`. Integration tests in `tests/integration/vcs_installations_test.go` (PR #18) pin cross-tenant RLS isolation, BYTEA ciphertext round-trip, and the UNIQUE constraint across tenants.
 - [ ] Signed-token Apply Fix endpoint — requires the GitHub App's installation private key to be in AWS Secrets Manager
 - [ ] PR comment latency p95 < 30s (instrument every step)
 - [ ] Skeptic Mode toggle
@@ -261,17 +261,17 @@ These items move "what blocks the first customer install" out of Phase 5 and int
 - [ ] `internal/methodology/detectors/idle_workload_observed` — agent-mode counterpart to the CLI's `idle-workload` heuristic: a workload with `replicas > 0` that has shown no traffic and no CPU over the last 7 days. Replaces sandbox-grade detection with measured P95-from-zero data. (3 days)
 
 ### Algorithmic improvement: Validation Before Recommendation (1 wk)
-- [ ] New package `internal/validator/` — interface `Validate(ctx, *tenancy.Context, candidate) (Result, error)`
-- [ ] Validators: `pdb`, `resourcequota`, `limitrange`, `hpabounds`, `dependency`, `oom-recent`
-- [ ] Wire as a pipeline stage between `internal/cost` (candidate generation) and `internal/prwriter` (rendering)
+- [x] `internal/validator/` — shipped 2026-05-24 (PR #19). `Validator` interface with `Check(ctx, *tenancy.Context, Candidate) (*Verdict, error)`; `Pipeline.Run` returns the first hard rejection + every verdict for tuning. Reject-on-hard short-circuit.
+- [x] Validators: `pdb`, `resourcequota`, `limitrange`, `hpabounds`, `dependency`, `oom-recent` (PR #19, shipped via `Default()`). HPABoundsCheck warns when in-bounds (the HPA dominates static replica edits) and hard-rejects out-of-bounds.
+- [ ] Wire as a pipeline stage between `internal/cost` (candidate generation) and `internal/prwriter` (rendering) — Pipeline is ready, call-site lands when `internal/cost.GenerateCandidates` plumbs `ClusterSignals` through (depends on Phase-4 Tier-1 K8s data sources).
 - [ ] Rejected candidates logged with reason for tuning the detector library (not surfaced to PR comment)
 - [ ] Metric: `optiqor_validator_rejects_total{reason}`; alert if reject rate jumps >2× week-over-week (signals a detector regression)
 
 ### Differentiator additions (folded into Phase 4)
-- [ ] `internal/prwriter/narrative` — LLM-generated 2-sentence diff narrative at the top of every PR comment (3 days)
-- [ ] `internal/cost/detectors/sec/cis` — CIS Kubernetes Benchmark control IDs attached to each security finding (2 days)
-- [ ] `internal/prwriter/labels` — PR labels-as-policy parser (`optiqor:skip`, `optiqor:budget=$X`, `optiqor:wait-for-prom=Nd`) (2 days)
-- [ ] `internal/ingestion/coalesce` — collapse two PRs against the same chart within 24h into one analysis (2 days)
+- [x] `internal/prwriter/narrative` — shipped 2026-05-24 (PR #19). `Generator` interface + deterministic `TemplateGenerator` for dev/tests (no network egress). LLM-backed implementation (Haiku) lands when the real Anthropic SDK wires up.
+- [x] `internal/cost/cis` — CIS Kubernetes Benchmark v1.9 control IDs per security detector (PR #17, 2026-05-24). `Controls(detectorID)` returns the slice; `Has(detectorID)` for the renderer's gate. Maps 9 security detectors.
+- [x] `internal/prwriter/labels` — PR labels-as-policy parser (PR #17, 2026-05-24). Recognises `optiqor:skip`, `optiqor:budget=$X` (USD, optional `$` prefix), `optiqor:wait-for-prom=Nd|Nh|Nm`. Unknown `optiqor:*` labels surfaced so the comment renderer can warn on typos.
+- [x] `internal/ingestion/coalesce` — shipped 2026-05-24 (PR #19). `Coalescer.Observe` against `(tenant, repo, chart-path)` key; first PR dispatches, second within TTL coalesces with the original PR URL, expired entries get replaced. Injected clock + 24h default TTL.
 
 ### Early kickoff — KMS Sign integration (folded forward from Phase 6)
 
@@ -283,14 +283,15 @@ The Receipt-signing path is the single most credibility-load-bearing feature in 
 ### Production-readiness — Apply Fix safety + LLM defense + environment classification (Phase 4)
 
 #### Pre-merge validation gate (gates Apply Fix dispatch — must precede Phase 5)
-- [ ] `internal/applyfix/gate/render` — sandboxed `helm template` / `kustomize build`; fails if templating breaks (3 days)
-- [ ] `internal/applyfix/gate/conform` — `kubeconform` against the cluster's actual API version
+- [x] `internal/applyfix/gate/render` — shipped 2026-05-24 (PR #17). Applies the LLM's unified diff to ChartYAML and YAML-parses the result; catches LLM corruption before the chart hits any real `helm template`. Real `helm template` lives in the agent's Phase-5 dryrun stage.
+- [x] `internal/applyfix/gate/post` — shipped 2026-05-24 (PR #17). Deterministic post-validators: rejects diffs that drop a `labels:` key (breaks Service selectors / HPA targets) or shrink a CPU/memory request beyond the safety floor (default 50%, override via `MaxResourceReductionRatio`).
+- [x] `internal/applyfix/gate/conform` — shipped 2026-05-24 (PR #19). Minimal apiVersion/kind shape check + RequiredKeys assertion on the post-diff chart values. Doesn't bundle a kubeconform binary at runtime — the agent's Phase-5 dryrun stage runs real kubeconform against the cluster's actual API version. CI does run `helm template | kubeconform -strict` against the rendered agent chart via `tests/integration/helm_chart_test.go` (PR #18).
 - [ ] `internal/applyfix/gate/dryrun` — agent-side `kubectl --dry-run=server`; signed-token round-trip; catches custom admission webhooks (Kyverno, Gatekeeper, OPA) the validator can't predict (1.5 wk)
 
 #### Prompt injection defense + LLM output validation
 - [ ] `internal/agent/llm/sanitizer` — strip Helm template comments; detect injection patterns (`ignore previous`, `system:`, etc.) and wrap suspicious content in `<USER_DATA>` boundaries with explicit "never trust" instructions; per-field length limits (3 days)
-- [ ] `internal/agent/llm/validator` — every LLM-generated YAML diff runs the same render/conform/dryrun gate; schema-aware sanity checks (within ±10× of current values); confidence-down-rank for borderline outputs (1 wk)
-- [ ] `internal/agent/llm/audit` — per-prompt audit log (input hash, output hash, model, cost) for forensic trail
+- [x] `internal/agent/llm/validator` — shipped 2026-05-24 (PR #17). Deterministic checks on the LLM's unified diff before it reaches the gate: rejects zero replicas, zero CPU/memory, missing hunk headers. Hard issues set `Result.Rejected`; warn-level issues feed confidence down-rank in the Composer. Schema-aware ±10× check lands when the post-stage exposes the pre-diff parsed values.
+- [x] `internal/agent/llm/audit` — shipped 2026-05-24 (PR #17). `Auditor` interface + `InMemoryAuditor` + `NullAuditor`. `Record` carries `InputSHA256` + `OutputSHA256` (forensic trail, never the plaintext prompt/response) + model + cost + suspicious flag. Hash helper enforces SHA-256 hex at the call site so producers can't accidentally store plaintext.
 - [ ] `internal/agent/llm/canary` — same prompt occasionally sent to Sonnet AND Haiku; outputs compared; divergence alerts on hallucination patterns
 
 #### Environment classification (input to safety profiles)
