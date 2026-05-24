@@ -2,7 +2,6 @@ package billing
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"time"
 
@@ -28,8 +27,11 @@ type SpikeDispatcher interface {
 	DispatchSpike(t tenancy.Context, ev SpikeEnvelope) error
 }
 
-// SpikeHandler serves POST /v1/cost-spikes. The handler always
-// dispatches; the worker decides whether to act on it.
+// SpikeHandler serves POST /v1/cost-spikes. Phase-5 binds the inbound
+// path to per-source signature verification (AWS SNS message signing,
+// Azure Event Grid keys); until then env.Tenant is body-trusted and
+// the route is firewalled at the LB to known anomaly-detector source
+// IPs. Don't expose this route on a public LB without that gate.
 type SpikeHandler struct {
 	Dispatcher SpikeDispatcher
 }
@@ -43,15 +45,12 @@ func (h *SpikeHandler) Receive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "dispatcher not configured", http.StatusInternalServerError)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.BillingSpikeWebhookMaxBytes))
-	if err != nil {
-		http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
-		return
-	}
+	body := http.MaxBytesReader(w, r.Body, config.BillingSpikeWebhookMaxBytes)
 	defer func() { _ = r.Body.Close() }()
-
+	dec := json.NewDecoder(body)
+	dec.DisallowUnknownFields()
 	var env SpikeEnvelope
-	if err := json.Unmarshal(body, &env); err != nil {
+	if err := dec.Decode(&env); err != nil {
 		http.Error(w, "json: "+err.Error(), http.StatusBadRequest)
 		return
 	}

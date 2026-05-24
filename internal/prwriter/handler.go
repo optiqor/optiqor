@@ -2,7 +2,6 @@ package prwriter
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 
 	"github.com/optiqor/optiqor-cli/pkg/rules"
@@ -50,14 +49,12 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing tenant context", http.StatusUnauthorized)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.PRApplyFixMaxBytes))
-	if err != nil {
-		http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
-		return
-	}
+	body := http.MaxBytesReader(w, r.Body, config.PRApplyFixMaxBytes)
 	defer func() { _ = r.Body.Close() }()
+	dec := json.NewDecoder(body)
+	dec.DisallowUnknownFields()
 	var req PreviewRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := dec.Decode(&req); err != nil {
 		http.Error(w, "json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
