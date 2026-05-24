@@ -16,6 +16,7 @@ func TestHandler_Ingest(t *testing.T) {
 		name     string
 		method   string
 		req      *IngestRequest // nil means send an empty JSON body
+		omitCtx  bool           // skip the tenancy context (Phase-1: middleware would attach it)
 		withProm bool           // wire a PromSink that records calls
 		withCUR  bool           // wire a CURSink that records calls
 		wantCode int
@@ -33,9 +34,16 @@ func TestHandler_Ingest(t *testing.T) {
 			wantCode: http.StatusBadRequest,
 		},
 		{
-			name:     "missing tenant returns 400",
+			name:     "missing tenant context returns 400",
 			method:   http.MethodPost,
 			req:      &IngestRequest{PrometheusJSON: []byte(promMatrixOK)},
+			omitCtx:  true,
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "body tenant mismatches context returns 400",
+			method:   http.MethodPost,
+			req:      &IngestRequest{Tenant: "spoofed", PrometheusJSON: []byte(promMatrixOK)},
 			wantCode: http.StatusBadRequest,
 		},
 		{
@@ -107,6 +115,9 @@ func TestHandler_Ingest(t *testing.T) {
 				body, _ = json.Marshal(tc.req)
 			}
 			req := httptest.NewRequest(tc.method, "/v1/ingest", bytes.NewReader(body))
+			if !tc.omitCtx {
+				req = req.WithContext(tenancy.WithContext(req.Context(), tenancy.Context{TenantID: "t1"}))
+			}
 			w := httptest.NewRecorder()
 			h.Ingest(w, req)
 			if w.Code != tc.wantCode {

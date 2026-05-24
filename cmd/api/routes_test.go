@@ -65,8 +65,16 @@ func TestRoutes(t *testing.T) {
 			name:      "ingest 400 on empty",
 			method:    http.MethodPost,
 			path:      "/v1/ingest",
-			body:      strings.NewReader(`{"tenant":"t1"}`),
+			body:      strings.NewReader(`{"tenant":"tenant-abc"}`),
+			headers:   map[string]string{"X-Optiqor-Tenant": "tenant-abc"},
 			wantCodes: []int{http.StatusBadRequest},
+		},
+		{
+			name:      "ingest 401 without tenant header",
+			method:    http.MethodPost,
+			path:      "/v1/ingest",
+			body:      strings.NewReader(`{"tenant":"tenant-abc"}`),
+			wantCodes: []int{http.StatusUnauthorized},
 		},
 		{
 			name:      "cost-spike accepted",

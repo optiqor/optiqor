@@ -3,7 +3,6 @@ package ingestion
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/optiqor/optiqor/internal/platform/config"
@@ -12,6 +11,11 @@ import (
 
 // IngestRequest carries Prometheus bytes, CUR bytes, or both. Requests
 // with neither are rejected (see ErrEmptyIngest).
+//
+// TenantID + ClusterID come from the request context (X-Optiqor-Tenant
+// header in Phase 1; mTLS-bound SPIFFE id in Phase 5). The body's
+// `tenant` / `cluster_id` fields are accepted only as a consistency
+// check — they must match the context, or the request is rejected.
 type IngestRequest struct {
 	Tenant         string `json:"tenant"`
 	ClusterID      string `json:"cluster_id"`
@@ -38,28 +42,39 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.IngestMaxBytes))
+	// Tenant context must come from the request middleware (header in
+	// Phase 1, mTLS SPIFFE id in Phase 5). Reject early so the parser
+	// + sinks never run under a body-claimed tenant.
+	t, err := tenancy.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, "read: "+err.Error(), http.StatusRequestEntityTooLarge)
+		http.Error(w, "tenant context required", http.StatusBadRequest)
 		return
 	}
+
+	body := http.MaxBytesReader(w, r.Body, config.IngestMaxBytes)
 	defer func() { _ = r.Body.Close() }()
 
+	dec := json.NewDecoder(body)
+	dec.DisallowUnknownFields()
 	var req IngestRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := dec.Decode(&req); err != nil {
 		http.Error(w, "json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if req.Tenant == "" {
-		http.Error(w, "tenant required", http.StatusBadRequest)
+	// Body must agree with the context so a misconfigured agent fails
+	// loudly instead of silently writing under another tenant.
+	if req.Tenant != "" && req.Tenant != t.TenantID {
+		http.Error(w, "tenant in body does not match request context", http.StatusBadRequest)
 		return
+	}
+	if req.ClusterID != "" {
+		t.ClusterID = req.ClusterID
 	}
 	if len(req.PrometheusJSON) == 0 && len(req.CURRowsCSV) == 0 {
 		http.Error(w, ErrEmptyIngest.Error(), http.StatusBadRequest)
 		return
 	}
 
-	t := tenancy.Context{TenantID: req.Tenant, ClusterID: req.ClusterID}
 	resp := IngestResponse{}
 
 	if len(req.PrometheusJSON) > 0 {

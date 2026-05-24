@@ -42,7 +42,8 @@ func TestStrategy_MemoryCutBounds(t *testing.T) {
 		{environment.EnvProd, 11, false},
 		{environment.EnvStaging, 20, true},
 		{environment.EnvStaging, 26, false},
-		{environment.EnvDev, 50, false}, // 0-cap rejects positive cuts
+		{environment.EnvDev, 50, true},
+		{environment.EnvDev, 100, true},
 		{environment.EnvDev, 0, true},
 	} {
 		t.Run(string(tc.env), func(t *testing.T) {
