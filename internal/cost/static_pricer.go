@@ -3,9 +3,9 @@ package cost
 import "fmt"
 
 // StaticPricer hard-codes the m6i-family on-demand average per region;
-// close enough for the sandbox ±40% band. Agent runs use a Cost
-// Explorer-backed Pricer. Values are cents; a wrong number here moves
-// every customer's reported savings.
+// sandbox ±40% band. Backend swaps to LivePricer in Phase 5; the CLI
+// keeps its own static table forever for OSS reproducibility — don't
+// try to keep the two in sync.
 type StaticPricer struct {
 	rates map[string]rate
 }

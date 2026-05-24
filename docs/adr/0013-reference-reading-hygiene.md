@@ -89,6 +89,6 @@ The strictest possible posture. Rejected because: wasteful and unrealistic. Engi
 
 ## Implementation status
 
-**Partial.** Policy is in effect from the acceptance date. OpenCost-specific posture is documented at `docs/idea.md §4.3` and `optiqor/todo.md` Phase-6 hygiene block (operational checklist). The unified policy generalized in this ADR has not yet had its CI guard wired — `.github/lint/prohibited-imports.txt` lands with the first `internal/methodology/` PR, alongside a `go list -deps`-based check that fails the build if any of the prohibited imports appear in the dependency graph.
+**Partial.** Policy is in effect from the acceptance date. OpenCost-specific posture is documented at `docs/strategy/idea.md` §4.3 and `optiqor/todo.md` Phase-6 hygiene block (operational checklist). The unified policy generalized in this ADR has not yet had its CI guard wired — `.github/lint/prohibited-imports.txt` lands with the first `internal/methodology/` PR, alongside a `go list -deps`-based check that fails the build if any of the prohibited imports appear in the dependency graph.
 
 *Last verified: 2026-05-18.*

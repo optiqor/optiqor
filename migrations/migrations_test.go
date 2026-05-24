@@ -368,3 +368,43 @@ func Test0004_DownIsClean(t *testing.T) {
 		}
 	}
 }
+
+func Test0005_VCSInstallations_StructureAndRLS(t *testing.T) {
+	sql := loadMigration(t, "0005_vcs_installations.sql")
+	for _, want := range []string{
+		"CREATE TABLE vcs_installations",
+		"id                       UUID PRIMARY KEY DEFAULT uuid_generate_v7()",
+		"tenant_id                UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE",
+		"provider                 TEXT NOT NULL CHECK (provider IN ('github','gitlab'))",
+		"installation_id          BIGINT NOT NULL",
+		"access_token_ciphertext  BYTEA",
+		"status                   TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended','revoked'))",
+		"UNIQUE (provider, installation_id)",
+		"ALTER TABLE vcs_installations ENABLE ROW LEVEL SECURITY",
+		"CREATE POLICY tenant_isolation ON vcs_installations",
+		"GRANT SELECT, INSERT, UPDATE ON vcs_installations TO optiqor_app",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0005 missing: %q", want)
+		}
+	}
+}
+
+func Test0005_VCSInstallations_NoPlaintextTokenColumn(t *testing.T) {
+	sql := loadMigration(t, "0005_vcs_installations.sql")
+	if strings.Contains(sql, "access_token         TEXT") || strings.Contains(sql, "access_token TEXT") {
+		t.Error("0005 must never store plaintext access tokens — encrypt via KMS")
+	}
+}
+
+func Test0005_VCSInstallations_DownIsClean(t *testing.T) {
+	sql := loadMigration(t, "0005_vcs_installations.sql")
+	for _, want := range []string{
+		"DROP POLICY IF EXISTS tenant_isolation ON vcs_installations",
+		"DROP TABLE IF EXISTS vcs_installations",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0005 Down missing %q", want)
+		}
+	}
+}

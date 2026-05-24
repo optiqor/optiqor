@@ -1,0 +1,13 @@
+apiVersion: v2
+name: optiqor-agent
+description: In-cluster Optiqor agent. Read-only K8s + outbound-only network per ADR-0008.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://optiqor.dev
+sources:
+  - https://github.com/optiqor/optiqor
+maintainers:
+  - name: Optiqor
+    url: https://optiqor.dev
+kubeVersion: ">=1.28.0-0"
