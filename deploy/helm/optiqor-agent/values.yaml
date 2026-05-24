@@ -1,0 +1,54 @@
+image:
+  repository: ghcr.io/optiqor/agent
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# tenantID is set by the install wizard (web/src/app/install/*) and
+# baked into the deployment ENV. The agent uses it as the keyspace
+# prefix and the per-tenant Temporal queue routing key.
+tenantID: ""
+
+# Backend ingest endpoint. mTLS material lives in the secret named
+# below; Phase 5 fills the certs.
+ingest:
+  url: "https://ingest.optiqor.dev"
+  secretName: optiqor-agent-mtls
+
+# Read-only RBAC scope per ADR-0008. Adding a verb here changes the
+# agent's security posture; needs an ADR amendment.
+rbac:
+  create: true
+  verbs:
+    - get
+    - list
+    - watch
+
+serviceAccount:
+  create: true
+  name: ""
+
+# Footprint defaults are deliberately tight; ADR-0008 + customer
+# security review depend on the agent staying invisible at scale.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# NetworkPolicy denies all inbound and only allows egress to the
+# ingest URL. ADR-0008 principle 2.
+networkPolicy:
+  enabled: true
+
+# Prometheus scrape; the agent surfaces its own /metrics on :9090.
+metrics:
+  enabled: true
+  port: 9090
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+podLabels: {}

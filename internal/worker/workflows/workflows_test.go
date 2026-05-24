@@ -10,11 +10,29 @@ import (
 
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/applyfix/gate"
 	"github.com/optiqor/optiqor/internal/receipts"
 	"github.com/optiqor/optiqor/internal/rollback"
 	"github.com/optiqor/optiqor/internal/tenancy"
 	"github.com/optiqor/optiqor/internal/worker"
 )
+
+func newPassPipeline(t *testing.T) *gate.Pipeline {
+	t.Helper()
+	pass := passValidator{stages: []gate.Stage{gate.StageTemplate, gate.StageConform, gate.StageDryrun, gate.StagePost}}
+	vs := make([]gate.Validator, 0, len(pass.stages))
+	for _, s := range pass.stages {
+		vs = append(vs, passValidator{stages: []gate.Stage{s}})
+	}
+	return gate.NewPipeline(gate.StrictPolicy{}, vs...)
+}
+
+type passValidator struct{ stages []gate.Stage }
+
+func (p passValidator) Stage() gate.Stage { return p.stages[0] }
+func (p passValidator) Validate(_ context.Context, _ tenancy.Context, _ gate.Candidate) gate.StageResult {
+	return gate.StageResult{Stage: p.stages[0], Status: gate.StatusPassed}
+}
 
 type fakePublisher struct {
 	mu     sync.Mutex
@@ -102,7 +120,7 @@ func TestApplyFix_Execute(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pub := &fakePublisher{}
-			wf := ApplyFix{Composer: &agent.Composer{LLM: tc.llm}, Publisher: pub}
+			wf := ApplyFix{Composer: &agent.Composer{LLM: tc.llm}, Gate: newPassPipeline(t), Publisher: pub}
 			err := wf.Execute(context.Background(), tenancy.Context{TenantID: "t1"}, tc.payload)
 			if tc.wantErr {
 				if err == nil {
@@ -126,7 +144,7 @@ func TestApplyFix_DispatcherRoundTrip_PublishesPR(t *testing.T) {
 		Model: "claude-sonnet",
 	}}}
 	pub := &fakePublisher{}
-	wf := ApplyFix{Composer: &agent.Composer{LLM: llm}, Publisher: pub}
+	wf := ApplyFix{Composer: &agent.Composer{LLM: llm}, Gate: newPassPipeline(t), Publisher: pub}
 	disp := worker.NewInMemory()
 	if err := disp.Register(wf); err != nil {
 		t.Fatal(err)
@@ -306,7 +324,7 @@ func TestAllWorkflows_RegisterableTogether(t *testing.T) {
 	disp := worker.NewInMemory()
 	iss, _, _ := receipts.GenerateIssuer("k1")
 	ws := []worker.Workflow{
-		ApplyFix{Composer: &agent.Composer{LLM: &agent.FakeLLMClient{}}, Publisher: &fakePublisher{}},
+		ApplyFix{Composer: &agent.Composer{LLM: &agent.FakeLLMClient{}}, Gate: newPassPipeline(t), Publisher: &fakePublisher{}},
 		ReceiptIssue{Issuer: iss, Store: &fakeReceiptStore{}},
 		RollbackWatchdog{Initiator: &fakeInitiator{}},
 		CostSpike{Notifier: &fakeNotifier{}},

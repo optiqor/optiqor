@@ -147,3 +147,4 @@ jobs:
         with:
           terraform_version: "1.7.5"
       - run: terraform -chdir=infra/terraform fmt -recursive -check
+

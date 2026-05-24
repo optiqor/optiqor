@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/applyfix/gate"
 	"github.com/optiqor/optiqor/internal/receipts"
 	"github.com/optiqor/optiqor/internal/worker"
 	"github.com/optiqor/optiqor/internal/worker/workflows"
@@ -25,10 +26,21 @@ func registerWorkflows(d *worker.InMemory, log *slog.Logger) error {
 		return err
 	}
 
+	// render + post are real Phase-4 stages; conform + dryrun still
+	// stub. SkeletonPolicy lets NotImplemented through; flip to
+	// StrictPolicy once conform+dryrun land (Phase 5).
+	gatePipeline := gate.NewPipeline(gate.SkeletonPolicy{},
+		gate.RenderValidator{},
+		gate.NotImplementedValidator{S: gate.StageConform},
+		gate.NotImplementedValidator{S: gate.StageDryrun},
+		gate.PostValidator{MaxResourceReductionRatio: 0.5},
+	)
+
 	bound := []worker.Workflow{
 		workflows.NewEcho(log),
 		workflows.ApplyFix{
 			Composer:  composer,
+			Gate:      gatePipeline,
 			Publisher: &loggingPRPublisher{log: log},
 		},
 		workflows.ReceiptIssue{

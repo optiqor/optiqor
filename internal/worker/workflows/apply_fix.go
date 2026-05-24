@@ -8,6 +8,7 @@ import (
 
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/applyfix/gate"
 	"github.com/optiqor/optiqor/internal/parser"
 	"github.com/optiqor/optiqor/internal/prwriter"
 	"github.com/optiqor/optiqor/internal/tenancy"
@@ -47,11 +48,9 @@ type ApplyFixPayload struct {
 	Now        time.Time     `json:"now"`
 }
 
-// ApplyFix runs the deterministic CLI rule engine, the LLM diff
-// generator, and the prwriter renderer, then hands a PR payload to the
-// GitHub layer. One per process, registered with worker.Dispatcher.
 type ApplyFix struct {
 	Composer  *agent.Composer
+	Gate      *gate.Pipeline
 	Publisher PRPublisher
 }
 
@@ -64,6 +63,9 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 	}
 	if w.Composer == nil {
 		return fmt.Errorf("apply_fix: nil composer")
+	}
+	if w.Gate == nil {
+		return fmt.Errorf("apply_fix: nil gate")
 	}
 	if w.Publisher == nil {
 		return fmt.Errorf("apply_fix: nil publisher")
@@ -83,6 +85,15 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 	})
 	if err != nil {
 		return fmt.Errorf("apply_fix: compose: %w", err)
+	}
+
+	if _, err := w.Gate.Run(ctx, t, gate.Candidate{
+		ApplyFixID:  p.ApplyFixID,
+		ChartYAML:   p.ChartYAML,
+		UnifiedDiff: resp.UnifiedDiff,
+		Workload:    primary,
+	}); err != nil {
+		return fmt.Errorf("apply_fix: gate: %w", err)
 	}
 
 	body, err := prwriter.Render(prwriter.Comment{
