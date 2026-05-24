@@ -110,7 +110,7 @@ func (h *Handler) Issue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure gated on r.TLS so dev/integration over HTTP works; prod is HTTPS
 		Name:     CookieName,
 		Value:    token,
 		Path:     "/",
