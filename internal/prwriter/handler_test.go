@@ -91,6 +91,14 @@ func TestPreview(t *testing.T) {
 			llm:      &agent.FakeLLMClient{},
 			wantCode: http.StatusBadRequest,
 		},
+		{
+			name:     "unknown-field-rejected",
+			method:   http.MethodPost,
+			tenant:   tenantID,
+			body:     map[string]any{"chart": "x", "chart_yaml": "y", "bogus_typo_field": "z"},
+			llm:      &agent.FakeLLMClient{},
+			wantCode: http.StatusBadRequest,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := &Handler{Composer: &agent.Composer{LLM: tc.llm}}

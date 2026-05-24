@@ -73,6 +73,13 @@ func TestSpikeHandler_Receive(t *testing.T) {
 			dispatcher: &fakeSpikeDispatcher{err: errors.New("downstream")},
 			wantStatus: http.StatusBadGateway,
 		},
+		{
+			name:       "unknown field rejected",
+			method:     http.MethodPost,
+			body:       map[string]any{"tenant": "t1", "workload_id": "wl-1", "bogus_typo_field": "x"},
+			dispatcher: &fakeSpikeDispatcher{},
+			wantStatus: http.StatusBadRequest,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := &SpikeHandler{Dispatcher: tc.dispatcher}
