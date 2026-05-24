@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
@@ -111,6 +112,7 @@ type Validator interface {
 type Pipeline struct {
 	validators []Validator
 	metrics    *Metrics
+	logger     *slog.Logger
 }
 
 func NewPipeline(vs ...Validator) *Pipeline {
@@ -124,6 +126,15 @@ func NewPipeline(vs ...Validator) *Pipeline {
 // optiqor_validator_rejects_total counter. nil-safe.
 func (p *Pipeline) WithMetrics(m *Metrics) *Pipeline {
 	p.metrics = m
+	return p
+}
+
+// WithLogger attaches a slog.Logger that the pipeline writes to on
+// every hard rejection. Detector-library tuning reads these logs to
+// find detectors whose recommendations land outside cluster
+// constraints. nil-safe.
+func (p *Pipeline) WithLogger(l *slog.Logger) *Pipeline {
+	p.logger = l
 	return p
 }
 
@@ -147,6 +158,15 @@ func (p *Pipeline) Run(ctx context.Context, t tenancy.Context, c Candidate) (Res
 			out.Rejected = &cp
 			if p.metrics != nil {
 				p.metrics.RecordReject(v.Name())
+			}
+			if p.logger != nil {
+				p.logger.LogAttrs(ctx, slog.LevelInfo, "validator: candidate rejected",
+					slog.String("tenant_id", t.TenantID),
+					slog.String("validator", v.Name()),
+					slog.String("workload", c.WorkloadID),
+					slog.String("detector_id", c.DetectorID),
+					slog.String("reason", verdict.Reason),
+				)
 			}
 		}
 	}

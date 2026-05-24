@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -138,4 +139,36 @@ func containsAll(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+func TestPipeline_WithLogger_RecordsRejection(t *testing.T) {
+	var buf strings.Builder
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	p := NewPipeline(PDBCheck{}).WithLogger(logger)
+	_, _ = p.Run(context.Background(), tenancy.Context{TenantID: "tenant-log"}, Candidate{
+		WorkloadID:       "api",
+		DetectorID:       "memory-overprovisioned",
+		ProposedReplicas: 1,
+		Signals:          ClusterSignals{PDB: &PDB{MinAvailable: 2}},
+	})
+	out := buf.String()
+	for _, want := range []string{"tenant-log", "pdb", "api", "memory-overprovisioned", "PDB minAvailable"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestPipeline_WithLogger_QuietOnAccept(t *testing.T) {
+	var buf strings.Builder
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	p := NewPipeline(PDBCheck{}).WithLogger(logger)
+	_, _ = p.Run(context.Background(), tenancy.Context{TenantID: "tenant-quiet"}, Candidate{
+		WorkloadID:       "api",
+		ProposedReplicas: 5,
+		Signals:          ClusterSignals{PDB: &PDB{MinAvailable: 2}},
+	})
+	if buf.Len() != 0 {
+		t.Errorf("logger should be silent on accept; got: %s", buf.String())
+	}
 }
