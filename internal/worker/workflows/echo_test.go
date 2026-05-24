@@ -33,17 +33,21 @@ func TestEcho_LogsTenantAndPayloadLength(t *testing.T) {
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &rec); err != nil {
 		t.Fatalf("decode: %v\n%s", err, buf.String())
 	}
-	if rec["msg"] != "echo workflow" {
-		t.Errorf("msg = %v", rec["msg"])
-	}
-	if rec["tenant_id"] != "t1" {
-		t.Errorf("tenant_id = %v", rec["tenant_id"])
-	}
-	if rec["workspace_id"] != "w1" {
-		t.Errorf("workspace_id = %v", rec["workspace_id"])
-	}
-	if v, _ := rec["payload_len"].(float64); int(v) != len("hello-payload") {
-		t.Errorf("payload_len = %v", rec["payload_len"])
+	for _, tc := range []struct {
+		name string
+		key  string
+		want any
+	}{
+		{"msg", "msg", "echo workflow"},
+		{"tenant", "tenant_id", "t1"},
+		{"workspace", "workspace_id", "w1"},
+		{"payload length", "payload_len", float64(len("hello-payload"))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if rec[tc.key] != tc.want {
+				t.Errorf("%s = %v, want %v", tc.key, rec[tc.key], tc.want)
+			}
+		})
 	}
 }
 

@@ -3,6 +3,7 @@ package billing
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,55 +26,75 @@ func (f *fakeSpikeDispatcher) DispatchSpike(_ tenancy.Context, e SpikeEnvelope) 
 	return nil
 }
 
-func TestSpikeHandler_HappyPath_202(t *testing.T) {
-	d := &fakeSpikeDispatcher{}
-	h := &SpikeHandler{Dispatcher: d}
-	body, _ := json.Marshal(SpikeEnvelope{
+func TestSpikeHandler_Receive(t *testing.T) {
+	happy := SpikeEnvelope{
 		Tenant:           "t1",
 		WorkloadID:       "wl-1",
 		ObservedDeltaUSD: 120,
-		ObservedAtUTC:    time.Now().UTC(),
-	})
-	req := httptest.NewRequest(http.MethodPost, "/v1/cost-spikes", strings.NewReader(string(body)))
-	w := httptest.NewRecorder()
-	h.Receive(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Errorf("code = %d body = %s", w.Code, w.Body.String())
+		ObservedAtUTC:    time.Date(2026, 5, 24, 0, 0, 0, 0, time.UTC),
 	}
-	if len(d.got) != 1 {
-		t.Errorf("dispatched %d", len(d.got))
-	}
-}
+	missingFields := SpikeEnvelope{Tenant: ""}
+	dispatchOK := SpikeEnvelope{Tenant: "t1", WorkloadID: "wl-1"}
 
-func TestSpikeHandler_RejectsNonPost(t *testing.T) {
-	h := &SpikeHandler{Dispatcher: &fakeSpikeDispatcher{}}
-	req := httptest.NewRequest(http.MethodGet, "/v1/cost-spikes", http.NoBody)
-	w := httptest.NewRecorder()
-	h.Receive(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("code = %d", w.Code)
-	}
-}
+	for _, tc := range []struct {
+		name         string
+		method       string
+		body         any
+		dispatcher   *fakeSpikeDispatcher
+		wantStatus   int
+		wantDispatch int
+	}{
+		{
+			name:         "happy path 202",
+			method:       http.MethodPost,
+			body:         happy,
+			dispatcher:   &fakeSpikeDispatcher{},
+			wantStatus:   http.StatusAccepted,
+			wantDispatch: 1,
+		},
+		{
+			name:       "rejects non-post",
+			method:     http.MethodGet,
+			body:       nil,
+			dispatcher: &fakeSpikeDispatcher{},
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:       "missing tenant and workload",
+			method:     http.MethodPost,
+			body:       missingFields,
+			dispatcher: &fakeSpikeDispatcher{},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "dispatch failure 502",
+			method:     http.MethodPost,
+			body:       dispatchOK,
+			dispatcher: &fakeSpikeDispatcher{err: errors.New("downstream")},
+			wantStatus: http.StatusBadGateway,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &SpikeHandler{Dispatcher: tc.dispatcher}
+			var reqBody io.Reader = http.NoBody
+			if tc.body != nil {
+				b, err := json.Marshal(tc.body)
+				if err != nil {
+					t.Fatalf("marshal: %v", err)
+				}
+				reqBody = strings.NewReader(string(b))
+			}
+			req := httptest.NewRequest(tc.method, "/v1/cost-spikes", reqBody)
+			w := httptest.NewRecorder()
 
-func TestSpikeHandler_RequiresTenantAndWorkload(t *testing.T) {
-	h := &SpikeHandler{Dispatcher: &fakeSpikeDispatcher{}}
-	body, _ := json.Marshal(SpikeEnvelope{Tenant: ""})
-	req := httptest.NewRequest(http.MethodPost, "/v1/cost-spikes", strings.NewReader(string(body)))
-	w := httptest.NewRecorder()
-	h.Receive(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("code = %d", w.Code)
-	}
-}
+			h.Receive(w, req)
 
-func TestSpikeHandler_DispatchFailure_502(t *testing.T) {
-	d := &fakeSpikeDispatcher{err: errors.New("downstream")}
-	h := &SpikeHandler{Dispatcher: d}
-	body, _ := json.Marshal(SpikeEnvelope{Tenant: "t1", WorkloadID: "wl-1"})
-	req := httptest.NewRequest(http.MethodPost, "/v1/cost-spikes", strings.NewReader(string(body)))
-	w := httptest.NewRecorder()
-	h.Receive(w, req)
-	if w.Code != http.StatusBadGateway {
-		t.Errorf("code = %d", w.Code)
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%s", w.Code, tc.wantStatus, w.Body.String())
+			}
+			if got := len(tc.dispatcher.got); got != tc.wantDispatch {
+				t.Errorf("dispatched = %d, want %d", got, tc.wantDispatch)
+			}
+		})
 	}
 }

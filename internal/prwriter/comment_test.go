@@ -32,9 +32,129 @@ func TestRender_NoChart_Errors(t *testing.T) {
 	}
 }
 
+func TestRender(t *testing.T) {
+	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
+
+	for _, tc := range []struct {
+		name   string
+		mut    func(*Comment)
+		assert func(t *testing.T, out string)
+	}{
+		{
+			name: "cost-findings-lead-biggest-dollar-first",
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				cpuIdx := strings.Index(out, "CPU overprovisioned")
+				memIdx := strings.Index(out, "Memory overprovisioned")
+				if cpuIdx < 0 || memIdx < 0 {
+					t.Fatalf("missing finding lines:\n%s", out)
+				}
+				if cpuIdx > memIdx {
+					t.Errorf("CPU ($20/mo) should render before Memory ($9.20/mo)\nout:\n%s", out)
+				}
+			},
+		},
+		{
+			name: "security-is-bonus-section",
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if !strings.Contains(out, "### Security findings (bonus)") {
+					t.Errorf("security section missing bonus marker:\n%s", out)
+				}
+				if !strings.Contains(out, "side-effect") {
+					t.Errorf("missing bonus framing\n%s", out)
+				}
+				cost := strings.Index(out, "### Cost optimisations")
+				sec := strings.Index(out, "### Security findings")
+				if cost < 0 || sec < 0 || cost > sec {
+					t.Errorf("cost section must precede security section")
+				}
+			},
+		},
+		{
+			name: "security-hidden-when-toggle-off",
+			mut:  func(c *Comment) { c.SecurityVisible = false },
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if strings.Contains(out, "### Security findings") {
+					t.Errorf("security section should not render when toggle off")
+				}
+			},
+		},
+		{
+			name: "sandbox-disclosure-matches-cli",
+			mut:  func(c *Comment) { c.Mode = ModeSandbox },
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if !strings.Contains(out, AccuracyDisclosureSandbox) {
+					t.Errorf("missing sandbox disclosure:\n%s", out)
+				}
+			},
+		},
+		{
+			name: "agent-mode-shows-agent-disclosure",
+			mut:  func(c *Comment) { c.Mode = ModeAgent },
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if !strings.Contains(out, "Agent accuracy: ±15%") {
+					t.Errorf("missing agent disclosure:\n%s", out)
+				}
+				if strings.Contains(out, "±40%") {
+					t.Errorf("agent mode rendered sandbox disclosure")
+				}
+			},
+		},
+		{
+			name: "no-savings-shows-clean-message",
+			mut: func(c *Comment) {
+				c.MonthlySavingsUSDCents = 0
+				c.AnnualSavingsUSDCents = 0
+				c.Findings = nil
+			},
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if !strings.Contains(out, "No cost optimisations detected") {
+					t.Errorf("clean message missing:\n%s", out)
+				}
+			},
+		},
+		{
+			name: "apply-fix-link-shown-when-present",
+			mut:  func(c *Comment) { c.ApplyFixURL = "https://github.com/acme/api/pull/42" },
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if !strings.Contains(out, "Apply Fix PR") {
+					t.Errorf("apply-fix link missing:\n%s", out)
+				}
+			},
+		},
+		{
+			name: "apply-fix-link-omitted-when-absent",
+			mut:  func(c *Comment) { c.ApplyFixURL = "" },
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if strings.Contains(out, "Apply Fix PR") {
+					t.Errorf("apply-fix link rendered when URL absent")
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := sample(now)
+			if tc.mut != nil {
+				tc.mut(&c)
+			}
+			out, err := Render(c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tc.assert(t, out)
+		})
+	}
+}
+
+// Non-determinism here makes CI re-post "different" comments on every rerun.
 func TestRender_DeterministicAcrossRuns(t *testing.T) {
-	// Non-determinism here makes CI re-post "different" comments on
-	// every rerun.
 	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
 	a, err := Render(sample(now))
 	if err != nil {
@@ -52,118 +172,34 @@ func TestRender_DeterministicAcrossRuns(t *testing.T) {
 func TestRender_GeneratedAtTruncatedToMinute(t *testing.T) {
 	t1 := time.Date(2026, 5, 11, 14, 30, 15, 0, time.UTC)
 	t2 := time.Date(2026, 5, 11, 14, 30, 45, 0, time.UTC)
-	a, _ := Render(sample(t1))
-	b, _ := Render(sample(t2))
+	a, err := Render(sample(t1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Render(sample(t2))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if a != b {
 		t.Errorf("same-minute renders should match: \n%s\nvs\n%s", a, b)
 	}
 }
 
-func TestRender_CostFindingsLeadBiggestDollarFirst(t *testing.T) {
-	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
-	out, err := Render(sample(now))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cpuIdx := strings.Index(out, "CPU overprovisioned")
-	memIdx := strings.Index(out, "Memory overprovisioned")
-	if cpuIdx < 0 || memIdx < 0 {
-		t.Fatalf("missing finding lines:\n%s", out)
-	}
-	if cpuIdx > memIdx {
-		t.Errorf("CPU ($20/mo) should render before Memory ($9.20/mo)\nout:\n%s", out)
-	}
-}
-
-func TestRender_SecurityIsBonusSection(t *testing.T) {
-	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
-	out, err := Render(sample(now))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, "### Security findings (bonus)") {
-		t.Errorf("security section missing bonus marker:\n%s", out)
-	}
-	if !strings.Contains(out, "side-effect") {
-		t.Errorf("missing bonus framing\n%s", out)
-	}
-	cost := strings.Index(out, "### Cost optimisations")
-	sec := strings.Index(out, "### Security findings")
-	if cost < 0 || sec < 0 || cost > sec {
-		t.Errorf("cost section must precede security section")
-	}
-}
-
-func TestRender_SecurityHiddenWhenToggleOff(t *testing.T) {
-	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
-	c := sample(now)
-	c.SecurityVisible = false
-	out, _ := Render(c)
-	if strings.Contains(out, "### Security findings") {
-		t.Errorf("security section should not render when toggle off")
-	}
-}
-
-func TestRender_SandboxDisclosureExactlyMatchesCLI(t *testing.T) {
-	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
-	c := sample(now)
-	c.Mode = ModeSandbox
-	out, _ := Render(c)
-	if !strings.Contains(out, AccuracyDisclosureSandbox) {
-		t.Errorf("missing sandbox disclosure:\n%s", out)
-	}
-}
-
-func TestRender_AgentModeShowsAgentDisclosure(t *testing.T) {
-	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
-	c := sample(now)
-	c.Mode = ModeAgent
-	out, _ := Render(c)
-	if !strings.Contains(out, "Agent accuracy: ±15%") {
-		t.Errorf("missing agent disclosure:\n%s", out)
-	}
-	if strings.Contains(out, "±40%") {
-		t.Errorf("agent mode rendered sandbox disclosure")
-	}
-}
-
-func TestRender_NoSavingsShowsCleanMessage(t *testing.T) {
-	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
-	c := sample(now)
-	c.MonthlySavingsUSDCents = 0
-	c.AnnualSavingsUSDCents = 0
-	c.Findings = nil
-	out, _ := Render(c)
-	if !strings.Contains(out, "No cost optimisations detected") {
-		t.Errorf("clean message missing:\n%s", out)
-	}
-}
-
 func TestFmtUSD(t *testing.T) {
-	cases := map[int64]string{0: "$0", 100: "$1", 12345: "$123.45", 5: "$0.05"}
-	for in, want := range cases {
-		if got := fmtUSD(in); got != want {
-			t.Errorf("fmtUSD(%d) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestRender_ApplyFixURL_LinkShownWhenPresent(t *testing.T) {
-	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
-	c := sample(now)
-	c.ApplyFixURL = "https://github.com/acme/api/pull/42"
-	out, _ := Render(c)
-	if !strings.Contains(out, "Apply Fix PR") {
-		t.Errorf("apply-fix link missing:\n%s", out)
-	}
-}
-
-func TestRender_OmitsApplyFixURL_WhenAbsent(t *testing.T) {
-	now := time.Date(2026, 5, 11, 14, 30, 0, 0, time.UTC)
-	c := sample(now)
-	c.ApplyFixURL = ""
-	out, _ := Render(c)
-	if strings.Contains(out, "Apply Fix PR") {
-		t.Errorf("apply-fix link rendered when URL absent")
+	for _, tc := range []struct {
+		name string
+		in   int64
+		want string
+	}{
+		{name: "zero", in: 0, want: "$0"},
+		{name: "one-dollar", in: 100, want: "$1"},
+		{name: "fractional-dollars", in: 12345, want: "$123.45"},
+		{name: "sub-dollar-cents", in: 5, want: "$0.05"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := fmtUSD(tc.in); got != tc.want {
+				t.Errorf("fmtUSD(%d) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }

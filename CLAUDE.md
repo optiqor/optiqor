@@ -190,9 +190,65 @@ Golden tests for renderer output and any deterministic byte-stream. Regenerate w
 
 ### Comments
 
-Comments explain why, never what. Code says what; you say why it has to.
+Comments explain WHY, never what. Code says what; you say why it has to.
 
-**Bad (states the obvious, AI-shaped):**
+**Decoration is debt.** Every comment is a thing a future engineer must keep in sync with the code. Most comments don't earn their keep — they restate the signature, narrate the obvious, or pad a function's preamble with "philosophy" prose. When in doubt, delete. Re-add only when a reader would otherwise miss a non-obvious constraint, trade-off, ADR reference, security/performance rationale, or invariant.
+
+#### Godoc on exported symbols
+
+The Go convention says every exported symbol gets a godoc starting with its name. We follow this **only when the godoc adds value beyond the symbol name + signature**. A `func NewSigner(secret []byte) *Signer` does not need `// NewSigner returns a Signer.` — the name says it. A `func NewSigner(secret []byte) *Signer { if len(secret) == 0 { panic(...) }; ... }` does benefit from `// NewSigner panics on an empty secret so a misconfigured boot fails closed instead of issuing tokens nobody can verify.` because the panic-on-empty contract is non-obvious from the signature.
+
+Rule of thumb: if removing the godoc costs the reader nothing, the godoc costs the codebase nothing to delete. Audit each one.
+
+#### Bad / good examples
+
+**Bad — restates the signature:**
+
+```go
+// Mount registers GET /v1/session/whoami and POST /v1/session/issue.
+func (h *Handler) Mount(mux *http.ServeMux) {
+    mux.HandleFunc("GET /v1/session/whoami", h.Whoami)
+    mux.HandleFunc("POST /v1/session/issue", h.Issue)
+}
+```
+
+**Good — drop the godoc; the method body already enumerates the routes.**
+
+---
+
+**Bad — multi-paragraph "philosophy" package docstring:**
+
+```go
+// Package agent is the SaaS-side LLM orchestrator that turns a
+// [rules.Finding] into a human-readable explanation and a unified
+// `values.yaml` diff suggesting the fix.
+//
+// Phase 1 contract:
+//
+//   - Inputs are sanitised via internal/agent/llm/sanitizer before
+//     leaving the boundary. Customer secrets, file paths, and prompt
+//     injection markers are stripped or wrapped.
+//   - The LLM call goes through an [LLMClient] interface so:
+//   - tests run against a deterministic [FakeLLMClient];
+//   - the real Anthropic SDK adapter ships behind an env flag
+//     without forcing every test path to depend on it.
+//   ...
+package agent
+```
+
+**Good — same facts, one paragraph, load-bearing context only:**
+
+```go
+// Package agent turns a rules.Finding into an explanation + unified
+// values.yaml diff via an LLM. Sanitises input through
+// internal/agent/llm/sanitizer; enforces the per-call $0.40 cap before
+// any network egress; records every call against the llm_calls table.
+package agent
+```
+
+---
+
+**Bad — narrates what the code says:**
 
 ```go
 // Iterates through workloads and processes each one.
@@ -201,7 +257,7 @@ for _, w := range workloads {
 }
 ```
 
-**Good (explains the why):**
+**Good — explains the non-obvious WHY:**
 
 ```go
 // Sequential on purpose. The detector pipeline mutates a shared score
@@ -211,41 +267,71 @@ for _, w := range workloads {
 }
 ```
 
-**Bad (AI godoc that says nothing):**
+---
+
+**Bad — bullet-listed enumeration that duplicates struct field tags:**
 
 ```go
-// MonthlyUSDCents calculates the monthly cost in USD cents.
-// Returns 0 if replicas is 0.
-func MonthlyUSDCents(w Workload, p Prices) int64
+// PreviewResponse echoes the rendered Markdown body, the unified diff
+// suitable for git apply, the sanitizer's verdict on the input chart,
+// and a generated explanation string.
+//
+//   - MarkdownBody: the PR-comment markdown
+//   - UnifiedDiff:  the diff against the original chart
+//   - Explanation:  the LLM's narrative
+//   - SanitizerApplied: true if the sanitizer modified the input
+type PreviewResponse struct {
+    MarkdownBody     string `json:"markdown_body"`
+    UnifiedDiff      string `json:"unified_diff"`
+    Explanation      string `json:"explanation"`
+    SanitizerApplied bool   `json:"sanitizer_applied"`
+}
 ```
 
-**Good (godoc that earns its keep):**
+**Good — drop the godoc; the struct + json tags already document the wire shape.**
 
-```go
-// MonthlyUSDCents projects a steady-state monthly cost. Replicas are
-// clamped to >= 1 because Kubernetes Deployments with replicas=0 still
-// occupy the scheduler's bookkeeping and are re-evaluated each cycle.
-func MonthlyUSDCents(w Workload, p Prices) int64
-```
+---
 
-Reference real things: issue numbers, commit SHAs, ADR numbers, RFC sections, vendor docs. Specific over abstract.
+**Good — references real things (issue numbers, ADR numbers, RFC sections, vendor docs):**
 
 ```go
 // k8s 1.31 narrowed the projected-token audience claim. Older clusters
 // still expect "https://kubernetes.default.svc". See ADR-0007.
 ```
 
-**Banned in comments:**
+```go
+// Constant-time compare avoids leaking the token byte-by-byte via
+// timing. crypto/subtle.ConstantTimeCompare is the only safe path.
+```
 
-- Markdown headers (`#`, `##`, `###`).
+```go
+// Headers per RFC 9110 §10.2.3 — Retry-After in seconds, minimum 1.
+```
+
+#### Banned in comments
+
+- Markdown headers (`#`, `##`, `###`) inside `//` comments. Go and TS readers don't render markdown in source.
 - `Note:`, `Important:`, `Caution:`, `Warning:` labels. If it's important, the code structure should make the rule unmissable.
+- Em-dash-heavy narrative essays in package or function docstrings. One terse sentence beats five lines of glue.
+- Decorative section dividers in code: `// ─── Helpers ───`, `// ====== validators ======`. Use blank lines.
+- Multi-paragraph package docstrings narrating "Layout philosophy:", "Implementation notes:", "This file is the operational mirror of...". Compress to one or two terse sentences capturing the load-bearing facts.
+- Bullet-listed enumerations of struct fields or function returns — the type tags already enumerate them.
+- Restating what the next line of code says.
+- Restating the signature: `// Foo returns a Foo.`, `// Bar bars the baz.`
+- "Helper function to...", "Utility for...", "This function..." preambles. Describe the WHY or delete.
 - Emojis. None, anywhere.
-- Restating what the code says.
-- "Helper function to...", "Utility for...". Describe what it does in the name.
 - Author tags (`// jdoe, 2024-05-12`). Git blame exists.
-- TODOs without a name or issue. `// TODO(@shivam, #42): ...` is fine. `// TODO: do later` is not.
+- TODOs without a name and issue: `// TODO(@shivam, #42): ...` is fine; `// TODO: do later` is not.
 
-Godoc is for the package and exported symbols. Every exported symbol gets one sentence minimum. The first sentence starts with the symbol name. Examples for non-trivial APIs go in `example_test.go`.
+#### How to audit a comment
+
+Ask one question: *"if I delete this, what does the next engineer fail to understand?"* If the answer is "nothing — the name + signature + types already say it", delete. If the answer names a specific constraint, trade-off, ADR, workaround, security/perf concern, or invariant, keep but compress to its tightest form.
+
+Errors in error messages follow the same rule — no em-dashes for clause-glue, use commas or rewrite. `errors.New("auth: invalid token")` is right; `errors.New("auth: invalid token — verify failed against current secret")` is not (the second clause is restating, not adding).
+
+#### Reference commits
+
+The 2026-05-24 cleanup compressed the codebase by ~1,500 lines of comment cruft across four phases (commits `cdec3a3`, `723e409`, `9de1674` on the backend; `feba8e0`, `9f817cd` on the CLI). Read any of those diffs to see the tone applied at scale; new code should land at that compression level from the start, not need a follow-up sweep.
 
 ### Files and packages
 

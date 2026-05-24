@@ -34,173 +34,222 @@ func newHandler() *Handler {
 	}
 }
 
-func TestAnalyze_RejectsNonPost(t *testing.T) {
-	h := newHandler()
-	req := httptest.NewRequest(http.MethodGet, "/v1/analyze", http.NoBody)
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("code = %d", w.Code)
+func TestAnalyze(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		handler    func() *Handler
+		req        func() *http.Request
+		wantStatus int
+		check      func(t *testing.T, h *Handler, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name:    "rejects non-post",
+			handler: newHandler,
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodGet, "/v1/analyze", http.NoBody)
+			},
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:    "happy path",
+			handler: newHandler,
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
+			},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, _ *Handler, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+					t.Errorf("content-type = %q", ct)
+				}
+				var resp AnalyzeResponse
+				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("unmarshal: %v\nbody:%s", err, rec.Body.String())
+				}
+				if resp.AccuracyDisclosure != AccuracyDisclosure {
+					t.Errorf("disclosure mismatch: %q", resp.AccuracyDisclosure)
+				}
+				if resp.Workloads != 2 {
+					t.Errorf("workloads = %d, want 2", resp.Workloads)
+				}
+				if resp.ShareHash == "" {
+					t.Error("share_hash empty")
+				}
+				if !strings.Contains(resp.ShareURL, "/r/"+resp.ShareHash) {
+					t.Errorf("share_url = %q, missing /r/<hash> suffix", resp.ShareURL)
+				}
+				if len(resp.CostFindings)+len(resp.SecurityFindingsBonus) != len(resp.Findings) {
+					t.Errorf("split mismatch: cost=%d security=%d findings=%d",
+						len(resp.CostFindings), len(resp.SecurityFindingsBonus), len(resp.Findings))
+				}
+				if resp.AnnualSavingsUSD != resp.MonthlySavingsUSD*12 {
+					t.Errorf("annual != monthly*12: %v vs %v", resp.AnnualSavingsUSD, resp.MonthlySavingsUSD)
+				}
+			},
+		},
+		{
+			name:    "share url derived from request in dev",
+			handler: newHandler,
+			req: func() *http.Request {
+				r := httptest.NewRequest(http.MethodPost, "http://localhost:3000/v1/analyze", strings.NewReader(exampleChart))
+				r.Host = "localhost:3000"
+				return r
+			},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, _ *Handler, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var resp AnalyzeResponse
+				_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+				if !strings.HasPrefix(resp.ShareURL, "http://localhost:3000/r/") {
+					t.Errorf("share_url should derive from request: got %q", resp.ShareURL)
+				}
+			},
+		},
+		{
+			name: "share url honours public base url",
+			handler: func() *Handler {
+				h := newHandler()
+				h.PublicBaseURL = "https://optiqor.dev"
+				return h
+			},
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodPost, "http://localhost:3000/v1/analyze", strings.NewReader(exampleChart))
+			},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, _ *Handler, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var resp AnalyzeResponse
+				_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+				if !strings.HasPrefix(resp.ShareURL, "https://optiqor.dev/r/") {
+					t.Errorf("share_url should honour configured PublicBaseURL: got %q", resp.ShareURL)
+				}
+			},
+		},
+		{
+			name:    "share url honours x-forwarded-proto",
+			handler: newHandler,
+			req: func() *http.Request {
+				r := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
+				r.Host = "optiqor.dev"
+				r.Header.Set("X-Forwarded-Proto", "https")
+				return r
+			},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, _ *Handler, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var resp AnalyzeResponse
+				_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+				if !strings.HasPrefix(resp.ShareURL, "https://optiqor.dev/r/") {
+					t.Errorf("X-Forwarded-Proto should drive scheme: got %q", resp.ShareURL)
+				}
+			},
+		},
+		{
+			name:    "bad yaml 400",
+			handler: newHandler,
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(":\n  - not: [valid"))
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:    "oversized body 413",
+			handler: newHandler,
+			req: func() *http.Request {
+				big := strings.Repeat("a", int(config.SandboxAnalyzeMaxBytes)+1)
+				return httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(big))
+			},
+			wantStatus: http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:    "disclosure always present",
+			handler: newHandler,
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
+			},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, _ *Handler, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				body, _ := io.ReadAll(rec.Body)
+				if !strings.Contains(string(body), "±40%") {
+					t.Errorf("response missing accuracy disclosure:\n%s", body)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := tc.handler()
+			rec := httptest.NewRecorder()
+			h.Analyze(rec, tc.req())
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status: got %d want %d body=%s", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+			if tc.check != nil {
+				tc.check(t, h, rec)
+			}
+		})
 	}
 }
 
-func TestAnalyze_HappyPath(t *testing.T) {
-	h := newHandler()
-	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("code = %d, body = %s", w.Code, w.Body.String())
-	}
-	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
-		t.Errorf("content-type = %q", ct)
-	}
-	var resp AnalyzeResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v\nbody:%s", err, w.Body.String())
-	}
-	if resp.AccuracyDisclosure != AccuracyDisclosure {
-		t.Errorf("disclosure mismatch: %q", resp.AccuracyDisclosure)
-	}
-	if resp.Workloads != 2 {
-		t.Errorf("workloads = %d, want 2", resp.Workloads)
-	}
-	if resp.ShareHash == "" {
-		t.Error("share_hash empty")
-	}
-	// httptest default host is example.com; the /r/<hash> suffix is
-	// the stable part to assert on.
-	if !strings.Contains(resp.ShareURL, "/r/"+resp.ShareHash) {
-		t.Errorf("share_url = %q, missing /r/<hash> suffix", resp.ShareURL)
-	}
-	if len(resp.CostFindings)+len(resp.SecurityFindingsBonus) != len(resp.Findings) {
-		t.Errorf("split mismatch: cost=%d security=%d findings=%d",
-			len(resp.CostFindings), len(resp.SecurityFindingsBonus), len(resp.Findings))
-	}
-	if resp.AnnualSavingsUSD != resp.MonthlySavingsUSD*12 {
-		t.Errorf("annual != monthly*12: %v vs %v", resp.AnnualSavingsUSD, resp.MonthlySavingsUSD)
-	}
-}
+func TestShare_RoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		acceptHdr   string
+		query       string
+		wantContent string // substring expected in body
+		wantCT      string // prefix expected on Content-Type
+	}{
+		{
+			name:        "default html",
+			wantContent: "<!doctype html>",
+			wantCT:      "text/html",
+		},
+		{
+			name:        "accept json",
+			acceptHdr:   "application/json",
+			wantContent: "accuracy_disclosure",
+		},
+		{
+			name:        "format query",
+			query:       "?format=json",
+			wantContent: "accuracy_disclosure",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHandler()
+			req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
+			rec := httptest.NewRecorder()
+			h.Analyze(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("analyze failed: %s", rec.Body.String())
+			}
+			var resp AnalyzeResponse
+			_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 
-func TestAnalyze_ShareURL_DerivedFromRequestInDev(t *testing.T) {
-	h := newHandler() // no PublicBaseURL
-	req := httptest.NewRequest(http.MethodPost, "http://localhost:3000/v1/analyze", strings.NewReader(exampleChart))
-	req.Host = "localhost:3000"
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	var resp AnalyzeResponse
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if !strings.HasPrefix(resp.ShareURL, "http://localhost:3000/r/") {
-		t.Errorf("share_url should derive from request: got %q", resp.ShareURL)
-	}
-}
-
-func TestAnalyze_ShareURL_HonoursPublicBaseURL(t *testing.T) {
-	h := newHandler()
-	h.PublicBaseURL = "https://optiqor.dev"
-	req := httptest.NewRequest(http.MethodPost, "http://localhost:3000/v1/analyze", strings.NewReader(exampleChart))
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	var resp AnalyzeResponse
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if !strings.HasPrefix(resp.ShareURL, "https://optiqor.dev/r/") {
-		t.Errorf("share_url should honour configured PublicBaseURL: got %q", resp.ShareURL)
-	}
-}
-
-func TestAnalyze_ShareURL_HonoursXForwardedProto(t *testing.T) {
-	h := newHandler()
-	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
-	req.Host = "optiqor.dev"
-	req.Header.Set("X-Forwarded-Proto", "https")
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	var resp AnalyzeResponse
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if !strings.HasPrefix(resp.ShareURL, "https://optiqor.dev/r/") {
-		t.Errorf("X-Forwarded-Proto should drive scheme: got %q", resp.ShareURL)
-	}
-}
-
-func TestAnalyze_BadYAML_400(t *testing.T) {
-	h := newHandler()
-	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(":\n  - not: [valid"))
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("code = %d, body = %s", w.Code, w.Body.String())
-	}
-}
-
-func TestAnalyze_OversizedBody_413(t *testing.T) {
-	h := newHandler()
-	big := strings.Repeat("a", int(config.SandboxAnalyzeMaxBytes)+1)
-	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(big))
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	if w.Code != http.StatusRequestEntityTooLarge {
-		t.Errorf("code = %d", w.Code)
-	}
-}
-
-func TestAnalyze_StoresShareEntry_HTMLByDefault(t *testing.T) {
-	h := newHandler()
-	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("analyze failed: %s", w.Body.String())
-	}
-	var resp AnalyzeResponse
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-
-	mux := http.NewServeMux()
-	h.Mount(mux)
-
-	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, http.NoBody)
-	getW := httptest.NewRecorder()
-	mux.ServeHTTP(getW, getReq)
-	if getW.Code != http.StatusOK {
-		t.Fatalf("share GET code = %d, body = %s", getW.Code, getW.Body.String())
-	}
-	if ct := getW.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-		t.Errorf("default content-type = %q, want text/html", ct)
-	}
-	if !strings.Contains(getW.Body.String(), "<!doctype html>") {
-		t.Errorf("default share render is not HTML:\n%s", getW.Body.String()[:200])
-	}
-	if !strings.Contains(getW.Body.String(), "Sandbox accuracy: ±40%") {
-		t.Errorf("HTML share missing accuracy disclosure")
-	}
-}
-
-func TestAnalyze_StoresShareEntry_JSONOnAccept(t *testing.T) {
-	h := newHandler()
-	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	var resp AnalyzeResponse
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-
-	mux := http.NewServeMux()
-	h.Mount(mux)
-
-	getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash, http.NoBody)
-	getReq.Header.Set("Accept", "application/json")
-	getW := httptest.NewRecorder()
-	mux.ServeHTTP(getW, getReq)
-	if getW.Code != http.StatusOK {
-		t.Fatalf("share GET code = %d", getW.Code)
-	}
-	if !strings.Contains(getW.Body.String(), "accuracy_disclosure") {
-		t.Errorf("Accept:application/json branch missing disclosure key")
-	}
-
-	getReq2 := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash+"?format=json", http.NoBody)
-	getW2 := httptest.NewRecorder()
-	mux.ServeHTTP(getW2, getReq2)
-	if !strings.Contains(getW2.Body.String(), "accuracy_disclosure") {
-		t.Errorf("?format=json branch missing disclosure key")
+			mux := http.NewServeMux()
+			h.Mount(mux)
+			getReq := httptest.NewRequest(http.MethodGet, "/r/"+resp.ShareHash+tc.query, http.NoBody)
+			if tc.acceptHdr != "" {
+				getReq.Header.Set("Accept", tc.acceptHdr)
+			}
+			getRec := httptest.NewRecorder()
+			mux.ServeHTTP(getRec, getReq)
+			if getRec.Code != http.StatusOK {
+				t.Fatalf("share GET code = %d body=%s", getRec.Code, getRec.Body.String())
+			}
+			if tc.wantCT != "" {
+				if ct := getRec.Header().Get("Content-Type"); !strings.HasPrefix(ct, tc.wantCT) {
+					t.Errorf("content-type = %q, want prefix %q", ct, tc.wantCT)
+				}
+			}
+			body := getRec.Body.String()
+			if !strings.Contains(body, tc.wantContent) {
+				t.Errorf("body missing %q:\n%s", tc.wantContent, body)
+			}
+			if tc.wantCT == "text/html" && !strings.Contains(body, "Sandbox accuracy: ±40%") {
+				t.Errorf("HTML share missing accuracy disclosure")
+			}
+		})
 	}
 }
 
@@ -231,24 +280,14 @@ func TestShare_RespectsExpiry(t *testing.T) {
 	}
 }
 
-func TestAnalyze_DisclosureAlwaysPresent(t *testing.T) {
-	h := newHandler()
-	req := httptest.NewRequest(http.MethodPost, "/v1/analyze", strings.NewReader(exampleChart))
-	w := httptest.NewRecorder()
-	h.Analyze(w, req)
-	body, _ := io.ReadAll(w.Body)
-	if !strings.Contains(string(body), "±40%") {
-		t.Errorf("response missing accuracy disclosure:\n%s", body)
-	}
-}
-
 func TestHashBytes_StableAcrossCalls(t *testing.T) {
 	a := hashBytes([]byte("hello"))
 	b := hashBytes([]byte("hello"))
 	if a != b {
 		t.Errorf("hash non-deterministic: %s vs %s", a, b)
 	}
-	if len(a) != 24 { // 12 bytes hex-encoded
+	// 12 bytes hex-encoded.
+	if len(a) != 24 {
 		t.Errorf("hash length = %d, want 24", len(a))
 	}
 }

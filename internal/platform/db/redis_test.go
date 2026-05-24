@@ -15,37 +15,43 @@ func TestNewKeyspace_RequiresTenant(t *testing.T) {
 	}
 }
 
-func TestKeyspace_Prefix(t *testing.T) {
-	k, err := NewKeyspace(tenancy.Context{TenantID: "tenant-abc"})
+func TestKeyspace_Key(t *testing.T) {
+	k, err := NewKeyspace(tenancy.Context{TenantID: "t1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := k.Prefix(), "t:tenant-abc:"; got != want {
-		t.Errorf("Prefix() = %q, want %q", got, want)
-	}
-}
-
-func TestKeyspace_Key(t *testing.T) {
-	k, _ := NewKeyspace(tenancy.Context{TenantID: "t1"})
-	cases := []struct {
+	for _, tc := range []struct {
+		name  string
 		parts []string
 		want  string
 	}{
-		{[]string{}, "t:t1:"},
-		{[]string{"foo"}, "t:t1:foo"},
-		{[]string{"rate", "ip", "1.2.3.4"}, "t:t1:rate:ip:1.2.3.4"},
-	}
-	for _, tc := range cases {
-		if got := k.Key(tc.parts...); got != tc.want {
-			t.Errorf("Key(%v) = %q, want %q", tc.parts, got, tc.want)
-		}
+		{"no parts is prefix", []string{}, "t:t1:"},
+		{"single part", []string{"foo"}, "t:t1:foo"},
+		{"multiple parts joined", []string{"rate", "ip", "1.2.3.4"}, "t:t1:rate:ip:1.2.3.4"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := k.Key(tc.parts...); got != tc.want {
+				t.Errorf("Key(%v) = %q, want %q", tc.parts, got, tc.want)
+			}
+		})
 	}
 }
 
-func TestKeyspace_Pattern(t *testing.T) {
-	k, _ := NewKeyspace(tenancy.Context{TenantID: "t1"})
-	if got, want := k.Pattern("rate:*"), "t:t1:rate:*"; got != want {
-		t.Errorf("Pattern(rate:*) = %q, want %q", got, want)
+func TestKeyspace_PrefixAndPattern(t *testing.T) {
+	k, _ := NewKeyspace(tenancy.Context{TenantID: "tenant-abc"})
+	for _, tc := range []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"prefix", k.Prefix(), "t:tenant-abc:"},
+		{"pattern", k.Pattern("rate:*"), "t:tenant-abc:rate:*"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.got != tc.want {
+				t.Errorf("got %q, want %q", tc.got, tc.want)
+			}
+		})
 	}
 }
 
@@ -60,16 +66,31 @@ func TestKeyspace_DifferentTenantsCannotCollide(t *testing.T) {
 	}
 }
 
-func TestKeyspace_String(t *testing.T) {
+func TestKeyspace_Accessors(t *testing.T) {
 	k, _ := NewKeyspace(tenancy.Context{TenantID: "t1"})
-	if !strings.Contains(k.String(), "t:t1:") {
-		t.Errorf("String() = %q", k.String())
-	}
-}
-
-func TestKeyspace_TenantID(t *testing.T) {
-	k, _ := NewKeyspace(tenancy.Context{TenantID: "t1"})
-	if k.TenantID() != "t1" {
-		t.Errorf("TenantID() = %q", k.TenantID())
+	for _, tc := range []struct {
+		name  string
+		check func(t *testing.T)
+	}{
+		{
+			name: "string contains prefix",
+			check: func(t *testing.T) {
+				t.Helper()
+				if !strings.Contains(k.String(), "t:t1:") {
+					t.Errorf("String() = %q", k.String())
+				}
+			},
+		},
+		{
+			name: "tenant id round trip",
+			check: func(t *testing.T) {
+				t.Helper()
+				if k.TenantID() != "t1" {
+					t.Errorf("TenantID() = %q", k.TenantID())
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, tc.check)
 	}
 }

@@ -10,28 +10,29 @@ import (
 )
 
 func TestWindow_Validate(t *testing.T) {
-	now := time.Now()
-	cases := []struct {
+	now := time.Date(2026, 5, 24, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
 		name    string
 		w       Window
 		wantErr bool
 	}{
-		{"valid", Window{Start: now.Add(-time.Hour), End: now}, false},
+		{"valid one hour", Window{Start: now.Add(-time.Hour), End: now}, false},
 		{"reversed", Window{Start: now, End: now.Add(-time.Hour)}, true},
-		{"zero", Window{Start: now, End: now}, true},
-	}
-	for _, tc := range cases {
-		err := tc.w.Validate()
-		if tc.wantErr && err == nil {
-			t.Errorf("%s: expected error", tc.name)
-		}
-		if !tc.wantErr && err != nil {
-			t.Errorf("%s: unexpected error: %v", tc.name, err)
-		}
+		{"zero width", Window{Start: now, End: now}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.w.Validate()
+			if tc.wantErr && err == nil {
+				t.Error("want error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 
-func TestResult_TotalUSDCentsSkipsNonUSD(t *testing.T) {
+func TestResult_TotalUSDCents_SkipsNonUSD(t *testing.T) {
 	r := Result{Items: []LineItem{
 		{TotalUSDCents: 100, Currency: "USD"},
 		{TotalUSDCents: 200, Currency: "USD"},
@@ -43,83 +44,149 @@ func TestResult_TotalUSDCentsSkipsNonUSD(t *testing.T) {
 	}
 }
 
-func TestRegistry_RegisterAndLookup(t *testing.T) {
-	r := newRegistry()
-	r.Register(NewAWSCUR())
-	r.Register(NewCapacity())
-
-	if names := r.Names(); len(names) != 2 || names[0] != "aws-cur" || names[1] != "capacity" {
-		t.Fatalf("Names() = %v, want [aws-cur capacity]", names)
-	}
-
-	src, err := r.Lookup("aws-cur")
-	if err != nil {
-		t.Fatalf("lookup: %v", err)
-	}
-	if src.Cloud() != CloudAWS || src.Tier() != TierCloud {
-		t.Errorf("aws source attrs wrong: %+v %+v", src.Cloud(), src.Tier())
+func TestRegistry(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		register   []Source
+		lookup     string
+		wantNames  []string
+		wantCloud  Cloud
+		wantTier   Tier
+		wantLookup bool
+	}{
+		{
+			name:       "lookup hits registered aws-cur",
+			register:   []Source{NewAWSCUR(), NewCapacity()},
+			lookup:     "aws-cur",
+			wantNames:  []string{"aws-cur", "capacity"},
+			wantCloud:  CloudAWS,
+			wantTier:   TierCloud,
+			wantLookup: true,
+		},
+		{
+			name:       "lookup hits registered capacity",
+			register:   []Source{NewAWSCUR(), NewCapacity()},
+			lookup:     "capacity",
+			wantNames:  []string{"aws-cur", "capacity"},
+			wantCloud:  Cloud(""),
+			wantTier:   TierCapacity,
+			wantLookup: true,
+		},
+		{
+			name:      "lookup miss returns error",
+			register:  []Source{NewAWSCUR()},
+			lookup:    "nope",
+			wantNames: []string{"aws-cur"},
+		},
+		{
+			name:      "empty registry has empty names",
+			register:  nil,
+			lookup:    "anything",
+			wantNames: []string{},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRegistry()
+			for _, s := range tc.register {
+				r.Register(s)
+			}
+			if got := r.Names(); !equalStrings(got, tc.wantNames) {
+				t.Errorf("Names() = %v, want %v", got, tc.wantNames)
+			}
+			src, err := r.Lookup(tc.lookup)
+			if tc.wantLookup {
+				if err != nil {
+					t.Fatalf("Lookup(%q): %v", tc.lookup, err)
+				}
+				if src.Cloud() != tc.wantCloud {
+					t.Errorf("Cloud() = %q, want %q", src.Cloud(), tc.wantCloud)
+				}
+				if src.Tier() != tc.wantTier {
+					t.Errorf("Tier() = %q, want %q", src.Tier(), tc.wantTier)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Lookup(%q): want error, got source %+v", tc.lookup, src)
+			}
+		})
 	}
 }
 
-func TestRegistry_LookupMissing(t *testing.T) {
-	r := newRegistry()
-	if _, err := r.Lookup("nope"); err == nil {
-		t.Fatal("expected error for missing source")
+func TestRegistry_Register_PanicsOnInvalidInput(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		seed []Source
+		add  Source
+	}{
+		{"duplicate name", []Source{NewAWSCUR()}, NewAWSCUR()},
+		{"nil source", nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRegistry()
+			for _, s := range tc.seed {
+				r.Register(s)
+			}
+			defer func() {
+				if recover() == nil {
+					t.Fatal("want panic, got none")
+				}
+			}()
+			r.Register(tc.add)
+		})
 	}
 }
 
-func TestRegistry_RegisterDuplicatePanics(t *testing.T) {
-	r := newRegistry()
-	r.Register(NewAWSCUR())
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic on duplicate register")
-		}
-	}()
-	r.Register(NewAWSCUR())
-}
-
-func TestRegistry_RegisterNilPanics(t *testing.T) {
-	r := newRegistry()
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic on nil source")
-		}
-	}()
-	r.Register(nil)
-}
-
-func TestAWSCUR_QueryGuards(t *testing.T) {
-	src := NewAWSCUR()
-	now := time.Now()
+func TestSource_Query_Guards(t *testing.T) {
+	now := time.Date(2026, 5, 24, 0, 0, 0, 0, time.UTC)
 	good := Window{Start: now.Add(-time.Hour), End: now}
 
-	if _, err := src.Query(context.Background(), tenancy.Context{}, good); !errors.Is(err, tenancy.ErrNoTenant) {
-		t.Errorf("expected ErrNoTenant, got %v", err)
-	}
-	if _, err := src.Query(context.Background(), tenancy.Context{TenantID: "t1"}, Window{}); err == nil {
-		t.Error("expected window-validation error")
-	}
-	if _, err := src.Query(context.Background(), tenancy.Context{TenantID: "t1"}, good); !errors.Is(err, ErrNotImplemented) {
-		t.Errorf("expected ErrNotImplemented, got %v", err)
+	for _, tc := range []struct {
+		name      string
+		src       Source
+		tenant    tenancy.Context
+		window    Window
+		wantErrIs error // checked with errors.Is when non-nil
+	}{
+		{"aws-cur missing tenant", NewAWSCUR(), tenancy.Context{}, good, tenancy.ErrNoTenant},
+		{"aws-cur bad window", NewAWSCUR(), tenancy.Context{TenantID: "t1"}, Window{}, nil},
+		{"aws-cur stub", NewAWSCUR(), tenancy.Context{TenantID: "t1"}, good, ErrNotImplemented},
+		{"capacity missing tenant", NewCapacity(), tenancy.Context{}, good, tenancy.ErrNoTenant},
+		{"capacity bad window", NewCapacity(), tenancy.Context{TenantID: "t1"}, Window{}, nil},
+		{"capacity stub", NewCapacity(), tenancy.Context{TenantID: "t1"}, good, ErrNotImplemented},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.src.Query(context.Background(), tc.tenant, tc.window)
+			if err == nil {
+				t.Fatal("want error, got nil")
+			}
+			if tc.wantErrIs != nil && !errors.Is(err, tc.wantErrIs) {
+				t.Errorf("err = %v, want errors.Is %v", err, tc.wantErrIs)
+			}
+		})
 	}
 }
 
-func TestCapacity_QueryGuards(t *testing.T) {
+func TestCapacity_Attribution_OmitsCloudUsesCapacityTier(t *testing.T) {
 	src := NewCapacity()
-	now := time.Now()
-	good := Window{Start: now.Add(-time.Hour), End: now}
-
-	if _, err := src.Query(context.Background(), tenancy.Context{}, good); !errors.Is(err, tenancy.ErrNoTenant) {
-		t.Errorf("expected ErrNoTenant, got %v", err)
-	}
-	if _, err := src.Query(context.Background(), tenancy.Context{TenantID: "t1"}, good); !errors.Is(err, ErrNotImplemented) {
-		t.Errorf("expected ErrNotImplemented, got %v", err)
-	}
 	if src.Cloud() != Cloud("") {
 		t.Errorf("Capacity must not name a cloud; got %q", src.Cloud())
 	}
 	if src.Tier() != TierCapacity {
-		t.Errorf("Capacity tier wrong: %q", src.Tier())
+		t.Errorf("Capacity tier = %q, want %q", src.Tier(), TierCapacity)
 	}
+}
+
+// equalStrings exists because reflect.DeepEqual disagrees on []string{}
+// vs nil and Registry.Names returns a non-nil empty slice.
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

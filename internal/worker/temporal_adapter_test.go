@@ -62,100 +62,159 @@ func (w trivialWorkflow) Execute(ctx context.Context, t tenancy.Context, payload
 	return w.run(ctx, t, payload)
 }
 
-func TestTemporal_Register_Duplicate(t *testing.T) {
-	a := NewTemporal(&fakeTemporalClient{})
-	if err := a.Register(trivialWorkflow{name: "x"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.Register(trivialWorkflow{name: "x"}); !errors.Is(err, ErrDuplicateWorkflow) {
-		t.Errorf("want ErrDuplicateWorkflow, got %v", err)
-	}
-}
-
-func TestTemporal_Register_EmptyName(t *testing.T) {
-	a := NewTemporal(&fakeTemporalClient{})
-	if err := a.Register(trivialWorkflow{}); err == nil {
-		t.Error("empty name should fail")
-	}
-}
-
-func TestTemporal_Submit_UnknownWorkflow(t *testing.T) {
-	a := NewTemporal(&fakeTemporalClient{})
-	err := a.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, QueueDefault, "missing", []byte("{}"))
-	if !errors.Is(err, ErrUnknownWorkflow) {
-		t.Errorf("want ErrUnknownWorkflow, got %v", err)
-	}
-}
-
-func TestTemporal_Submit_DerivesTaskQueueAndID(t *testing.T) {
-	c := &fakeTemporalClient{}
-	a := NewTemporal(c)
-	_ = a.Register(trivialWorkflow{name: "apply_fix"})
-
-	err := a.Submit(
-		context.Background(),
-		tenancy.Context{TenantID: "tenant-abc", WorkspaceID: "ws-1"},
-		QueuePriority,
-		"apply_fix",
-		[]byte("{}"),
-	)
-	if err != nil {
-		t.Fatalf("Submit: %v", err)
-	}
-	if len(c.runs) != 1 {
-		t.Fatalf("got %d runs", len(c.runs))
-	}
-	got := c.runs[0]
-	if got.opts.TaskQueue != "tenant-tenant-abc-priority" {
-		t.Errorf("task queue = %q", got.opts.TaskQueue)
-	}
-	if got.opts.ID != "apply_fix::tenant-abc::ws-1" {
-		t.Errorf("workflow id = %q", got.opts.ID)
-	}
-	if got.name != "apply_fix" {
-		t.Errorf("workflow name = %q", got.name)
+func TestTemporal_Register(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		first   trivialWorkflow
+		second  *trivialWorkflow
+		wantErr error
+	}{
+		{
+			name:    "duplicate rejected",
+			first:   trivialWorkflow{name: "x"},
+			second:  &trivialWorkflow{name: "x"},
+			wantErr: ErrDuplicateWorkflow,
+		},
+		{
+			name:  "empty name rejected",
+			first: trivialWorkflow{},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := NewTemporal(&fakeTemporalClient{})
+			err := a.Register(tc.first)
+			if tc.second == nil {
+				if err == nil {
+					t.Error("empty name should fail")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = a.Register(*tc.second)
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("want %v, got %v", tc.wantErr, err)
+			}
+		})
 	}
 }
 
-func TestTemporal_Submit_RejectsNoTenant(t *testing.T) {
-	a := NewTemporal(&fakeTemporalClient{})
-	_ = a.Register(trivialWorkflow{name: "x"})
-	err := a.Submit(context.Background(), tenancy.Context{}, QueueDefault, "x", []byte("{}"))
-	if !errors.Is(err, tenancy.ErrNoTenant) {
-		t.Errorf("want ErrNoTenant, got %v", err)
-	}
-}
-
-func TestTemporal_Submit_RejectsBadQueueClass(t *testing.T) {
-	a := NewTemporal(&fakeTemporalClient{})
-	_ = a.Register(trivialWorkflow{name: "x"})
-	err := a.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, "bogus", "x", []byte("{}"))
-	if err == nil {
-		t.Errorf("want error for unsupported queue class")
-	}
-}
-
-func TestTemporal_Submit_RejectsAfterDrain(t *testing.T) {
-	a := NewTemporal(&fakeTemporalClient{})
-	_ = a.Register(trivialWorkflow{name: "x"})
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := a.Drain(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatalf("Drain: %v", err)
-	}
-	err := a.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, QueueDefault, "x", []byte("{}"))
-	if !errors.Is(err, ErrDraining) {
-		t.Errorf("want ErrDraining, got %v", err)
-	}
-}
-
-func TestTemporal_Submit_UpstreamErrorWrapped(t *testing.T) {
-	c := &fakeTemporalClient{err: errors.New("temporal unavailable")}
-	a := NewTemporal(c)
-	_ = a.Register(trivialWorkflow{name: "x"})
-	err := a.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, QueueDefault, "x", []byte("{}"))
-	if err == nil {
-		t.Fatal("want error")
+func TestTemporal_Submit(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		register *trivialWorkflow
+		tenant   tenancy.Context
+		queue    QueueClass
+		wfName   string
+		client   *fakeTemporalClient
+		drain    bool
+		wantErr  error
+		check    func(t *testing.T, c *fakeTemporalClient)
+	}{
+		{
+			name:    "unknown workflow rejected",
+			tenant:  tenancy.Context{TenantID: "t1"},
+			queue:   QueueDefault,
+			wfName:  "missing",
+			wantErr: ErrUnknownWorkflow,
+		},
+		{
+			name:     "derives task queue and workflow id",
+			register: &trivialWorkflow{name: "apply_fix"},
+			tenant:   tenancy.Context{TenantID: "tenant-abc", WorkspaceID: "ws-1"},
+			queue:    QueuePriority,
+			wfName:   "apply_fix",
+			check: func(t *testing.T, c *fakeTemporalClient) {
+				t.Helper()
+				if len(c.runs) != 1 {
+					t.Fatalf("got %d runs", len(c.runs))
+				}
+				got := c.runs[0]
+				if got.opts.TaskQueue != "tenant-tenant-abc-priority" {
+					t.Errorf("task queue = %q", got.opts.TaskQueue)
+				}
+				if got.opts.ID != "apply_fix::tenant-abc::ws-1" {
+					t.Errorf("workflow id = %q", got.opts.ID)
+				}
+				if got.name != "apply_fix" {
+					t.Errorf("workflow name = %q", got.name)
+				}
+			},
+		},
+		{
+			name:     "missing tenant rejected",
+			register: &trivialWorkflow{name: "x"},
+			queue:    QueueDefault,
+			wfName:   "x",
+			wantErr:  tenancy.ErrNoTenant,
+		},
+		{
+			name:     "bad queue class rejected",
+			register: &trivialWorkflow{name: "x"},
+			tenant:   tenancy.Context{TenantID: "t1"},
+			queue:    QueueClass("bogus"),
+			wfName:   "x",
+		},
+		{
+			name:     "rejected after drain",
+			register: &trivialWorkflow{name: "x"},
+			tenant:   tenancy.Context{TenantID: "t1"},
+			queue:    QueueDefault,
+			wfName:   "x",
+			drain:    true,
+			wantErr:  ErrDraining,
+		},
+		{
+			name:     "upstream error wrapped",
+			register: &trivialWorkflow{name: "x"},
+			tenant:   tenancy.Context{TenantID: "t1"},
+			queue:    QueueDefault,
+			wfName:   "x",
+			client:   &fakeTemporalClient{err: errors.New("temporal unavailable")},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := tc.client
+			if c == nil {
+				c = &fakeTemporalClient{}
+			}
+			a := NewTemporal(c)
+			if tc.register != nil {
+				if err := a.Register(*tc.register); err != nil {
+					t.Fatalf("register: %v", err)
+				}
+			}
+			if tc.drain {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				if err := a.Drain(ctx); err != nil && !errors.Is(err, context.Canceled) {
+					t.Fatalf("Drain: %v", err)
+				}
+			}
+			err := a.Submit(context.Background(), tc.tenant, tc.queue, tc.wfName, []byte("{}"))
+			switch {
+			case tc.wantErr != nil:
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("want %v, got %v", tc.wantErr, err)
+				}
+			case tc.name == "bad queue class rejected":
+				if err == nil {
+					t.Error("want error for unsupported queue class")
+				}
+			case tc.name == "upstream error wrapped":
+				if err == nil {
+					t.Fatal("want error")
+				}
+			default:
+				if err != nil {
+					t.Fatalf("Submit: %v", err)
+				}
+			}
+			if tc.check != nil {
+				tc.check(t, c)
+			}
+		})
 	}
 }
 

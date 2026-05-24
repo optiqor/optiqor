@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -19,62 +20,73 @@ func decode(t *testing.T, line []byte) map[string]any {
 	return m
 }
 
-func TestLogger_InjectsTenant(t *testing.T) {
-	var buf bytes.Buffer
-	log := New(&buf, "info")
-
-	ctx := tenancy.WithContext(context.Background(), tenancy.Context{
-		TenantID: "t1", WorkspaceID: "w1", ClusterID: "c1", Namespace: "ns1",
-	})
-	log.InfoContext(ctx, "hello")
-
-	m := decode(t, buf.Bytes())
-	if m[AttrTenantID] != "t1" {
-		t.Errorf("tenant_id = %v, want t1", m[AttrTenantID])
-	}
-	if m[AttrWorkspace] != "w1" {
-		t.Errorf("workspace_id = %v", m[AttrWorkspace])
-	}
-	if m[AttrCluster] != "c1" {
-		t.Errorf("cluster_id = %v", m[AttrCluster])
-	}
-	if m[AttrNamespace] != "ns1" {
-		t.Errorf("namespace = %v", m[AttrNamespace])
-	}
-	if m["msg"] != "hello" {
-		t.Errorf("msg = %v", m["msg"])
-	}
-}
-
-func TestLogger_OmitsEmptyAttrs(t *testing.T) {
-	var buf bytes.Buffer
-	log := New(&buf, "info")
-	ctx := tenancy.WithContext(context.Background(), tenancy.Context{TenantID: "t1"})
-	log.InfoContext(ctx, "hello")
-
-	m := decode(t, buf.Bytes())
-	if _, ok := m[AttrWorkspace]; ok {
-		t.Error("workspace_id should be omitted when empty")
-	}
-	if _, ok := m[AttrCluster]; ok {
-		t.Error("cluster_id should be omitted when empty")
-	}
-}
-
-func TestLogger_RequestAndWorkflowIDs(t *testing.T) {
-	var buf bytes.Buffer
-	log := New(&buf, "info")
-
-	ctx := WithRequestID(context.Background(), "req-1")
-	ctx = WithWorkflowID(ctx, "wf-2")
-	log.InfoContext(ctx, "hello")
-
-	m := decode(t, buf.Bytes())
-	if m[AttrRequestID] != "req-1" {
-		t.Errorf("request_id = %v", m[AttrRequestID])
-	}
-	if m[AttrWorkflowID] != "wf-2" {
-		t.Errorf("workflow_id = %v", m[AttrWorkflowID])
+func TestLogger_ContextAttrs(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		emit    func(ctx context.Context, l *slog.Logger)
+		ctx     func() context.Context
+		wantHas map[string]any
+		wantMis []string
+	}{
+		{
+			name: "injects full tenancy",
+			ctx: func() context.Context {
+				return tenancy.WithContext(context.Background(), tenancy.Context{
+					TenantID: "t1", WorkspaceID: "w1", ClusterID: "c1", Namespace: "ns1",
+				})
+			},
+			emit: func(ctx context.Context, l *slog.Logger) { l.InfoContext(ctx, "hello") },
+			wantHas: map[string]any{
+				AttrTenantID:  "t1",
+				AttrWorkspace: "w1",
+				AttrCluster:   "c1",
+				AttrNamespace: "ns1",
+				"msg":         "hello",
+			},
+		},
+		{
+			name: "omits empty workspace and cluster",
+			ctx: func() context.Context {
+				return tenancy.WithContext(context.Background(), tenancy.Context{TenantID: "t1"})
+			},
+			emit:    func(ctx context.Context, l *slog.Logger) { l.InfoContext(ctx, "hello") },
+			wantMis: []string{AttrWorkspace, AttrCluster},
+		},
+		{
+			name: "request and workflow ids surfaced",
+			ctx: func() context.Context {
+				ctx := WithRequestID(context.Background(), "req-1")
+				return WithWorkflowID(ctx, "wf-2")
+			},
+			emit: func(ctx context.Context, l *slog.Logger) { l.InfoContext(ctx, "hello") },
+			wantHas: map[string]any{
+				AttrRequestID:  "req-1",
+				AttrWorkflowID: "wf-2",
+			},
+		},
+		{
+			name:    "no tenant in context omits tenant_id",
+			ctx:     context.Background,
+			emit:    func(ctx context.Context, l *slog.Logger) { l.InfoContext(ctx, "no-tenant") },
+			wantMis: []string{AttrTenantID},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			log := New(&buf, "info")
+			tc.emit(tc.ctx(), log)
+			m := decode(t, buf.Bytes())
+			for k, want := range tc.wantHas {
+				if m[k] != want {
+					t.Errorf("%s = %v, want %v", k, m[k], want)
+				}
+			}
+			for _, k := range tc.wantMis {
+				if _, ok := m[k]; ok {
+					t.Errorf("%s should be absent: %v", k, m)
+				}
+			}
+		})
 	}
 }
 
@@ -93,28 +105,23 @@ func TestLogger_RespectsLevel(t *testing.T) {
 	}
 }
 
-func TestLogger_NoTenantNoCrash(t *testing.T) {
-	var buf bytes.Buffer
-	log := New(&buf, "info")
-	log.InfoContext(context.Background(), "no-tenant")
-	m := decode(t, buf.Bytes())
-	if _, ok := m[AttrTenantID]; ok {
-		t.Errorf("tenant_id should be absent when no tenant in context: %v", m)
-	}
-}
-
 func TestParseLevel(t *testing.T) {
-	cases := map[string]string{
-		"DEBUG":   "DEBUG",
-		"info":    "INFO",
-		"WARN":    "WARN",
-		"error":   "ERROR",
-		"garbage": "INFO",
-	}
-	for in, wantStr := range cases {
-		if got := parseLevel(in); got.String() != wantStr {
-			t.Errorf("parseLevel(%q) = %v, want %s", in, got, wantStr)
-		}
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"upper debug", "DEBUG", "DEBUG"},
+		{"lower info", "info", "INFO"},
+		{"upper warn", "WARN", "WARN"},
+		{"lower error", "error", "ERROR"},
+		{"unknown falls back to info", "garbage", "INFO"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseLevel(tc.in); got.String() != tc.want {
+				t.Errorf("parseLevel(%q) = %v, want %s", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 

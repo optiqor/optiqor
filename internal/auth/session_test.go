@@ -55,71 +55,79 @@ func TestSigner_IssueVerifyRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSigner_RejectsTamperedSignature(t *testing.T) {
+func TestSigner_Verify(t *testing.T) {
 	now := time.Date(2026, 5, 24, 0, 0, 0, 0, time.UTC)
-	s := newSigner(t, now)
-	token, err := s.Issue(validSession(now))
-	if err != nil {
-		t.Fatal(err)
+
+	for _, tc := range []struct {
+		name  string
+		token func(t *testing.T) (verifier *Signer, token string)
+	}{
+		{
+			name: "tampered signature",
+			token: func(t *testing.T) (*Signer, string) {
+				t.Helper()
+				s := newSigner(t, now)
+				tok, err := s.Issue(validSession(now))
+				if err != nil {
+					t.Fatal(err)
+				}
+				parts := strings.Split(tok, ".")
+				parts[2] = "X" + parts[2][1:]
+				return s, strings.Join(parts, ".")
+			},
+		},
+		{
+			name: "wrong secret",
+			token: func(t *testing.T) (*Signer, string) {
+				t.Helper()
+				good := newSigner(t, now)
+				tok, _ := good.Issue(validSession(now))
+				other := NewSigner([]byte("different-secret-but-also-32-bytes!"))
+				other.Now = func() time.Time { return now }
+				return other, tok
+			},
+		},
+		{
+			name: "expired",
+			token: func(t *testing.T) (*Signer, string) {
+				t.Helper()
+				s := newSigner(t, now)
+				tok, _ := s.Issue(validSession(now))
+				s.Now = func() time.Time { return now.Add(2 * time.Hour) }
+				return s, tok
+			},
+		},
+		{
+			// Guards against the classic alg=none JWT downgrade: header
+			// claims unsigned, payload carries a valid HMAC so a naive
+			// verifier would accept it.
+			name: "alg none with valid hmac",
+			token: func(t *testing.T) (*Signer, string) {
+				t.Helper()
+				s := newSigner(t, now)
+				headerNone := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
+				payload := "eyJ0aWQiOiJ4Iiwic3ViIjoieSIsImV4cCI6OTk5OTk5OTk5OX0"
+				signed := headerNone + "." + payload
+				return s, signed + "." + s.mac(signed)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			verifier, tok := tc.token(t)
+			if _, err := verifier.Verify(tok); !errors.Is(err, ErrInvalidToken) {
+				t.Errorf("want ErrInvalidToken, got %v", err)
+			}
+		})
 	}
-	// Flip one byte in the signature segment.
-	parts := strings.Split(token, ".")
-	parts[2] = "X" + parts[2][1:]
-	bad := strings.Join(parts, ".")
 
-	_, err = s.Verify(bad)
-	if !errors.Is(err, ErrInvalidToken) {
-		t.Errorf("want ErrInvalidToken on tampered sig, got %v", err)
-	}
-}
-
-func TestSigner_RejectsWrongSecret(t *testing.T) {
-	now := time.Date(2026, 5, 24, 0, 0, 0, 0, time.UTC)
-	good := newSigner(t, now)
-	token, _ := good.Issue(validSession(now))
-
-	other := NewSigner([]byte("different-secret-but-also-32-bytes!"))
-	other.Now = func() time.Time { return now }
-	if _, err := other.Verify(token); !errors.Is(err, ErrInvalidToken) {
-		t.Errorf("verifier with different secret must reject, got %v", err)
-	}
-}
-
-func TestSigner_RejectsExpired(t *testing.T) {
-	issuedAt := time.Date(2026, 5, 24, 0, 0, 0, 0, time.UTC)
-	s := newSigner(t, issuedAt)
-	token, _ := s.Issue(validSession(issuedAt))
-
-	// Move clock past expiry.
-	s.Now = func() time.Time { return issuedAt.Add(2 * time.Hour) }
-	if _, err := s.Verify(token); !errors.Is(err, ErrInvalidToken) {
-		t.Errorf("expired token must be rejected, got %v", err)
-	}
-}
-
-func TestSigner_RejectsAlgNone(t *testing.T) {
-	// Guards against the classic alg=none JWT downgrade.
-	now := time.Date(2026, 5, 24, 0, 0, 0, 0, time.UTC)
-	s := newSigner(t, now)
-
-	headerNone := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"              // {"alg":"none","typ":"JWT"}
-	payload := "eyJ0aWQiOiJ4Iiwic3ViIjoieSIsImV4cCI6OTk5OTk5OTk5OX0" // {"tid":"x","sub":"y","exp":9999999999}
-	signed := headerNone + "." + payload
-	bad := signed + "." + s.mac(signed) // valid HMAC, still must reject.
-
-	if _, err := s.Verify(bad); !errors.Is(err, ErrInvalidToken) {
-		t.Errorf("alg=none must be rejected even with a valid HMAC, got %v", err)
-	}
-}
-
-func TestSigner_RejectsMalformedShape(t *testing.T) {
-	now := time.Date(2026, 5, 24, 0, 0, 0, 0, time.UTC)
-	s := newSigner(t, now)
-	for _, bad := range []string{"", "abc", "a.b", "a.b.c.d", "...."} {
-		if _, err := s.Verify(bad); !errors.Is(err, ErrInvalidToken) {
-			t.Errorf("malformed token %q: want ErrInvalidToken, got %v", bad, err)
+	t.Run("malformed shape", func(t *testing.T) {
+		s := newSigner(t, now)
+		for _, bad := range []string{"", "abc", "a.b", "a.b.c.d", "...."} {
+			if _, err := s.Verify(bad); !errors.Is(err, ErrInvalidToken) {
+				t.Errorf("malformed token %q: want ErrInvalidToken, got %v", bad, err)
+			}
 		}
-	}
+	})
 }
 
 func TestSession_ValidEnforcesRequiredClaims(t *testing.T) {

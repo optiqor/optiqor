@@ -25,12 +25,20 @@ func mkReceipt() Receipt {
 	}
 }
 
-func TestIssuer_RejectsBadKey(t *testing.T) {
-	if _, err := NewIssuer("", make(ed25519.PrivateKey, ed25519.PrivateKeySize)); err == nil {
-		t.Error("want error on empty keyID")
-	}
-	if _, err := NewIssuer("k1", ed25519.PrivateKey{0x01}); err == nil {
-		t.Error("want error on truncated private key")
+func TestNewIssuer_RejectsBadKey(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		keyID string
+		key   ed25519.PrivateKey
+	}{
+		{"empty key id", "", make(ed25519.PrivateKey, ed25519.PrivateKeySize)},
+		{"truncated private key", "k1", ed25519.PrivateKey{0x01}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := NewIssuer(tc.keyID, tc.key); err == nil {
+				t.Error("want error")
+			}
+		})
 	}
 }
 
@@ -95,83 +103,99 @@ func TestSign_Deterministic(t *testing.T) {
 	}
 }
 
-func TestVerify_TamperedPayloadFails(t *testing.T) {
-	iss, pub, err := GenerateIssuer("k1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	reg := NewStaticRegistry()
-	reg.Add("k1", pub)
-	signed, _ := iss.Sign(mkReceipt())
-
-	dot := strings.IndexByte(signed, '.')
-	tampered := signed[:dot+5] + "x" + signed[dot+6:]
-	_, err = Verify(tampered, reg)
-	if err == nil {
-		t.Fatal("want verify failure on tampered payload")
-	}
-}
-
-func TestVerify_TamperedSignatureFails(t *testing.T) {
-	iss, pub, err := GenerateIssuer("k1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	reg := NewStaticRegistry()
-	reg.Add("k1", pub)
-	signed, _ := iss.Sign(mkReceipt())
-
-	tampered := "AAAA" + signed[4:]
-	_, err = Verify(tampered, reg)
-	if !errors.Is(err, ErrSignature) && err == nil {
-		t.Fatal("want signature error")
-	}
-}
-
-func TestVerify_UnknownKeyIDFails(t *testing.T) {
-	iss, pub, err := GenerateIssuer("rotated-key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	reg := NewStaticRegistry()
-	reg.Add("k1", pub) // issuer signs under "rotated-key"; registry only knows "k1"
-
-	signed, _ := iss.Sign(mkReceipt())
-	if _, err := Verify(signed, reg); err == nil {
-		t.Fatal("want verify failure when issuer key not in registry")
-	}
-}
-
-func TestVerify_WrongPublicKeyFails(t *testing.T) {
-	iss, _, err := GenerateIssuer("k1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Different keypair registered under the same id — simulates a
-	// registry tricked into trusting the wrong pubkey.
-	otherPub, _, _ := ed25519.GenerateKey(nil)
-	reg := NewStaticRegistry()
-	reg.Add("k1", otherPub)
-	signed, _ := iss.Sign(mkReceipt())
-
-	_, err = Verify(signed, reg)
-	if !errors.Is(err, ErrSignature) {
-		t.Errorf("want ErrSignature, got %v", err)
+func TestVerify(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// build returns the signed string to verify and the registry
+		// that should be queried. Returning both lets each row construct
+		// its own keyset (e.g. unknown key id, wrong public key).
+		build   func(t *testing.T) (signed string, reg Registry)
+		wantErr error // errors.Is target; nil means "any non-nil err is acceptable"
+	}{
+		{
+			name: "tampered payload byte fails",
+			build: func(t *testing.T) (string, Registry) {
+				t.Helper()
+				iss, pub, err := GenerateIssuer("k1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				signed, _ := iss.Sign(mkReceipt())
+				dot := strings.IndexByte(signed, '.')
+				return signed[:dot+5] + "x" + signed[dot+6:], registryWith(t, pub)
+			},
+		},
+		{
+			name: "tampered signature prefix fails",
+			build: func(t *testing.T) (string, Registry) {
+				t.Helper()
+				iss, pub, err := GenerateIssuer("k1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				signed, _ := iss.Sign(mkReceipt())
+				return "AAAA" + signed[4:], registryWith(t, pub)
+			},
+		},
+		{
+			name: "issuer key id not in registry fails",
+			build: func(t *testing.T) (string, Registry) {
+				t.Helper()
+				iss, pub, err := GenerateIssuer("rotated-key")
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Issuer signs under "rotated-key"; registry only knows "k1".
+				signed, _ := iss.Sign(mkReceipt())
+				return signed, registryWith(t, pub)
+			},
+		},
+		{
+			name: "registry trusts wrong public key for id",
+			build: func(t *testing.T) (string, Registry) {
+				t.Helper()
+				iss, _, err := GenerateIssuer("k1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Different keypair registered under the same id —
+				// simulates a registry tricked into trusting the wrong pubkey.
+				otherPub, _, _ := ed25519.GenerateKey(nil)
+				signed, _ := iss.Sign(mkReceipt())
+				return signed, registryWith(t, otherPub)
+			},
+			wantErr: ErrSignature,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			signed, reg := tc.build(t)
+			_, err := Verify(signed, reg)
+			if err == nil {
+				t.Fatal("want verify failure")
+			}
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Errorf("want %v, got %v", tc.wantErr, err)
+			}
+		})
 	}
 }
 
 func TestVerify_MalformedInputFails(t *testing.T) {
 	reg := NewStaticRegistry()
-	cases := []string{
-		"",
-		"only-one-part",
-		"!!!.!!!",
-		"AA..BB",
-	}
-	for _, c := range cases {
-		if _, err := Verify(c, reg); err == nil {
-			t.Errorf("Verify(%q) wanted error", c)
-		}
+	for _, tc := range []struct {
+		name string
+		in   string
+	}{
+		{"empty string", ""},
+		{"single part no separator", "only-one-part"},
+		{"non-base64 parts", "!!!.!!!"},
+		{"empty payload between dots", "AA..BB"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Verify(tc.in, reg); err == nil {
+				t.Errorf("Verify(%q) wanted error", tc.in)
+			}
+		})
 	}
 }
 
@@ -191,14 +215,40 @@ func TestCanonical_StableFieldOrder(t *testing.T) {
 }
 
 func TestReceipt_Validate(t *testing.T) {
-	valid := mkReceipt()
-	valid.IssuerKeyID = "k1"
-	if err := valid.Validate(); err != nil {
-		t.Fatalf("valid receipt should pass: %v", err)
+	base := mkReceipt()
+	base.IssuerKeyID = "k1"
+
+	for _, tc := range []struct {
+		name    string
+		mut     func(*Receipt)
+		wantErr bool
+	}{
+		{name: "valid receipt passes", mut: func(*Receipt) {}, wantErr: false},
+		{
+			name:    "inverted observation window fails",
+			mut:     func(r *Receipt) { r.ObservedToUTC = r.ObservedFromUTC.Add(-time.Hour) },
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := base
+			tc.mut(&r)
+			err := r.Validate()
+			if tc.wantErr && err == nil {
+				t.Error("want validation error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
 	}
-	bad := valid
-	bad.ObservedToUTC = bad.ObservedFromUTC.Add(-time.Hour)
-	if err := bad.Validate(); err == nil {
-		t.Error("inverted observation window should fail validation")
-	}
+}
+
+// registryWith builds a registry trusting pub under key id "k1" — the
+// canonical id used across every TestVerify row.
+func registryWith(t *testing.T, pub ed25519.PublicKey) Registry {
+	t.Helper()
+	r := NewStaticRegistry()
+	r.Add("k1", pub)
+	return r
 }

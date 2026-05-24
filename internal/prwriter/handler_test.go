@@ -29,61 +29,95 @@ func mkPreviewReq() PreviewRequest {
 	}
 }
 
-func TestPreview_HappyPath_ReturnsBodyAndDiff(t *testing.T) {
-	llm := &agent.FakeLLMClient{Responses: []agent.LLMResponse{{
-		Text: "EXPLANATION:\nfix cpu\nDIFF:\n--- a\n+++ b\n@@\n-cpu: 2\n+cpu: 1\n",
-	}}}
-	h := &Handler{Composer: &agent.Composer{LLM: llm}}
+func TestPreview(t *testing.T) {
+	const tenantID = "t1"
+	happyLLM := func() *agent.FakeLLMClient {
+		return &agent.FakeLLMClient{Responses: []agent.LLMResponse{{
+			Text: "EXPLANATION:\nfix cpu\nDIFF:\n--- a\n+++ b\n@@\n-cpu: 2\n+cpu: 1\n",
+		}}}
+	}
 
-	body, _ := json.Marshal(mkPreviewReq())
-	req := httptest.NewRequest(http.MethodPost, "/v1/apply-fixes", strings.NewReader(string(body)))
-	req = req.WithContext(tenancy.WithContext(context.Background(), tenancy.Context{TenantID: "t1"}))
-	w := httptest.NewRecorder()
-	h.Preview(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("code = %d body = %s", w.Code, w.Body.String())
-	}
-	var resp PreviewResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(resp.MarkdownBody, "Optiqor analysis") {
-		t.Errorf("markdown body missing header:\n%s", resp.MarkdownBody)
-	}
-	if !strings.Contains(resp.UnifiedDiff, "--- a") {
-		t.Errorf("diff missing")
-	}
-}
+	for _, tc := range []struct {
+		name     string
+		method   string
+		tenant   string // empty means no tenant context
+		body     any    // nil means http.NoBody
+		llm      *agent.FakeLLMClient
+		wantCode int
+		check    func(t *testing.T, body []byte)
+	}{
+		{
+			name:     "happy-path-returns-body-and-diff",
+			method:   http.MethodPost,
+			tenant:   tenantID,
+			body:     mkPreviewReq(),
+			llm:      happyLLM(),
+			wantCode: http.StatusOK,
+			check: func(t *testing.T, body []byte) {
+				t.Helper()
+				var resp PreviewResponse
+				if err := json.Unmarshal(body, &resp); err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(resp.MarkdownBody, "Optiqor analysis") {
+					t.Errorf("markdown body missing header:\n%s", resp.MarkdownBody)
+				}
+				if !strings.Contains(resp.UnifiedDiff, "--- a") {
+					t.Errorf("diff missing")
+				}
+			},
+		},
+		{
+			name:     "no-tenant-returns-401",
+			method:   http.MethodPost,
+			tenant:   "",
+			body:     mkPreviewReq(),
+			llm:      &agent.FakeLLMClient{},
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:     "rejects-non-post",
+			method:   http.MethodGet,
+			tenant:   "",
+			body:     nil,
+			llm:      &agent.FakeLLMClient{},
+			wantCode: http.StatusMethodNotAllowed,
+		},
+		{
+			name:     "requires-chart-fields",
+			method:   http.MethodPost,
+			tenant:   tenantID,
+			body:     PreviewRequest{},
+			llm:      &agent.FakeLLMClient{},
+			wantCode: http.StatusBadRequest,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &Handler{Composer: &agent.Composer{LLM: tc.llm}}
 
-func TestPreview_NoTenant_401(t *testing.T) {
-	h := &Handler{Composer: &agent.Composer{LLM: &agent.FakeLLMClient{}}}
-	body, _ := json.Marshal(mkPreviewReq())
-	req := httptest.NewRequest(http.MethodPost, "/v1/apply-fixes", strings.NewReader(string(body)))
-	w := httptest.NewRecorder()
-	h.Preview(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("code = %d", w.Code)
-	}
-}
+			var req *http.Request
+			if tc.body == nil {
+				req = httptest.NewRequest(tc.method, "/v1/apply-fixes", http.NoBody)
+			} else {
+				raw, err := json.Marshal(tc.body)
+				if err != nil {
+					t.Fatalf("marshal body: %v", err)
+				}
+				req = httptest.NewRequest(tc.method, "/v1/apply-fixes", strings.NewReader(string(raw)))
+			}
+			if tc.tenant != "" {
+				req = req.WithContext(tenancy.WithContext(context.Background(), tenancy.Context{TenantID: tc.tenant}))
+			}
 
-func TestPreview_RejectsNonPost(t *testing.T) {
-	h := &Handler{Composer: &agent.Composer{LLM: &agent.FakeLLMClient{}}}
-	req := httptest.NewRequest(http.MethodGet, "/v1/apply-fixes", http.NoBody)
-	w := httptest.NewRecorder()
-	h.Preview(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("code = %d", w.Code)
-	}
-}
+			w := httptest.NewRecorder()
+			h.Preview(w, req)
 
-func TestPreview_RequiresChartFields(t *testing.T) {
-	h := &Handler{Composer: &agent.Composer{LLM: &agent.FakeLLMClient{}}}
-	body, _ := json.Marshal(PreviewRequest{})
-	req := httptest.NewRequest(http.MethodPost, "/v1/apply-fixes", strings.NewReader(string(body)))
-	req = req.WithContext(tenancy.WithContext(context.Background(), tenancy.Context{TenantID: "t1"}))
-	w := httptest.NewRecorder()
-	h.Preview(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("code = %d", w.Code)
+			if w.Code != tc.wantCode {
+				t.Fatalf("code = %d, want %d; body = %s", w.Code, tc.wantCode, w.Body.String())
+			}
+			if tc.check != nil {
+				tc.check(t, w.Body.Bytes())
+			}
+		})
 	}
 }
