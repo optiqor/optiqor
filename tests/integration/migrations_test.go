@@ -24,6 +24,7 @@ func TestMigrations_ApplyAndSchema(t *testing.T) {
 		{"apply_fixes table", "SELECT to_regclass('public.apply_fixes') IS NOT NULL", true},
 		{"audit_log table", "SELECT to_regclass('public.audit_log') IS NOT NULL", true},
 		{"shared_analyses table", "SELECT to_regclass('public.shared_analyses') IS NOT NULL", true},
+		{"vcs_installations table", "SELECT to_regclass('public.vcs_installations') IS NOT NULL", true},
 		{"optiqor_app role exists", "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='optiqor_app')", true},
 		{"optiqor_migrator role exists", "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='optiqor_migrator')", true},
 		{"optiqor_migrator BYPASSRLS", "SELECT rolbypassrls FROM pg_roles WHERE rolname='optiqor_migrator'", true},
@@ -50,6 +51,7 @@ func TestMigrations_RLSEnabledOnTenantTables(t *testing.T) {
 		"workspaces", "clusters", "namespaces", "workloads",
 		"recommendations", "recommendation_dismissals",
 		"apply_fixes", "receipts", "llm_calls", "audit_log",
+		"vcs_installations",
 	}
 	for _, table := range tenantScoped {
 		t.Run(table, func(t *testing.T) {
