@@ -26,13 +26,14 @@ func registerWorkflows(d *worker.InMemory, log *slog.Logger) error {
 		return err
 	}
 
-	// render + conform + post are real Phase-4 stages; dryrun still
-	// stub (Phase-5 agent round-trip). Flip to StrictPolicy once dryrun
-	// lands.
+	// render + conform + post are real Phase-4 stages. The dryrun
+	// validator carries no AgentClient until Phase-5 onboarding installs
+	// the agent — it reports NotImplemented and SkeletonPolicy lets it
+	// through. Flip to StrictPolicy + a real AgentClient at Phase-5 boot.
 	gatePipeline := gate.NewPipeline(gate.SkeletonPolicy{},
 		gate.RenderValidator{},
 		gate.ConformValidator{},
-		gate.NotImplementedValidator{S: gate.StageDryrun},
+		gate.DryrunValidator{},
 		gate.PostValidator{MaxResourceReductionRatio: 0.5},
 	)
 
