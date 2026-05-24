@@ -25,7 +25,8 @@ type Sizing struct {
 	PercentileTarget int
 
 	// MaxMemoryReductionPct caps how aggressively a memory request
-	// can shrink in a single Apply Fix. 0 means "no cap" (dev only).
+	// can shrink in a single Apply Fix. 0 means "no cuts allowed"
+	// (matches MemoryCutAllowed semantics); 100 = full range (dev).
 	MaxMemoryReductionPct int
 
 	// MaxReplicaReductionPerPR caps how many replicas a single PR can
@@ -52,7 +53,7 @@ func For(env environment.Environment) Sizing {
 	case environment.EnvDev:
 		return Sizing{
 			PercentileTarget:         95,
-			MaxMemoryReductionPct:    0,
+			MaxMemoryReductionPct:    100, // full range per Phase-4 spec
 			MaxReplicaReductionPerPR: 100,
 			MinConfidence:            "low",
 			AutoMergeEligible:        true,

@@ -142,13 +142,16 @@ func mountDomainRoutes(mux *http.ServeMux, deps *domainDeps) {
 	mux.Handle("GET /r/{hash}", sandboxMW(http.HandlerFunc(deps.Sandbox.Share)))
 
 	deps.Receipts.Mount(mux)
-	deps.Ingest.Mount(mux)
 	deps.Spike.Mount(mux)
 	deps.Auth.Mount(mux)
 
 	tenantMW := func(next http.Handler) http.Handler {
 		return requireTenant(HeaderTenantExtractor, next)
 	}
+	// /v1/ingest writes against a tenant scope (Phase 5 wires the agent
+	// SPIFFE id); route through the tenant middleware so the handler
+	// can read tenancy.FromContext fail-closed.
+	mux.Handle("POST /v1/ingest", tenantMW(http.HandlerFunc(deps.Ingest.Ingest)))
 	mux.Handle("POST /v1/apply-fixes", tenantMW(http.HandlerFunc(deps.PRWriter.Preview)))
 	mux.Handle("GET /v1/onboarding/state", tenantMW(http.HandlerFunc(deps.Onboarding.GetState)))
 	mux.Handle("POST /v1/onboarding/transition", tenantMW(http.HandlerFunc(deps.Onboarding.Transition)))

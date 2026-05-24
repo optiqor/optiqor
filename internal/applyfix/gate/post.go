@@ -15,9 +15,10 @@ import (
 // composer's prompt instructs against: removed labels, resource
 // reductions beyond a safe bound, blank required fields.
 type PostValidator struct {
-	// MaxResourceReductionRatio caps how aggressively a CPU/memory
-	// request or limit may shrink in a single Apply Fix. 0.5 means a
-	// 50% cut is the floor; tighter is acceptable.
+	// MaxResourceReductionRatio is the maximum fractional cut allowed
+	// per CPU/memory request or limit, in [0,1]. 0.5 means a value
+	// can drop to half its before-state; cuts deeper than that are
+	// rejected. Default applied when ≤0 is 0.5.
 	MaxResourceReductionRatio float64
 }
 

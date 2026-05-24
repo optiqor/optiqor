@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -40,6 +41,8 @@ type Handler struct {
 	Region        string
 	Now           func() time.Time
 	PublicBaseURL string
+	// Logger records share-store errors. Nil-safe; defaults to slog.Default().
+	Logger *slog.Logger
 }
 
 // AnalyzeResponse mirrors the CLI's JSON output so the same client
@@ -136,7 +139,7 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 
 	if h.Store != nil {
 		now := h.nowOrDefault()
-		_ = h.Store.Put(r.Context(), SharedAnalysis{
+		if err := h.Store.Put(r.Context(), SharedAnalysis{
 			Hash:      hash,
 			Body:      out,
 			MediaType: "application/json",
@@ -145,7 +148,12 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 			Findings:  resp.Findings,
 			CreatedAt: now,
 			ExpiresAt: now.Add(ShareTTL),
-		})
+		}); err != nil {
+			// Share-store write failure makes the URL a 404 later.
+			// Log loudly + continue so the analyze response still goes
+			// back to the caller; the analysis itself stays valid.
+			h.logger().Error("sandbox: share store put failed", "hash", hash, "err", err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -256,6 +264,13 @@ func (h *Handler) nowOrDefault() time.Time {
 		return h.Now()
 	}
 	return time.Now().UTC()
+}
+
+func (h *Handler) logger() *slog.Logger {
+	if h.Logger != nil {
+		return h.Logger
+	}
+	return slog.Default()
 }
 
 func (h *Handler) String() string {
