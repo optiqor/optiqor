@@ -16,73 +16,71 @@ func mkState(now time.Time) State {
 	}
 }
 
-func TestDecide_HappyPath_ContinueWithinBounds(t *testing.T) {
+func TestDecide(t *testing.T) {
 	now := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
-	s := mkState(now)
-	d, err := Decide(s, Snapshot{Kind: SignalLatencyP95, Value: 200, ObservedAt: now.Add(1 * time.Hour)}, now.Add(1*time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d.Action != ActionContinue {
-		t.Errorf("action = %q, want continue", d.Action)
-	}
-}
-
-func TestDecide_TriggersRollbackWhenBoundCrossed(t *testing.T) {
-	now := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
-	s := mkState(now)
-	trigger := Snapshot{Kind: SignalLatencyP95, Value: 400, ObservedAt: now.Add(1 * time.Hour)}
-	d, err := Decide(s, trigger, now.Add(1*time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d.Action != ActionRollback {
-		t.Errorf("action = %q, want rollback", d.Action)
-	}
-	if d.Trigger.Value != 400 {
-		t.Errorf("trigger snapshot lost: %+v", d.Trigger)
-	}
-}
-
-func TestDecide_UnboundedKindIgnored(t *testing.T) {
-	now := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
-	s := mkState(now)
-	d, _ := Decide(s, Snapshot{Kind: SignalCPUSaturation, Value: 9.99, ObservedAt: now.Add(1 * time.Hour)}, now.Add(1*time.Hour))
-	if d.Action != ActionContinue {
-		t.Errorf("snapshot of unbounded kind should be ignored")
-	}
-}
-
-func TestDecide_WindowExpires(t *testing.T) {
-	now := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
-	s := mkState(now)
-	d, _ := Decide(s, Snapshot{Kind: SignalLatencyP95, Value: 200}, now.Add(Window+time.Hour))
-	if d.Action != ActionClose {
-		t.Errorf("expired window should close, got %q", d.Action)
-	}
-}
-
-func TestDecide_ClosedStateIsTerminal(t *testing.T) {
-	now := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
-	s := Close(mkState(now))
-	d, _ := Decide(s, Snapshot{Kind: SignalLatencyP95, Value: 9999}, now.Add(1*time.Hour))
-	if d.Action != ActionClose {
-		t.Errorf("closed state should stay closed even with violations")
-	}
-}
-
-func TestState_Validate(t *testing.T) {
-	if err := (State{}).Validate(); err == nil {
-		t.Error("empty state should fail validation")
-	}
-	now := time.Now()
-	s := mkState(now)
-	if err := s.Validate(); err != nil {
-		t.Errorf("valid state failed: %v", err)
+	for _, tc := range []struct {
+		name        string
+		closed      bool
+		snap        Snapshot
+		evalAt      time.Time
+		wantAction  Action
+		wantTrigger float64 // 0 when not asserting
+	}{
+		{
+			name:       "value within bound continues",
+			snap:       Snapshot{Kind: SignalLatencyP95, Value: 200, ObservedAt: now.Add(time.Hour)},
+			evalAt:     now.Add(time.Hour),
+			wantAction: ActionContinue,
+		},
+		{
+			name:        "value over bound triggers rollback and preserves snapshot",
+			snap:        Snapshot{Kind: SignalLatencyP95, Value: 400, ObservedAt: now.Add(time.Hour)},
+			evalAt:      now.Add(time.Hour),
+			wantAction:  ActionRollback,
+			wantTrigger: 400,
+		},
+		{
+			name:       "unbounded signal kind is ignored",
+			snap:       Snapshot{Kind: SignalCPUSaturation, Value: 9.99, ObservedAt: now.Add(time.Hour)},
+			evalAt:     now.Add(time.Hour),
+			wantAction: ActionContinue,
+		},
+		{
+			name:       "evaluation past window closes",
+			snap:       Snapshot{Kind: SignalLatencyP95, Value: 200},
+			evalAt:     now.Add(Window + time.Hour),
+			wantAction: ActionClose,
+		},
+		{
+			name:       "closed state ignores subsequent violations",
+			closed:     true,
+			snap:       Snapshot{Kind: SignalLatencyP95, Value: 9999},
+			evalAt:     now.Add(time.Hour),
+			wantAction: ActionClose,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := mkState(now)
+			if tc.closed {
+				s = Close(s)
+			}
+			d, err := Decide(s, tc.snap, tc.evalAt)
+			if err != nil {
+				t.Fatalf("Decide: %v", err)
+			}
+			if d.Action != tc.wantAction {
+				t.Errorf("action = %q, want %q", d.Action, tc.wantAction)
+			}
+			if tc.wantTrigger != 0 && d.Trigger.Value != tc.wantTrigger {
+				t.Errorf("trigger snapshot lost: %+v", d.Trigger)
+			}
+		})
 	}
 }
 
 func TestDecide_DeterministicAcrossRuns(t *testing.T) {
+	// Same (state, snapshot, now) MUST produce byte-identical Decision —
+	// the Auto-Rollback Guarantee depends on this for replayable audit.
 	now := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
 	s := mkState(now)
 	snap := Snapshot{Kind: SignalErrorRate, Value: 50, ObservedAt: now}
@@ -92,6 +90,27 @@ func TestDecide_DeterministicAcrossRuns(t *testing.T) {
 		if got != first {
 			t.Fatalf("non-deterministic Decide at iter %d: %+v vs %+v", i, got, first)
 		}
+	}
+}
+
+func TestState_Validate(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		state   State
+		wantErr bool
+	}{
+		{name: "zero value fails", state: State{}, wantErr: true},
+		{name: "fully populated passes", state: mkState(time.Now()), wantErr: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.state.Validate()
+			if tc.wantErr && err == nil {
+				t.Error("want validation error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 

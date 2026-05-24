@@ -37,23 +37,23 @@ api:
 	}
 }
 
-func TestParseValues_Malformed_WrapsErrParse(t *testing.T) {
-	_, err := ParseValues(strings.NewReader(":\n  - not: [valid"))
-	if err == nil {
-		t.Fatal("want error on malformed YAML")
-	}
-	if !errors.Is(err, ErrParse) {
-		t.Errorf("want errors.Is(err, ErrParse); got %v", err)
-	}
-}
-
-func TestParseValues_Empty_WrapsErrParse(t *testing.T) {
-	// Empty input must surface as 400 via errors.Is(err, ErrParse).
-	_, err := ParseValues(strings.NewReader(""))
-	if err == nil {
-		t.Fatal("empty stream should error")
-	}
-	if !errors.Is(err, ErrParse) {
-		t.Errorf("empty stream error should wrap ErrParse; got %v", err)
+func TestParseValues_InvalidInput(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+	}{
+		{name: "malformed-yaml", in: ":\n  - not: [valid"},
+		// Empty input must surface as 400 via errors.Is(err, ErrParse).
+		{name: "empty-stream", in: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseValues(strings.NewReader(tc.in))
+			if err == nil {
+				t.Fatal("want error")
+			}
+			if !errors.Is(err, ErrParse) {
+				t.Errorf("err should wrap ErrParse; got %v", err)
+			}
+		})
 	}
 }

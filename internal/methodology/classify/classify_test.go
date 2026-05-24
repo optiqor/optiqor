@@ -6,29 +6,49 @@ import (
 	"time"
 )
 
-func TestSandboxClassifier_ReturnsSteadyForAnyInput(t *testing.T) {
-	c := SandboxClassifier{}
+func TestSandboxClassifier_Classify(t *testing.T) {
 	samples := []Sample{
 		{Time: time.Unix(0, 0), Value: 100},
 		{Time: time.Unix(60, 0), Value: 200},
 		{Time: time.Unix(120, 0), Value: 50},
 	}
-	r, err := c.Classify(samples)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if r.Class != ClassSteady {
-		t.Errorf("class = %s, want %s", r.Class, ClassSteady)
-	}
-	if r.SampleCount != 3 {
-		t.Errorf("sample count = %d, want 3", r.SampleCount)
-	}
-}
-
-func TestSandboxClassifier_EmptyInputReturnsInsufficientData(t *testing.T) {
-	c := SandboxClassifier{}
-	_, err := c.Classify(nil)
-	if !errors.Is(err, ErrInsufficientData) {
-		t.Fatalf("err = %v, want ErrInsufficientData", err)
+	for _, tc := range []struct {
+		name        string
+		in          []Sample
+		wantClass   Class
+		wantSamples int
+		wantErr     error
+	}{
+		{
+			name:        "any-input-returns-steady",
+			in:          samples,
+			wantClass:   ClassSteady,
+			wantSamples: 3,
+		},
+		{
+			name:    "empty-input-returns-insufficient-data",
+			in:      nil,
+			wantErr: ErrInsufficientData,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := SandboxClassifier{}
+			r, err := c.Classify(tc.in)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if r.Class != tc.wantClass {
+				t.Errorf("class = %s, want %s", r.Class, tc.wantClass)
+			}
+			if r.SampleCount != tc.wantSamples {
+				t.Errorf("sample count = %d, want %d", r.SampleCount, tc.wantSamples)
+			}
+		})
 	}
 }

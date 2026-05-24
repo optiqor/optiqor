@@ -36,103 +36,189 @@ func TestQueueName_Stable(t *testing.T) {
 	}
 }
 
-func TestRegister_AndExecute(t *testing.T) {
-	var runs int64
-	d := NewInMemory()
-	wf := &counterWorkflow{name: "test", runs: &runs}
-	if err := d.Register(wf); err != nil {
-		t.Fatal(err)
-	}
-	err := d.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, QueueDefault, "test", nil)
-	if err != nil {
-		t.Fatalf("Submit: %v", err)
-	}
-	if runs != 1 {
-		t.Errorf("runs = %d, want 1", runs)
-	}
-}
-
-func TestRegister_NilWorkflow(t *testing.T) {
-	if err := NewInMemory().Register(nil); err == nil {
-		t.Fatal("expected error on nil workflow")
-	}
-}
-
-func TestRegister_DuplicateName(t *testing.T) {
-	d := NewInMemory()
-	wf := &counterWorkflow{name: "x"}
-	_ = d.Register(wf)
-	err := d.Register(wf)
-	if !errors.Is(err, ErrDuplicateWorkflow) {
-		t.Fatalf("expected ErrDuplicateWorkflow, got %v", err)
-	}
-}
-
-func TestSubmit_UnknownWorkflow(t *testing.T) {
-	d := NewInMemory()
-	err := d.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, QueueDefault, "missing", nil)
-	if !errors.Is(err, ErrUnknownWorkflow) {
-		t.Fatalf("expected ErrUnknownWorkflow, got %v", err)
-	}
-}
-
-func TestSubmit_InvalidQueue(t *testing.T) {
-	d := NewInMemory()
-	_ = d.Register(&counterWorkflow{name: "x"})
-	err := d.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, QueueClass("bogus"), "x", nil)
-	if err == nil {
-		t.Fatal("expected error on bogus queue class")
-	}
-}
-
-func TestSubmit_RequiresTenant(t *testing.T) {
-	d := NewInMemory()
-	_ = d.Register(&counterWorkflow{name: "x"})
-	err := d.Submit(context.Background(), tenancy.Context{}, QueueDefault, "x", nil)
-	if !errors.Is(err, tenancy.ErrNoTenant) {
-		t.Fatalf("expected ErrNoTenant, got %v", err)
+func TestInMemory_Register(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		setup   func(*InMemory)
+		arg     Workflow
+		wantErr error
+	}{
+		{
+			name: "nil workflow rejected",
+			arg:  nil,
+		},
+		{
+			name: "duplicate name rejected",
+			setup: func(d *InMemory) {
+				_ = d.Register(&counterWorkflow{name: "x"})
+			},
+			arg:     &counterWorkflow{name: "x"},
+			wantErr: ErrDuplicateWorkflow,
+		},
+		{
+			name: "fresh registration succeeds",
+			arg:  &counterWorkflow{name: "x"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := NewInMemory()
+			if tc.setup != nil {
+				tc.setup(d)
+			}
+			err := d.Register(tc.arg)
+			switch {
+			case tc.wantErr != nil:
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("err = %v, want %v", err, tc.wantErr)
+				}
+			case tc.arg == nil:
+				if err == nil {
+					t.Fatal("expected error on nil workflow")
+				}
+			default:
+				if err != nil {
+					t.Fatalf("unexpected err: %v", err)
+				}
+			}
+		})
 	}
 }
 
-func TestSubmit_PassesTenantToWorkflowAndContext(t *testing.T) {
-	d := NewInMemory()
-	wf := &counterWorkflow{name: "x"}
-	_ = d.Register(wf)
-	if err := d.Submit(context.Background(), tenancy.Context{TenantID: "tenant-99"}, QueueDefault, "x", nil); err != nil {
-		t.Fatalf("Submit: %v", err)
+func TestInMemory_Submit(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		register Workflow
+		tenant   tenancy.Context
+		queue    QueueClass
+		wfName   string
+		wantErr  error
+		wantRuns int64
+	}{
+		{
+			name:     "happy path runs workflow",
+			register: &counterWorkflow{name: "x"},
+			tenant:   tenancy.Context{TenantID: "t1"},
+			queue:    QueueDefault,
+			wfName:   "x",
+			wantRuns: 1,
+		},
+		{
+			name:    "unknown workflow rejected",
+			tenant:  tenancy.Context{TenantID: "t1"},
+			queue:   QueueDefault,
+			wfName:  "missing",
+			wantErr: ErrUnknownWorkflow,
+		},
+		{
+			name:     "invalid queue class rejected",
+			register: &counterWorkflow{name: "x"},
+			tenant:   tenancy.Context{TenantID: "t1"},
+			queue:    QueueClass("bogus"),
+			wfName:   "x",
+		},
+		{
+			name:     "missing tenant rejected",
+			register: &counterWorkflow{name: "x"},
+			queue:    QueueDefault,
+			wfName:   "x",
+			wantErr:  tenancy.ErrNoTenant,
+		},
+		{
+			name:     "propagates workflow error",
+			register: &counterWorkflow{name: "x", err: errors.New("workflow boom")},
+			tenant:   tenancy.Context{TenantID: "t1"},
+			queue:    QueueDefault,
+			wfName:   "x",
+			wantRuns: 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := NewInMemory()
+			var runs int64
+			if tc.register != nil {
+				if cw, ok := tc.register.(*counterWorkflow); ok {
+					cw.runs = &runs
+				}
+				if err := d.Register(tc.register); err != nil {
+					t.Fatalf("register: %v", err)
+				}
+			}
+			err := d.Submit(context.Background(), tc.tenant, tc.queue, tc.wfName, nil)
+			switch {
+			case tc.wantErr != nil:
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("err = %v, want %v", err, tc.wantErr)
+				}
+			case tc.name == "invalid queue class rejected":
+				if err == nil {
+					t.Fatal("expected error on bogus queue class")
+				}
+			case tc.name == "propagates workflow error":
+				if err == nil || err.Error() != "workflow boom" {
+					t.Fatalf("err = %v, want workflow boom", err)
+				}
+			default:
+				if err != nil {
+					t.Fatalf("submit: %v", err)
+				}
+			}
+			if atomic.LoadInt64(&runs) != tc.wantRuns {
+				t.Errorf("runs = %d, want %d", runs, tc.wantRuns)
+			}
+		})
 	}
 }
 
-func TestDrain_RefusesAfterDrain(t *testing.T) {
-	d := NewInMemory()
-	_ = d.Register(&counterWorkflow{name: "x"})
-	if err := d.Drain(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	err := d.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, QueueDefault, "x", nil)
-	if !errors.Is(err, ErrDraining) {
-		t.Fatalf("expected ErrDraining, got %v", err)
+func TestInMemory_Drain(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  func(t *testing.T, d *InMemory)
+	}{
+		{
+			name: "refuses submit after drain",
+			run: func(t *testing.T, d *InMemory) {
+				t.Helper()
+				if err := d.Register(&counterWorkflow{name: "x"}); err != nil {
+					t.Fatal(err)
+				}
+				if err := d.Drain(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+				err := d.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, QueueDefault, "x", nil)
+				if !errors.Is(err, ErrDraining) {
+					t.Fatalf("expected ErrDraining, got %v", err)
+				}
+			},
+		},
+		{
+			name: "succeeds with no work",
+			run: func(t *testing.T, d *InMemory) {
+				t.Helper()
+				if err := d.Drain(context.Background()); err != nil {
+					t.Fatalf("Drain with no work should succeed: %v", err)
+				}
+			},
+		},
+		{
+			name: "is idempotent",
+			run: func(t *testing.T, d *InMemory) {
+				t.Helper()
+				if err := d.Drain(context.Background()); err != nil {
+					t.Fatalf("first Drain: %v", err)
+				}
+				if err := d.Drain(context.Background()); err != nil {
+					t.Fatalf("second Drain: %v", err)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.run(t, NewInMemory())
+		})
 	}
 }
 
-func TestDrain_NoWorkSucceeds(t *testing.T) {
-	d := NewInMemory()
-	if err := d.Drain(context.Background()); err != nil {
-		t.Fatalf("Drain with no work should succeed: %v", err)
-	}
-}
-
-func TestDrain_Idempotent(t *testing.T) {
-	d := NewInMemory()
-	if err := d.Drain(context.Background()); err != nil {
-		t.Fatalf("first Drain: %v", err)
-	}
-	if err := d.Drain(context.Background()); err != nil {
-		t.Fatalf("second Drain: %v", err)
-	}
-}
-
-func TestWorkflows_DeterministicOrder(t *testing.T) {
+func TestInMemory_Workflows_DeterministicOrder(t *testing.T) {
 	d := NewInMemory()
 	for _, n := range []string{"zeta", "alpha", "mike"} {
 		_ = d.Register(&counterWorkflow{name: n})
@@ -146,16 +232,7 @@ func TestWorkflows_DeterministicOrder(t *testing.T) {
 	}
 }
 
-func TestSubmit_PropagatesWorkflowError(t *testing.T) {
-	d := NewInMemory()
-	_ = d.Register(&counterWorkflow{name: "x", err: errors.New("workflow boom")})
-	err := d.Submit(context.Background(), tenancy.Context{TenantID: "t1"}, QueueDefault, "x", nil)
-	if err == nil || err.Error() != "workflow boom" {
-		t.Fatalf("err = %v, want workflow boom", err)
-	}
-}
-
-func TestSubmit_RaceSafe(t *testing.T) {
+func TestInMemory_Submit_RaceSafe(t *testing.T) {
 	d := NewInMemory()
 	var runs int64
 	_ = d.Register(&counterWorkflow{name: "x", runs: &runs})

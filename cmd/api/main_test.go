@@ -26,7 +26,7 @@ func silentLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func TestHealthz(t *testing.T) {
+func TestHealthz_OK(t *testing.T) {
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody))
@@ -35,221 +35,286 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-func TestReadyz_AllOK(t *testing.T) {
-	r := healthz.NewRegistry()
-	r.Register("self", healthz.AlwaysOK)
-	r.Register("more", healthz.AlwaysOK)
-
-	mux := buildMux(r, silentLogger(), nil, nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	var body struct {
-		OK     bool             `json:"ok"`
-		Checks []healthz.Result `json:"checks"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v\nbody=%s", err, rec.Body.String())
-	}
-	if !body.OK || len(body.Checks) != 2 {
-		t.Fatalf("body=%+v", body)
-	}
-}
-
-func TestReadyz_Failing(t *testing.T) {
-	r := healthz.NewRegistry()
-	r.Register("self", healthz.AlwaysOK)
-	r.Register("redis", healthz.AlwaysFail("connection refused"))
-
-	mux := buildMux(r, silentLogger(), nil, nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503", rec.Code)
-	}
-	var body struct {
-		OK     bool             `json:"ok"`
-		Checks []healthz.Result `json:"checks"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if body.OK {
-		t.Fatal("body.ok should be false")
-	}
-	var found bool
-	for _, c := range body.Checks {
-		if c.Name == "redis" && !c.OK {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("redis-failure not surfaced: %+v", body.Checks)
-	}
-}
-
-func TestRequestID_Generated(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
-	rec := httptest.NewRecorder()
-	withRequestID(mux).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody))
-	if got := rec.Header().Get("X-Request-ID"); got == "" {
-		t.Fatal("X-Request-ID should be generated when missing")
-	}
-}
-
-func TestRequestID_Echoed(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
-	req := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
-	req.Header.Set("X-Request-ID", "abc-123")
-	rec := httptest.NewRecorder()
-	withRequestID(mux).ServeHTTP(rec, req)
-	if got := rec.Header().Get("X-Request-ID"); got != "abc-123" {
-		t.Fatalf("X-Request-ID echoed = %q, want abc-123", got)
-	}
-}
-
-func TestReadyz_TimeoutNotPanicking(t *testing.T) {
-	r := healthz.NewRegistry()
-	r.Register("slow", func(ctx context.Context) error {
+func TestReadyz(t *testing.T) {
+	slowCheck := func(ctx context.Context) error {
 		select {
 		case <-time.After(time.Second):
 			return nil
 		case <-ctx.Done():
 			return errors.New("ctx done")
 		}
-	})
-
-	mux := buildMux(r, silentLogger(), nil, nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
-	if rec.Body.Len() == 0 {
-		t.Fatal("body should not be empty")
+	}
+	for _, tc := range []struct {
+		name      string
+		setup     func(*healthz.Registry)
+		wantCode  int
+		checkBody func(t *testing.T, body []byte)
+	}{
+		{
+			name: "all ok",
+			setup: func(r *healthz.Registry) {
+				r.Register("self", healthz.AlwaysOK)
+				r.Register("more", healthz.AlwaysOK)
+			},
+			wantCode: http.StatusOK,
+			checkBody: func(t *testing.T, body []byte) {
+				t.Helper()
+				var got struct {
+					OK     bool             `json:"ok"`
+					Checks []healthz.Result `json:"checks"`
+				}
+				if err := json.Unmarshal(body, &got); err != nil {
+					t.Fatalf("decode: %v\nbody=%s", err, body)
+				}
+				if !got.OK || len(got.Checks) != 2 {
+					t.Fatalf("body=%+v", got)
+				}
+			},
+		},
+		{
+			name: "failing check surfaces 503",
+			setup: func(r *healthz.Registry) {
+				r.Register("self", healthz.AlwaysOK)
+				r.Register("redis", healthz.AlwaysFail("connection refused"))
+			},
+			wantCode: http.StatusServiceUnavailable,
+			checkBody: func(t *testing.T, body []byte) {
+				t.Helper()
+				var got struct {
+					OK     bool             `json:"ok"`
+					Checks []healthz.Result `json:"checks"`
+				}
+				if err := json.Unmarshal(body, &got); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if got.OK {
+					t.Fatal("body.ok should be false")
+				}
+				var found bool
+				for _, c := range got.Checks {
+					if c.Name == "redis" && !c.OK {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("redis-failure not surfaced: %+v", got.Checks)
+				}
+			},
+		},
+		{
+			name: "slow check times out without panic",
+			setup: func(r *healthz.Registry) {
+				r.Register("slow", slowCheck)
+			},
+			checkBody: func(t *testing.T, body []byte) {
+				t.Helper()
+				if len(body) == 0 {
+					t.Fatal("body should not be empty")
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := healthz.NewRegistry()
+			tc.setup(r)
+			mux := buildMux(r, silentLogger(), nil, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
+			if tc.wantCode != 0 && rec.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantCode)
+			}
+			if tc.checkBody != nil {
+				tc.checkBody(t, rec.Body.Bytes())
+			}
+		})
 	}
 }
 
-func TestGitHubWebhook_ValidSignature(t *testing.T) {
-	body := []byte(`{"action":"opened"}`)
+func TestRequestID(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+		want    string // empty means "any non-empty"
+	}{
+		{name: "generated when missing"},
+		{name: "echoed when present", headers: map[string]string{"X-Request-ID": "abc-123"}, want: "abc-123"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
+			req := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
+			for k, v := range tc.headers {
+				req.Header.Set(k, v)
+			}
+			rec := httptest.NewRecorder()
+			withRequestID(mux).ServeHTTP(rec, req)
+			got := rec.Header().Get("X-Request-ID")
+			if tc.want == "" {
+				if got == "" {
+					t.Fatal("X-Request-ID should be generated when missing")
+				}
+				return
+			}
+			if got != tc.want {
+				t.Fatalf("X-Request-ID = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGitHubWebhook(t *testing.T) {
+	signedBody := []byte(`{"action":"opened"}`)
 	secret := []byte("hush")
-
 	mac := hmac.New(sha256.New, secret)
-	mac.Write(body)
-	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	mac.Write(signedBody)
+	validSig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), secret, nil)
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader(body))
-	req.Header.Set("X-Hub-Signature-256", signature)
-	req.Header.Set("X-GitHub-Event", "pull_request")
-	req.Header.Set("X-GitHub-Delivery", "abc-123")
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
-	}
-	var got struct {
-		Status   string `json:"status"`
-		Event    string `json:"event"`
-		Delivery string `json:"delivery"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got.Status != "accepted" || got.Event != "pull_request" || got.Delivery != "abc-123" {
-		t.Fatalf("body=%+v", got)
-	}
-}
-
-func TestGitHubWebhook_TamperedRejected(t *testing.T) {
-	body := []byte(`{"action":"opened"}`)
-	secret := []byte("hush")
-
-	mac := hmac.New(sha256.New, secret)
-	mac.Write(body)
-	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), secret, nil)
-	tampered := []byte(`{"action":"closed"}`)
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader(tampered))
-	req.Header.Set("X-Hub-Signature-256", signature)
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
-	}
-}
-
-func TestGitHubWebhook_DevModeAcceptsUnsigned(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
-	body := []byte(`{"action":"opened"}`)
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader(body))
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("dev mode (no secret) should accept unsigned; got %d", rec.Code)
-	}
-}
-
-func TestHeaderTenantExtractor_Valid(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
-	req.Header.Set("X-Optiqor-Tenant", "tenant-1")
-	req.Header.Set("X-Optiqor-Workspace", "ws-1")
-	t1, err := HeaderTenantExtractor(req)
-	if err != nil {
-		t.Fatalf("expected ok, got %v", err)
-	}
-	if t1.TenantID != "tenant-1" || t1.WorkspaceID != "ws-1" {
-		t.Errorf("extractor lost values: %+v", t1)
+	for _, tc := range []struct {
+		name     string
+		secret   []byte
+		body     []byte
+		headers  map[string]string
+		wantCode int
+		checkOK  func(t *testing.T, body []byte)
+	}{
+		{
+			name:   "valid signature accepted",
+			secret: secret,
+			body:   signedBody,
+			headers: map[string]string{
+				"X-Hub-Signature-256": validSig,
+				"X-GitHub-Event":      "pull_request",
+				"X-GitHub-Delivery":   "abc-123",
+			},
+			wantCode: http.StatusAccepted,
+			checkOK: func(t *testing.T, body []byte) {
+				t.Helper()
+				var got struct {
+					Status   string `json:"status"`
+					Event    string `json:"event"`
+					Delivery string `json:"delivery"`
+				}
+				if err := json.Unmarshal(body, &got); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if got.Status != "accepted" || got.Event != "pull_request" || got.Delivery != "abc-123" {
+					t.Fatalf("body=%+v", got)
+				}
+			},
+		},
+		{
+			name:     "tampered body rejected",
+			secret:   secret,
+			body:     []byte(`{"action":"closed"}`),
+			headers:  map[string]string{"X-Hub-Signature-256": validSig},
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:     "dev mode accepts unsigned",
+			body:     signedBody,
+			wantCode: http.StatusAccepted,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := buildMux(healthz.NewRegistry(), silentLogger(), tc.secret, nil)
+			req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader(tc.body))
+			for k, v := range tc.headers {
+				req.Header.Set(k, v)
+			}
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.wantCode, rec.Body.String())
+			}
+			if tc.checkOK != nil {
+				tc.checkOK(t, rec.Body.Bytes())
+			}
+		})
 	}
 }
 
-func TestHeaderTenantExtractor_Empty(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
-	if _, err := HeaderTenantExtractor(req); !errors.Is(err, tenancy.ErrNoTenant) {
-		t.Fatalf("expected ErrNoTenant, got %v", err)
+func TestHeaderTenantExtractor(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+		wantErr error
+		wantT   tenancy.Context
+	}{
+		{
+			name:    "valid tenant and workspace",
+			headers: map[string]string{"X-Optiqor-Tenant": "tenant-1", "X-Optiqor-Workspace": "ws-1"},
+			wantT:   tenancy.Context{TenantID: "tenant-1", WorkspaceID: "ws-1"},
+		},
+		{
+			name:    "no header returns ErrNoTenant",
+			wantErr: tenancy.ErrNoTenant,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
+			for k, v := range tc.headers {
+				req.Header.Set(k, v)
+			}
+			got, err := HeaderTenantExtractor(req)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
+			if got.TenantID != tc.wantT.TenantID || got.WorkspaceID != tc.wantT.WorkspaceID {
+				t.Errorf("extractor lost values: %+v", got)
+			}
+		})
 	}
 }
 
-func TestRequireTenant_Allows(t *testing.T) {
-	called := false
-	h := requireTenant(HeaderTenantExtractor, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t1, err := tenancy.FromContext(r.Context())
-		if err != nil {
-			t.Fatalf("inner: %v", err)
-		}
-		if t1.TenantID != "t1" {
-			t.Errorf("tenant id mismatch: %v", t1)
-		}
-		called = true
-		w.WriteHeader(http.StatusOK)
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
-	req.Header.Set("X-Optiqor-Tenant", "t1")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if !called {
-		t.Fatal("inner handler should be reached")
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d", rec.Code)
-	}
-}
-
-func TestRequireTenant_Rejects(t *testing.T) {
-	h := requireTenant(HeaderTenantExtractor, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		t.Fatal("inner handler should NOT be reached")
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
+func TestRequireTenant(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		headers  map[string]string
+		wantCode int
+		wantInne bool
+	}{
+		{
+			name:     "allows when tenant header set",
+			headers:  map[string]string{"X-Optiqor-Tenant": "t1"},
+			wantCode: http.StatusOK,
+			wantInne: true,
+		},
+		{
+			name:     "rejects without tenant",
+			wantCode: http.StatusUnauthorized,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			h := requireTenant(HeaderTenantExtractor, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t1, err := tenancy.FromContext(r.Context())
+				if err != nil {
+					t.Fatalf("inner: %v", err)
+				}
+				if t1.TenantID != "t1" {
+					t.Errorf("tenant id mismatch: %v", t1)
+				}
+				called = true
+				w.WriteHeader(http.StatusOK)
+			}))
+			req := httptest.NewRequest(http.MethodGet, "/x", http.NoBody)
+			for k, v := range tc.headers {
+				req.Header.Set(k, v)
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantCode)
+			}
+			if called != tc.wantInne {
+				t.Fatalf("inner called = %v, want %v", called, tc.wantInne)
+			}
+		})
 	}
 }
 
@@ -270,36 +335,42 @@ func TestMetrics_ExposesRegistry(t *testing.T) {
 	}
 }
 
-func TestPanicRecovery_Returns500AndDoesNotPropagate(t *testing.T) {
-	panicker := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		panic("kaboom")
-	})
-	wrapped := withPanicRecovery(silentLogger(), panicker)
-
-	rec := httptest.NewRecorder()
-	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", http.NoBody))
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), "internal server error") {
-		t.Errorf("body = %q", rec.Body.String())
-	}
-}
-
-func TestPanicRecovery_PassesThroughWhenNoPanic(t *testing.T) {
-	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusTeapot)
-		_, _ = w.Write([]byte("hi"))
-	})
-	wrapped := withPanicRecovery(silentLogger(), ok)
-	rec := httptest.NewRecorder()
-	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", http.NoBody))
-	if rec.Code != http.StatusTeapot {
-		t.Fatalf("status = %d, want 418", rec.Code)
-	}
-	if rec.Body.String() != "hi" {
-		t.Errorf("body = %q", rec.Body.String())
+func TestPanicRecovery(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		inner    http.Handler
+		wantCode int
+		wantBody string
+	}{
+		{
+			name: "captures panic and returns 500",
+			inner: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				panic("kaboom")
+			}),
+			wantCode: http.StatusInternalServerError,
+			wantBody: "internal server error",
+		},
+		{
+			name: "passes through when no panic",
+			inner: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusTeapot)
+				_, _ = w.Write([]byte("hi"))
+			}),
+			wantCode: http.StatusTeapot,
+			wantBody: "hi",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapped := withPanicRecovery(silentLogger(), tc.inner)
+			rec := httptest.NewRecorder()
+			wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", http.NoBody))
+			if rec.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantCode)
+			}
+			if !strings.Contains(rec.Body.String(), tc.wantBody) {
+				t.Errorf("body = %q, want substring %q", rec.Body.String(), tc.wantBody)
+			}
+		})
 	}
 }
 
@@ -325,92 +396,120 @@ func TestAccessLog_RecordsCounterAndLatency(t *testing.T) {
 	}
 }
 
-func TestRecordingWriter_StatusDefaultsTo200OnImplicitWrite(t *testing.T) {
-	rec := httptest.NewRecorder()
-	rw := &recordingWriter{ResponseWriter: rec, status: 200}
-	if _, err := rw.Write([]byte("hello")); err != nil {
-		t.Fatal(err)
-	}
-	if rw.status != 200 {
-		t.Errorf("status = %d", rw.status)
-	}
-	if rw.bytes != 5 {
-		t.Errorf("bytes = %d", rw.bytes)
+func TestRecordingWriter(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  func(t *testing.T, rw *recordingWriter)
+	}{
+		{
+			name: "implicit write keeps default 200",
+			run: func(t *testing.T, rw *recordingWriter) {
+				t.Helper()
+				if _, err := rw.Write([]byte("hello")); err != nil {
+					t.Fatal(err)
+				}
+				if rw.status != 200 {
+					t.Errorf("status = %d", rw.status)
+				}
+				if rw.bytes != 5 {
+					t.Errorf("bytes = %d", rw.bytes)
+				}
+			},
+		},
+		{
+			name: "second WriteHeader is ignored",
+			run: func(t *testing.T, rw *recordingWriter) {
+				t.Helper()
+				rw.WriteHeader(http.StatusBadRequest)
+				rw.WriteHeader(http.StatusInternalServerError)
+				if rw.status != http.StatusBadRequest {
+					t.Errorf("status = %d, want 400", rw.status)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			rw := &recordingWriter{ResponseWriter: rec, status: 200}
+			tc.run(t, rw)
+		})
 	}
 }
 
-func TestRecordingWriter_DoesNotDoubleWriteHeader(t *testing.T) {
-	rec := httptest.NewRecorder()
-	rw := &recordingWriter{ResponseWriter: rec, status: 200}
-	rw.WriteHeader(http.StatusBadRequest)
-	rw.WriteHeader(http.StatusInternalServerError)
-	if rw.status != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", rw.status)
-	}
-}
-
-func TestGitHubOAuthCallback_RequiresCode(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/oauth/github/callback", http.NoBody))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rec.Code)
-	}
-}
-
-func TestGitHubOAuthCallback_AcceptsCode(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/oauth/github/callback?state=abc&code=xyz", http.NoBody)
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), `"phase":"1"`) {
-		t.Errorf("body missing phase ack: %s", rec.Body.String())
+func TestGitHubOAuthCallback(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		url      string
+		wantCode int
+		wantBody string
+	}{
+		{
+			name:     "missing code is 400",
+			url:      "/oauth/github/callback",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "code accepted",
+			url:      "/oauth/github/callback?state=abc&code=xyz",
+			wantCode: http.StatusOK,
+			wantBody: `"phase":"1"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.url, http.NoBody))
+			if rec.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantCode)
+			}
+			if tc.wantBody != "" && !strings.Contains(rec.Body.String(), tc.wantBody) {
+				t.Errorf("body missing %q: %s", tc.wantBody, rec.Body.String())
+			}
+		})
 	}
 }
 
 func TestPProf_GatedByAdminToken(t *testing.T) {
-	mux := http.NewServeMux()
-	mountPProf(mux, "secret-token")
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody))
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("missing token: status = %d, want 401", rec.Code)
-	}
-
-	rec = httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody)
-	req.Header.Set("X-Admin-Token", "wrong")
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong token: status = %d, want 401", rec.Code)
-	}
-
-	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody)
-	req.Header.Set("X-Admin-Token", "secret-token")
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("correct token: status = %d, want 200", rec.Code)
+	for _, tc := range []struct {
+		name     string
+		token    string
+		wantCode int
+	}{
+		{"missing token", "", http.StatusUnauthorized},
+		{"wrong token", "wrong", http.StatusUnauthorized},
+		{"correct token", "secret-token", http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mountPProf(mux, "secret-token")
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/debug/pprof/", http.NoBody)
+			if tc.token != "" {
+				req.Header.Set("X-Admin-Token", tc.token)
+			}
+			mux.ServeHTTP(rec, req)
+			if rec.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantCode)
+			}
+		})
 	}
 }
 
 func TestSubtleConstantTimeEq(t *testing.T) {
-	cases := []struct {
+	for _, tc := range []struct {
+		name string
 		a, b string
-		eq   int
+		want int
 	}{
-		{"abc", "abc", 1},
-		{"abc", "abd", 0},
-		{"abc", "ab", 0},
-		{"", "", 1},
-	}
-	for _, tc := range cases {
-		if got := subtleConstantTimeEq(tc.a, tc.b); got != tc.eq {
-			t.Errorf("eq(%q,%q) = %d, want %d", tc.a, tc.b, got, tc.eq)
-		}
+		{"equal", "abc", "abc", 1},
+		{"different byte", "abc", "abd", 0},
+		{"different length", "abc", "ab", 0},
+		{"both empty", "", "", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := subtleConstantTimeEq(tc.a, tc.b); got != tc.want {
+				t.Errorf("eq(%q,%q) = %d, want %d", tc.a, tc.b, got, tc.want)
+			}
+		})
 	}
 }

@@ -26,25 +26,35 @@ func TestRegistry_RegisterLookup(t *testing.T) {
 	}
 }
 
-func TestRegistry_DuplicatePanics(t *testing.T) {
-	r := newRegistry()
-	r.Register(NewGitHub())
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic on duplicate")
-		}
-	}()
-	r.Register(NewGitHub())
-}
-
-func TestRegistry_NilPanics(t *testing.T) {
-	r := newRegistry()
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic on nil")
-		}
-	}()
-	r.Register(nil)
+func TestRegistry_Register_Panics(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		do   func(r *Registry)
+	}{
+		{
+			name: "duplicate",
+			do: func(r *Registry) {
+				r.Register(NewGitHub())
+				r.Register(NewGitHub())
+			},
+		},
+		{
+			name: "nil-provider",
+			do: func(r *Registry) {
+				r.Register(nil)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRegistry()
+			defer func() {
+				if recover() == nil {
+					t.Fatal("expected panic")
+				}
+			}()
+			tc.do(r)
+		})
+	}
 }
 
 func TestRegistry_Providers_Sorted(t *testing.T) {
@@ -55,55 +65,68 @@ func TestRegistry_Providers_Sorted(t *testing.T) {
 	}
 }
 
-func TestGitHub_VerifyWebhook_Valid(t *testing.T) {
+func TestGitHub_VerifyWebhook(t *testing.T) {
 	body := []byte(`{"action":"opened"}`)
 	secret := []byte("hush")
-
 	mac := hmac.New(sha256.New, secret)
 	mac.Write(body)
-	header := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	validHeader := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
-	if err := NewGitHub().VerifyWebhook(secret, header, body); err != nil {
-		t.Fatalf("VerifyWebhook valid: %v", err)
-	}
-}
-
-func TestGitHub_VerifyWebhook_Tampered(t *testing.T) {
-	body := []byte(`{"action":"opened"}`)
-	secret := []byte("hush")
-
-	mac := hmac.New(sha256.New, secret)
-	mac.Write(body)
-	header := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-
-	tampered := []byte(`{"action":"closed"}`)
-	if err := NewGitHub().VerifyWebhook(secret, header, tampered); !errors.Is(err, ErrInvalidSignature) {
-		t.Fatalf("expected ErrInvalidSignature, got %v", err)
-	}
-}
-
-func TestGitHub_VerifyWebhook_BadHeader(t *testing.T) {
-	cases := []string{
-		"",
-		"md5=abc",
-		"sha256=not-hex",
-		"sha256=",
-	}
-	for _, h := range cases {
-		err := NewGitHub().VerifyWebhook([]byte("s"), h, []byte("b"))
-		if !errors.Is(err, ErrInvalidSignature) {
-			t.Errorf("VerifyWebhook(%q) = %v, want ErrInvalidSignature", h, err)
-		}
+	for _, tc := range []struct {
+		name    string
+		secret  []byte
+		header  string
+		body    []byte
+		wantErr error // nil means success
+	}{
+		{name: "valid", secret: secret, header: validHeader, body: body, wantErr: nil},
+		{name: "tampered-body", secret: secret, header: validHeader, body: []byte(`{"action":"closed"}`), wantErr: ErrInvalidSignature},
+		{name: "empty-header", secret: []byte("s"), header: "", body: []byte("b"), wantErr: ErrInvalidSignature},
+		{name: "wrong-algorithm", secret: []byte("s"), header: "md5=abc", body: []byte("b"), wantErr: ErrInvalidSignature},
+		{name: "non-hex-signature", secret: []byte("s"), header: "sha256=not-hex", body: []byte("b"), wantErr: ErrInvalidSignature},
+		{name: "empty-signature", secret: []byte("s"), header: "sha256=", body: []byte("b"), wantErr: ErrInvalidSignature},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewGitHub().VerifyWebhook(tc.secret, tc.header, tc.body)
+			if tc.wantErr == nil {
+				if err != nil {
+					t.Fatalf("VerifyWebhook: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("err = %v, want %v", err, tc.wantErr)
+			}
+		})
 	}
 }
 
 func TestGitHub_PhaseStubs(t *testing.T) {
 	g := NewGitHub()
-	if _, err := g.PostComment(context.Background(), PullRequest{}, Comment{}); !errors.Is(err, ErrNotImplemented) {
-		t.Errorf("PostComment = %v, want ErrNotImplemented", err)
-	}
-	if _, err := g.OpenPR(context.Background(), OpenPRRequest{}); !errors.Is(err, ErrNotImplemented) {
-		t.Errorf("OpenPR = %v, want ErrNotImplemented", err)
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{
+			name: "post-comment",
+			call: func() error {
+				_, err := g.PostComment(context.Background(), PullRequest{}, Comment{})
+				return err
+			},
+		},
+		{
+			name: "open-pr",
+			call: func() error {
+				_, err := g.OpenPR(context.Background(), OpenPRRequest{})
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(); !errors.Is(err, ErrNotImplemented) {
+				t.Errorf("err = %v, want ErrNotImplemented", err)
+			}
+		})
 	}
 }
 

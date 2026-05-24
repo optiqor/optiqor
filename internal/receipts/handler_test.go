@@ -29,119 +29,152 @@ func mkValidReceipt() Receipt {
 	}
 }
 
-func TestInMemoryStore_SaveGet(t *testing.T) {
-	s := NewInMemoryStore()
-	if err := s.Save(context.Background(), tenancy.Context{TenantID: "t1"}, "rcpt_1", "abc", mkValidReceipt()); err != nil {
-		t.Fatal(err)
-	}
-	signed, r, err := s.Get(context.Background(), "rcpt_1")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if signed != "abc" {
-		t.Errorf("signed = %q", signed)
-	}
-	if r.ID != "rcpt_1" {
-		t.Errorf("receipt id = %q", r.ID)
-	}
-}
-
-func TestInMemoryStore_Unknown_ReturnsNotFound(t *testing.T) {
-	s := NewInMemoryStore()
-	if _, _, err := s.Get(context.Background(), "rcpt_missing"); !errors.Is(err, ErrReceiptNotFound) {
-		t.Errorf("want ErrReceiptNotFound, got %v", err)
-	}
-}
-
-func TestHandler_GetVerified_True(t *testing.T) {
-	iss, pub, err := GenerateIssuer("k1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := NewInMemoryStore()
-	signed, err := iss.Sign(mkValidReceipt())
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := mkValidReceipt()
-	r.IssuerKeyID = "k1"
-	_ = store.Save(context.Background(), tenancy.Context{TenantID: "t1"}, "rcpt_1", signed, r)
-
-	reg := NewStaticRegistry()
-	reg.Add("k1", pub)
-	h := &Handler{Store: store, Registry: reg}
-
-	req := httptest.NewRequest(http.MethodGet, "/v1/receipts/rcpt_1", http.NoBody)
-	mux := http.NewServeMux()
-	h.Mount(mux)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("code = %d body = %s", w.Code, w.Body.String())
-	}
-	var resp VerifyResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if !resp.Verified {
-		t.Errorf("verified = false; want true")
-	}
-	if resp.IssuerKeyID != "k1" {
-		t.Errorf("issuer key id = %q", resp.IssuerKeyID)
-	}
-}
-
-func TestHandler_GetUnknown_404(t *testing.T) {
-	h := &Handler{Store: NewInMemoryStore(), Registry: NewStaticRegistry()}
-	mux := http.NewServeMux()
-	h.Mount(mux)
-	req := httptest.NewRequest(http.MethodGet, "/v1/receipts/missing", http.NoBody)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	if w.Code != http.StatusNotFound {
-		t.Errorf("code = %d", w.Code)
-	}
-}
-
-func TestHandler_VerifyPage_HTMLAndStatus(t *testing.T) {
-	iss, pub, err := GenerateIssuer("k1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := NewInMemoryStore()
-	signed, _ := iss.Sign(mkValidReceipt())
-	r := mkValidReceipt()
-	r.IssuerKeyID = "k1"
-	_ = store.Save(context.Background(), tenancy.Context{TenantID: "t1"}, "rcpt_1", signed, r)
-	reg := NewStaticRegistry()
-	reg.Add("k1", pub)
-	h := &Handler{Store: store, Registry: reg}
-
-	mux := http.NewServeMux()
-	h.Mount(mux)
-	req := httptest.NewRequest(http.MethodGet, "/v/rcpt_1", http.NoBody)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("code = %d, body = %s", w.Code, w.Body.String())
-	}
-	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-		t.Errorf("content-type = %q", ct)
-	}
-	body := w.Body.String()
-	for _, want := range []string{
-		"<!doctype html>",
-		"Verified Receipt",
-		"rcpt_1",
-		"signature verified",
+func TestInMemoryStore_RoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		seed    bool
+		wantID  string
+		wantErr error
+	}{
+		{name: "save then get round-trips", seed: true, wantID: "rcpt_1"},
+		{name: "missing id returns sentinel", seed: false, wantErr: ErrReceiptNotFound},
 	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("verifier missing %q", want)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewInMemoryStore()
+			lookupID := "rcpt_missing"
+			if tc.seed {
+				if err := s.Save(context.Background(), tenancy.Context{TenantID: "t1"}, "rcpt_1", "abc", mkValidReceipt()); err != nil {
+					t.Fatalf("Save: %v", err)
+				}
+				lookupID = "rcpt_1"
+			}
+			signed, r, err := s.Get(context.Background(), lookupID)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Errorf("want %v, got %v", tc.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Get: %v", err)
+			}
+			if signed != "abc" {
+				t.Errorf("signed = %q", signed)
+			}
+			if r.ID != tc.wantID {
+				t.Errorf("receipt id = %q", r.ID)
+			}
+		})
 	}
 }
 
-func TestHandler_RejectsNonGet(t *testing.T) {
+// setupHandler issues a signed receipt for "rcpt_1" under key "k1" and
+// returns a Handler whose registry trusts that key. Tests covering the
+// "verified" path share this; 404 cases skip it via seed=false.
+func setupHandler(t *testing.T, seed bool) *Handler {
+	t.Helper()
+	store := NewInMemoryStore()
+	reg := NewStaticRegistry()
+	if seed {
+		iss, pub, err := GenerateIssuer("k1")
+		if err != nil {
+			t.Fatalf("GenerateIssuer: %v", err)
+		}
+		signed, err := iss.Sign(mkValidReceipt())
+		if err != nil {
+			t.Fatalf("Sign: %v", err)
+		}
+		r := mkValidReceipt()
+		r.IssuerKeyID = "k1"
+		if err := store.Save(context.Background(), tenancy.Context{TenantID: "t1"}, "rcpt_1", signed, r); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		reg.Add("k1", pub)
+	}
+	return &Handler{Store: store, Registry: reg}
+}
+
+func TestHandler_Routes(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		seed     bool
+		method   string
+		path     string
+		wantCode int
+		check    func(t *testing.T, w *httptest.ResponseRecorder)
+	}{
+		{
+			name:     "get returns verified json for known id",
+			seed:     true,
+			method:   http.MethodGet,
+			path:     "/v1/receipts/rcpt_1",
+			wantCode: http.StatusOK,
+			check: func(t *testing.T, w *httptest.ResponseRecorder) {
+				t.Helper()
+				var resp VerifyResponse
+				if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("unmarshal: %v", err)
+				}
+				if !resp.Verified {
+					t.Errorf("verified = false; want true")
+				}
+				if resp.IssuerKeyID != "k1" {
+					t.Errorf("issuer key id = %q", resp.IssuerKeyID)
+				}
+			},
+		},
+		{
+			name:     "get unknown id returns 404",
+			seed:     false,
+			method:   http.MethodGet,
+			path:     "/v1/receipts/missing",
+			wantCode: http.StatusNotFound,
+		},
+		{
+			name:     "verify page renders html with signature status",
+			seed:     true,
+			method:   http.MethodGet,
+			path:     "/v/rcpt_1",
+			wantCode: http.StatusOK,
+			check: func(t *testing.T, w *httptest.ResponseRecorder) {
+				t.Helper()
+				if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+					t.Errorf("content-type = %q", ct)
+				}
+				body := w.Body.String()
+				for _, want := range []string{
+					"<!doctype html>",
+					"Verified Receipt",
+					"rcpt_1",
+					"signature verified",
+				} {
+					if !strings.Contains(body, want) {
+						t.Errorf("verifier missing %q", want)
+					}
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := setupHandler(t, tc.seed)
+			mux := http.NewServeMux()
+			h.Mount(mux)
+			req := httptest.NewRequest(tc.method, tc.path, http.NoBody)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			if w.Code != tc.wantCode {
+				t.Fatalf("code = %d, body = %s", w.Code, w.Body.String())
+			}
+			if tc.check != nil {
+				tc.check(t, w)
+			}
+		})
+	}
+}
+
+func TestHandler_Get_RejectsNonGet(t *testing.T) {
+	// Mount-level method routing already filters POST, but Get is also
+	// exposed directly via the receiver — preserve its own 405 guard.
 	h := &Handler{Store: NewInMemoryStore(), Registry: NewStaticRegistry()}
 	req := httptest.NewRequest(http.MethodPost, "/v1/receipts/x", http.NoBody)
 	req.SetPathValue("id", "x")

@@ -6,15 +6,15 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
-func TestHeuristic_TableDriven(t *testing.T) {
-	type tc struct {
+func TestHeuristic_Classify(t *testing.T) {
+	h := NewHeuristic()
+	for _, tc := range []struct {
 		name string
 		in   Signal
 		want rules.Confidence
-	}
-	cases := []tc{
+	}{
 		{
-			name: "agent + 7d + corroborated → high",
+			name: "agent-7d-corroborated-high",
 			in: Signal{
 				SandboxMode:         false,
 				HasHistoricalData:   true,
@@ -25,7 +25,7 @@ func TestHeuristic_TableDriven(t *testing.T) {
 			want: rules.ConfidenceHigh,
 		},
 		{
-			name: "agent + 7d but single-signal stays at floor=med",
+			name: "agent-7d-single-signal-floor-med",
 			in: Signal{
 				SandboxMode:         false,
 				HasHistoricalData:   true,
@@ -36,7 +36,7 @@ func TestHeuristic_TableDriven(t *testing.T) {
 			want: rules.ConfidenceMed,
 		},
 		{
-			name: "agent + <7d → medium",
+			name: "agent-under-7d-medium",
 			in: Signal{
 				SandboxMode:         false,
 				HasHistoricalData:   true,
@@ -47,7 +47,7 @@ func TestHeuristic_TableDriven(t *testing.T) {
 			want: rules.ConfidenceMed,
 		},
 		{
-			name: "sandbox capped at medium even with strong corroboration",
+			name: "sandbox-capped-at-medium",
 			in: Signal{
 				SandboxMode:     true,
 				SignalCount:     5,
@@ -56,7 +56,7 @@ func TestHeuristic_TableDriven(t *testing.T) {
 			want: rules.ConfidenceMed,
 		},
 		{
-			name: "sandbox single-signal stays low",
+			name: "sandbox-single-signal-low",
 			in: Signal{
 				SandboxMode:     true,
 				SignalCount:     1,
@@ -65,7 +65,7 @@ func TestHeuristic_TableDriven(t *testing.T) {
 			want: rules.ConfidenceLow,
 		},
 		{
-			name: "prior dismissal de-escalates from high to medium",
+			name: "prior-dismissal-high-to-med",
 			in: Signal{
 				DetectorDefault: rules.ConfidenceHigh,
 				PriorDismissed:  true,
@@ -73,7 +73,7 @@ func TestHeuristic_TableDriven(t *testing.T) {
 			want: rules.ConfidenceMed,
 		},
 		{
-			name: "prior dismissal de-escalates from medium to low",
+			name: "prior-dismissal-med-to-low",
 			in: Signal{
 				DetectorDefault: rules.ConfidenceMed,
 				PriorDismissed:  true,
@@ -81,7 +81,7 @@ func TestHeuristic_TableDriven(t *testing.T) {
 			want: rules.ConfidenceLow,
 		},
 		{
-			name: "prior dismissal at low stays at low",
+			name: "prior-dismissal-low-stays-low",
 			in: Signal{
 				DetectorDefault: rules.ConfidenceLow,
 				PriorDismissed:  true,
@@ -89,12 +89,12 @@ func TestHeuristic_TableDriven(t *testing.T) {
 			want: rules.ConfidenceLow,
 		},
 		{
-			name: "empty default falls through to low",
+			name: "empty-default-falls-to-low",
 			in:   Signal{SandboxMode: true},
 			want: rules.ConfidenceLow,
 		},
 		{
-			name: "detector default high in agent mode preserved",
+			name: "detector-default-high-agent-preserved",
 			in: Signal{
 				SandboxMode:         false,
 				HasHistoricalData:   true,
@@ -104,20 +104,18 @@ func TestHeuristic_TableDriven(t *testing.T) {
 			},
 			want: rules.ConfidenceHigh,
 		},
-	}
-	h := NewHeuristic()
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := h.Classify(c.in); got != c.want {
-				t.Errorf("Classify = %q, want %q", got, c.want)
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := h.Classify(tc.in); got != tc.want {
+				t.Errorf("Classify = %q, want %q", got, tc.want)
 			}
 		})
 	}
 }
 
+// Confidence is part of every PR comment + Receipt; non-determinism here
+// would corrupt cryptographic verification. Pin it.
 func TestHeuristic_DeterministicAcrossRuns(t *testing.T) {
-	// Confidence is part of every PR comment + Receipt; non-determinism
-	// here would corrupt cryptographic verification. Pin it.
 	h := NewHeuristic()
 	s := Signal{SandboxMode: true, SignalCount: 2, DetectorDefault: rules.ConfidenceLow}
 	first := h.Classify(s)

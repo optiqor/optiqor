@@ -7,48 +7,68 @@ import (
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-func TestNoopProvider_ReturnsDefaults(t *testing.T) {
-	c := NewClient(NoopProvider())
-	if got := c.Bool(context.Background(), "x", true, EvalContext{}); got != true {
-		t.Errorf("bool default lost: %v", got)
-	}
-	if got := c.String(context.Background(), "y", "fallback", EvalContext{}); got != "fallback" {
-		t.Errorf("string default lost: %v", got)
-	}
-	if got := c.Number(context.Background(), "z", 1.5, EvalContext{}); got != 1.5 {
-		t.Errorf("number default lost: %v", got)
-	}
-}
-
-func TestStaticProvider_OverridesDefaults(t *testing.T) {
-	sp := NewStaticProvider()
-	sp.Bools["beta"] = true
-	sp.Strings["mode"] = "canary"
-	sp.Numbers["budget"] = 0.4
-
-	c := NewClient(sp)
-	if !c.Bool(context.Background(), "beta", false, EvalContext{}) {
-		t.Error("beta should return true")
-	}
-	if got := c.String(context.Background(), "mode", "stable", EvalContext{}); got != "canary" {
-		t.Errorf("mode = %q", got)
-	}
-	if got := c.Number(context.Background(), "budget", 0.2, EvalContext{}); got != 0.4 {
-		t.Errorf("budget = %v", got)
-	}
-}
-
-func TestStaticProvider_FallsBackWhenAbsent(t *testing.T) {
-	c := NewClient(NewStaticProvider())
-	if got := c.Bool(context.Background(), "absent", true, EvalContext{}); got != true {
-		t.Errorf("absent flag should fall back to default; got %v", got)
-	}
-}
-
-func TestClient_NilProviderUsesDefault(t *testing.T) {
-	c := &Client{} // intentionally no provider set
-	if got := c.Bool(context.Background(), "anything", true, EvalContext{}); got != true {
-		t.Error("nil provider should fall back to default")
+func TestClient_Provider(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name      string
+		client    func() *Client
+		boolKey   string
+		boolDef   bool
+		wantBool  bool
+		stringKey string
+		stringDef string
+		wantStr   string
+		numberKey string
+		numberDef float64
+		wantNum   float64
+	}{
+		{
+			name:    "noop returns defaults",
+			client:  func() *Client { return NewClient(NoopProvider()) },
+			boolKey: "x", boolDef: true, wantBool: true,
+			stringKey: "y", stringDef: "fallback", wantStr: "fallback",
+			numberKey: "z", numberDef: 1.5, wantNum: 1.5,
+		},
+		{
+			name: "static overrides defaults",
+			client: func() *Client {
+				sp := NewStaticProvider()
+				sp.Bools["beta"] = true
+				sp.Strings["mode"] = "canary"
+				sp.Numbers["budget"] = 0.4
+				return NewClient(sp)
+			},
+			boolKey: "beta", boolDef: false, wantBool: true,
+			stringKey: "mode", stringDef: "stable", wantStr: "canary",
+			numberKey: "budget", numberDef: 0.2, wantNum: 0.4,
+		},
+		{
+			name:    "static absent falls back to default",
+			client:  func() *Client { return NewClient(NewStaticProvider()) },
+			boolKey: "absent", boolDef: true, wantBool: true,
+		},
+		{
+			name:    "nil provider falls back to default",
+			client:  func() *Client { return &Client{} },
+			boolKey: "anything", boolDef: true, wantBool: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := tc.client()
+			if got := c.Bool(ctx, tc.boolKey, tc.boolDef, EvalContext{}); got != tc.wantBool {
+				t.Errorf("Bool = %v, want %v", got, tc.wantBool)
+			}
+			if tc.stringKey != "" {
+				if got := c.String(ctx, tc.stringKey, tc.stringDef, EvalContext{}); got != tc.wantStr {
+					t.Errorf("String = %q, want %q", got, tc.wantStr)
+				}
+			}
+			if tc.numberKey != "" {
+				if got := c.Number(ctx, tc.numberKey, tc.numberDef, EvalContext{}); got != tc.wantNum {
+					t.Errorf("Number = %v, want %v", got, tc.wantNum)
+				}
+			}
+		})
 	}
 }
 

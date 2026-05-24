@@ -11,27 +11,43 @@ import (
 	"testing"
 )
 
-func TestCounter_Increments(t *testing.T) {
-	r := NewRegistry()
-	c := r.NewCounter("optiqor_requests_total", "total requests", map[string]string{"service": "api"})
-	c.Inc()
-	c.Inc()
-	c.Add(3.5)
-	if got := c.Value(); got != 5.5 {
-		t.Errorf("Value() = %v, want 5.5", got)
-	}
-}
-
-func TestCounter_RegisterReturnsExisting(t *testing.T) {
-	r := NewRegistry()
-	a := r.NewCounter("foo", "", map[string]string{"k": "v"})
-	a.Inc()
-	b := r.NewCounter("foo", "", map[string]string{"k": "v"})
-	if a != b {
-		t.Fatalf("re-registration should return same counter; got distinct instances")
-	}
-	if got := b.Value(); got != 1 {
-		t.Errorf("Value() = %v, want 1 (state persisted across re-register)", got)
+func TestCounter(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  func(t *testing.T, r *Registry)
+	}{
+		{
+			name: "increments and adds",
+			run: func(t *testing.T, r *Registry) {
+				t.Helper()
+				c := r.NewCounter("optiqor_requests_total", "total requests", map[string]string{"service": "api"})
+				c.Inc()
+				c.Inc()
+				c.Add(3.5)
+				if got := c.Value(); got != 5.5 {
+					t.Errorf("Value() = %v, want 5.5", got)
+				}
+			},
+		},
+		{
+			name: "re-register returns existing",
+			run: func(t *testing.T, r *Registry) {
+				t.Helper()
+				a := r.NewCounter("foo", "", map[string]string{"k": "v"})
+				a.Inc()
+				b := r.NewCounter("foo", "", map[string]string{"k": "v"})
+				if a != b {
+					t.Fatal("re-registration should return same counter; got distinct instances")
+				}
+				if got := b.Value(); got != 1 {
+					t.Errorf("Value() = %v, want 1 (state persisted across re-register)", got)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.run(t, NewRegistry())
+		})
 	}
 }
 
@@ -45,7 +61,7 @@ func TestHistogram_BucketsAndOverflow(t *testing.T) {
 	if snap.Count != 5 {
 		t.Errorf("Count = %d, want 5", snap.Count)
 	}
-	wantPerBucket := []uint64{1, 1, 1, 1, 0} // last regular bucket got 0; overflow took 1
+	wantPerBucket := []uint64{1, 1, 1, 1, 0}
 	for i, want := range wantPerBucket {
 		if snap.Counts[i] != want {
 			t.Errorf("bucket[%d] = %d, want %d", i, snap.Counts[i], want)
@@ -122,7 +138,7 @@ func TestNoopTracer(t *testing.T) {
 	}
 	span.SetAttribute("k", "v")
 	span.RecordError(errors.New("boom"))
-	span.End() // must not panic
+	span.End()
 }
 
 func TestCounter_RaceSafe(t *testing.T) {
@@ -165,15 +181,20 @@ func TestHistogram_RaceSafe(t *testing.T) {
 }
 
 func TestEscapeLabelValue(t *testing.T) {
-	cases := map[string]string{
-		`hello`:       `hello`,
-		`a"b`:         `a\"b`,
-		`a\b`:         `a\\b`,
-		"line\nbreak": `line\nbreak`,
-	}
-	for in, want := range cases {
-		if got := escapeLabelValue(in); got != want {
-			t.Errorf("escapeLabelValue(%q) = %q, want %q", in, got, want)
-		}
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain", `hello`, `hello`},
+		{"quote", `a"b`, `a\"b`},
+		{"backslash", `a\b`, `a\\b`},
+		{"newline", "line\nbreak", `line\nbreak`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := escapeLabelValue(tc.in); got != tc.want {
+				t.Errorf("escapeLabelValue(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }

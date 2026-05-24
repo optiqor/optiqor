@@ -29,57 +29,83 @@ const promMatrixOutOfOrder = `{
   }
 }`
 
-func TestParsePrometheusMatrix_OK(t *testing.T) {
-	got, err := ParsePrometheusMatrix(strings.NewReader(promMatrixOK))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("series count = %d", len(got))
-	}
-	s := got[0]
-	if s.Metric["job"] != "api" {
-		t.Errorf("metric label lost: %+v", s.Metric)
-	}
-	if len(s.Samples) != 2 {
-		t.Fatalf("samples = %d", len(s.Samples))
-	}
-	if s.Samples[0].Value != 1 || s.Samples[1].Value != 0.5 {
-		t.Errorf("values lost: %+v", s.Samples)
-	}
-	if !s.Samples[0].At.Before(s.Samples[1].At) {
-		t.Errorf("samples not chronological")
-	}
-}
-
-func TestParsePrometheusMatrix_OutOfOrderResorted(t *testing.T) {
-	got, err := ParsePrometheusMatrix(strings.NewReader(promMatrixOutOfOrder))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if got[0].Samples[0].At.After(got[0].Samples[1].At) {
-		t.Errorf("samples not resorted")
-	}
-}
-
-func TestParsePrometheusMatrix_NonSuccessStatusFails(t *testing.T) {
-	_, err := ParsePrometheusMatrix(strings.NewReader(`{"status":"error","data":{"resultType":"matrix","result":[]}}`))
-	if !errors.Is(err, ErrPromBadStatus) {
-		t.Errorf("want ErrPromBadStatus, got %v", err)
-	}
-}
-
-func TestParsePrometheusMatrix_VectorRejected(t *testing.T) {
-	_, err := ParsePrometheusMatrix(strings.NewReader(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
-	if !errors.Is(err, ErrPromUnsupportedType) {
-		t.Errorf("want ErrPromUnsupportedType, got %v", err)
-	}
-}
-
-func TestParsePrometheusMatrix_MalformedJSONFails(t *testing.T) {
-	_, err := ParsePrometheusMatrix(strings.NewReader(`{not json`))
-	if err == nil {
-		t.Error("want error on malformed JSON")
+func TestParsePrometheusMatrix(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		in      string
+		wantErr error // errors.Is target; nil + errAny=false means "no error"
+		errAny  bool  // true means any non-nil err is acceptable
+		check   func(t *testing.T, got []PromSeries)
+	}{
+		{
+			name: "happy matrix preserves labels values and chronology",
+			in:   promMatrixOK,
+			check: func(t *testing.T, got []PromSeries) {
+				t.Helper()
+				if len(got) != 1 {
+					t.Fatalf("series count = %d", len(got))
+				}
+				s := got[0]
+				if s.Metric["job"] != "api" {
+					t.Errorf("metric label lost: %+v", s.Metric)
+				}
+				if len(s.Samples) != 2 {
+					t.Fatalf("samples = %d", len(s.Samples))
+				}
+				if s.Samples[0].Value != 1 || s.Samples[1].Value != 0.5 {
+					t.Errorf("values lost: %+v", s.Samples)
+				}
+				if !s.Samples[0].At.Before(s.Samples[1].At) {
+					t.Errorf("samples not chronological")
+				}
+			},
+		},
+		{
+			name: "out-of-order samples are re-sorted ascending",
+			in:   promMatrixOutOfOrder,
+			check: func(t *testing.T, got []PromSeries) {
+				t.Helper()
+				if got[0].Samples[0].At.After(got[0].Samples[1].At) {
+					t.Errorf("samples not resorted")
+				}
+			},
+		},
+		{
+			name:    "non-success status returns ErrPromBadStatus",
+			in:      `{"status":"error","data":{"resultType":"matrix","result":[]}}`,
+			wantErr: ErrPromBadStatus,
+		},
+		{
+			name:    "vector result type is rejected",
+			in:      `{"status":"success","data":{"resultType":"vector","result":[]}}`,
+			wantErr: ErrPromUnsupportedType,
+		},
+		{
+			name:   "malformed JSON returns parse error",
+			in:     `{not json`,
+			errAny: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ParsePrometheusMatrix(strings.NewReader(tc.in))
+			switch {
+			case tc.wantErr != nil:
+				if !errors.Is(err, tc.wantErr) {
+					t.Errorf("want %v, got %v", tc.wantErr, err)
+				}
+			case tc.errAny:
+				if err == nil {
+					t.Error("want error")
+				}
+			default:
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				if tc.check != nil {
+					tc.check(t, got)
+				}
+			}
+		})
 	}
 }
 
@@ -88,62 +114,87 @@ const curOK = `lineItem/UsageStartDate,lineItem/UsageEndDate,lineItem/ProductCod
 2026-05-01T01:00:00Z,2026-05-01T02:00:00Z,AmazonEC2,BoxUsage:m6i.large,1.0,0.096,us-east-1,i-0123
 `
 
-func TestParseCURRows_OK(t *testing.T) {
-	got, err := ParseCURRows(strings.NewReader(curOK))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("rows = %d, want 2", len(got))
-	}
-	if got[0].UnblendedCostUSD != 0.096 {
-		t.Errorf("cost = %v", got[0].UnblendedCostUSD)
-	}
-	if got[0].UsageStartUTC != time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC) {
-		t.Errorf("start = %v", got[0].UsageStartUTC)
-	}
-	if got[0].ResourceID != "i-0123" {
-		t.Errorf("resource id = %q", got[0].ResourceID)
-	}
-}
+func TestParseCURRows(t *testing.T) {
+	missingHeader := "lineItem/UsageStartDate,lineItem/UsageEndDate\n2026-05-01T00:00:00Z,2026-05-01T01:00:00Z\n"
 
-func TestParseCURRows_MissingHeaderFails(t *testing.T) {
-	missing := "lineItem/UsageStartDate,lineItem/UsageEndDate\n2026-05-01T00:00:00Z,2026-05-01T01:00:00Z\n"
-	_, err := ParseCURRows(strings.NewReader(missing))
-	if err == nil {
-		t.Error("want error when required column absent")
-	}
-}
-
-func TestParseCURRows_EmptyStream(t *testing.T) {
-	got, err := ParseCURRows(strings.NewReader(""))
-	if err != nil {
-		t.Errorf("empty stream should not error: %v", err)
-	}
-	if len(got) != 0 {
-		t.Errorf("got %d rows, want 0", len(got))
-	}
-}
-
-func TestParseCURRows_BadTimestampWrapped(t *testing.T) {
-	bad := `lineItem/UsageStartDate,lineItem/UsageEndDate,lineItem/ProductCode,lineItem/UsageType,lineItem/UsageAmount,lineItem/UnblendedCost,product/region
+	badTimestamp := `lineItem/UsageStartDate,lineItem/UsageEndDate,lineItem/ProductCode,lineItem/UsageType,lineItem/UsageAmount,lineItem/UnblendedCost,product/region
 not-a-date,2026-05-01T01:00:00Z,EC2,Box,1.0,0.1,us-east-1
 `
-	_, err := ParseCURRows(strings.NewReader(bad))
-	if err == nil {
-		t.Error("want timestamp parse error")
-	}
-}
 
-func TestParseCURRows_OptionalResourceID(t *testing.T) {
-	noRes := `lineItem/UsageStartDate,lineItem/UsageEndDate,lineItem/ProductCode,lineItem/UsageType,lineItem/UsageAmount,lineItem/UnblendedCost,product/region
+	noResource := `lineItem/UsageStartDate,lineItem/UsageEndDate,lineItem/ProductCode,lineItem/UsageType,lineItem/UsageAmount,lineItem/UnblendedCost,product/region
 2026-05-01T00:00:00Z,2026-05-01T01:00:00Z,EC2,Box,1.0,0.1,us-east-1
 `
-	got, err := ParseCURRows(strings.NewReader(noRes))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got[0].ResourceID != "" {
-		t.Errorf("resource id should be empty when column missing: %q", got[0].ResourceID)
+
+	for _, tc := range []struct {
+		name    string
+		in      string
+		wantErr bool
+		check   func(t *testing.T, got []CURRow)
+	}{
+		{
+			name: "happy row decodes cost timestamp and resource id",
+			in:   curOK,
+			check: func(t *testing.T, got []CURRow) {
+				t.Helper()
+				if len(got) != 2 {
+					t.Fatalf("rows = %d, want 2", len(got))
+				}
+				if got[0].UnblendedCostUSD != 0.096 {
+					t.Errorf("cost = %v", got[0].UnblendedCostUSD)
+				}
+				if got[0].UsageStartUTC != time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC) {
+					t.Errorf("start = %v", got[0].UsageStartUTC)
+				}
+				if got[0].ResourceID != "i-0123" {
+					t.Errorf("resource id = %q", got[0].ResourceID)
+				}
+			},
+		},
+		{
+			name:    "missing required column fails",
+			in:      missingHeader,
+			wantErr: true,
+		},
+		{
+			name: "empty stream returns no rows without error",
+			in:   "",
+			check: func(t *testing.T, got []CURRow) {
+				t.Helper()
+				if len(got) != 0 {
+					t.Errorf("got %d rows, want 0", len(got))
+				}
+			},
+		},
+		{
+			name:    "bad timestamp surfaces wrapped error",
+			in:      badTimestamp,
+			wantErr: true,
+		},
+		{
+			name: "optional resource id column may be absent",
+			in:   noResource,
+			check: func(t *testing.T, got []CURRow) {
+				t.Helper()
+				if got[0].ResourceID != "" {
+					t.Errorf("resource id should be empty when column missing: %q", got[0].ResourceID)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ParseCURRows(strings.NewReader(tc.in))
+			if tc.wantErr {
+				if err == nil {
+					t.Error("want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if tc.check != nil {
+				tc.check(t, got)
+			}
+		})
 	}
 }
