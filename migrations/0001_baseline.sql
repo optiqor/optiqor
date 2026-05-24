@@ -200,8 +200,12 @@ CREATE TABLE receipts (
     window_end      TIMESTAMPTZ NOT NULL,
     predicted_usd_cents BIGINT NOT NULL DEFAULT 0,
     actual_usd_cents    BIGINT NOT NULL DEFAULT 0,
-    -- Canonicalised JSON; signed verbatim.
-    payload         JSONB NOT NULL,
+    -- Canonical JSON, signed verbatim. Stored as TEXT (not JSONB) so the
+    -- bytes round-trip unchanged — JSONB reformats on read (whitespace
+    -- collapse, field reorder, number-precision) which would silently
+    -- break Ed25519 signature verification. Cast to jsonb at query time
+    -- if leaderboard / pattern-library queries need structural ops.
+    payload         TEXT NOT NULL,
     signature       BYTEA NOT NULL,
     signing_key_id  TEXT NOT NULL,
     tlog_index      BIGINT,
