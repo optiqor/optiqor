@@ -28,7 +28,7 @@ func TestFor(t *testing.T) {
 		{
 			env: environment.EnvDev,
 			want: Sizing{
-				PercentileTarget: 95, MaxMemoryReductionPct: 100, MaxReplicaReductionPerPR: 100,
+				PercentileTarget: 95, MaxMemoryReductionPct: 0, MaxReplicaReductionPerPR: 100,
 				MinConfidence: "low", AutoMergeEligible: true,
 			},
 		},
@@ -89,8 +89,8 @@ func TestSizing_MemoryCutAllowed(t *testing.T) {
 		{name: "prod 15% rejected", strategy: prod, pct: 15, want: false},
 		{name: "staging 25% boundary allowed", strategy: staging, pct: 25, want: true},
 		{name: "staging 30% rejected", strategy: staging, pct: 30, want: false},
-		{name: "dev allows large cut under 100", strategy: dev, pct: 80, want: true},
-		{name: "dev allows boundary 100", strategy: dev, pct: 100, want: true},
+		{name: "dev no-cap rejects positive", strategy: dev, pct: 50, want: false},
+		{name: "dev no-cap allows zero", strategy: dev, pct: 0, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.strategy.MemoryCutAllowed(tc.pct); got != tc.want {

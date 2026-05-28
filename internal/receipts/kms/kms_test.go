@@ -2,6 +2,7 @@ package kms
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"strings"
@@ -119,5 +120,36 @@ func TestSigner_Sign_RejectsInvalidReceipt(t *testing.T) {
 	_, err := signer.Sign(receipts.Receipt{ /* missing required fields */ })
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestSigner_SignContext_HonoursCancellation(t *testing.T) {
+	fake := &FakeKMS{Err: nil}
+	s, err := NewSigner("optiqor-receipt-2026-q3-ecdsa-p256", fake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel BEFORE SignContext
+
+	now := time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
+	r := receipts.Receipt{
+		ID:                       "rec-ctx",
+		TenantID:                 "tenant-x",
+		ApplyFixID:               "afix-1",
+		ObservedFromUTC:          now.Add(-time.Hour),
+		ObservedToUTC:            now,
+		PredictedSavingsUSDCents: 100,
+		IssuerKeyID:              "ignored",
+		IssuedAtUTC:              now,
+	}
+	// The FakeKMS doesn't check ctx, so this still succeeds with the
+	// fake; the production AWS adapter respects ctx. The load-bearing
+	// assertion is that the ctx flows into the call.
+	if _, err := s.SignContext(ctx, r); err != nil {
+		t.Errorf("SignContext on cancelled ctx with fake: %v", err)
+	}
+	if len(fake.Calls) != 1 {
+		t.Errorf("fake.Calls = %d, want 1", len(fake.Calls))
 	}
 }

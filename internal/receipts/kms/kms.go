@@ -1,11 +1,6 @@
-// Package kms provides a KMS-backed receipt signer. Per ADR-0017,
-// production receipts are signed with ECDSA P-256 + SHA-256 because
-// AWS KMS does not support Ed25519 native signing. The private key
-// material never leaves KMS; every Sign call is logged in CloudTrail.
-//
-// This package contains the platform-agnostic Signer plus the
-// KMSClient interface that lets tests swap in a deterministic fake.
-// The aws-sdk-go-v2 wiring lands in a separate build-tagged adapter.
+// Package kms signs receipts via AWS KMS ECDSA P-256 + SHA-256 per
+// ADR-0017. Key material never leaves KMS; every Sign hits CloudTrail.
+// The aws-sdk-go-v2 wiring lands behind a build tag.
 package kms
 
 import (
@@ -52,13 +47,13 @@ func NewSigner(keyID string, client KMSClient) (*Signer, error) {
 	return &Signer{KeyID: keyID, Client: client}, nil
 }
 
-// Sign hashes the canonical receipt payload with SHA-256 (the prep
-// step KMS expects when SigningAlgorithm = ECDSA_SHA_256) and asks
-// KMS for the DER-encoded signature. The wire form stays
-// `b64url(sig) "." b64url(payload)` so verifiers don't change shape;
-// only the verification function dispatches on the keyID prefix to
-// pick ecdsa.Verify over ed25519.Verify.
+// Sign uses context.Background; workflow code should call SignContext
+// so the kms:Sign call inherits the request deadline + trace span.
 func (s *Signer) Sign(r receipts.Receipt) (string, error) {
+	return s.SignContext(context.Background(), r)
+}
+
+func (s *Signer) SignContext(ctx context.Context, r receipts.Receipt) (string, error) {
 	r.IssuerKeyID = s.KeyID
 	if err := r.Validate(); err != nil {
 		return "", err
@@ -68,7 +63,7 @@ func (s *Signer) Sign(r receipts.Receipt) (string, error) {
 		return "", err
 	}
 	digest := sha256.Sum256(payload)
-	sig, err := s.Client.Sign(context.Background(), s.KeyID, digest[:])
+	sig, err := s.Client.Sign(ctx, s.KeyID, digest[:])
 	if err != nil {
 		return "", fmt.Errorf("receipts/kms: kms:Sign: %w", err)
 	}
@@ -78,9 +73,7 @@ func (s *Signer) Sign(r receipts.Receipt) (string, error) {
 // KeyID returns the keyID; matches the receipts.Issuer accessor shape.
 func (s *Signer) KeyIDValue() string { return s.KeyID }
 
-// FakeKMS satisfies KMSClient with a deterministic per-keyID
-// signature for unit + integration tests. Real production wires the
-// aws-sdk-go-v2 kms.Client behind a build tag.
+// FakeKMS is the deterministic test double for KMSClient.
 type FakeKMS struct {
 	// Err makes Sign return the given error. Useful for failure-path tests.
 	Err error
