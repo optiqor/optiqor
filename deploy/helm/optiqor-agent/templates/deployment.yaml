@@ -47,6 +47,14 @@ spec:
               value: {{ required ".Values.clusterID is required" .Values.clusterID | quote }}
             - name: OPTIQOR_INGEST_URL
               value: {{ .Values.ingest.url | quote }}
+            - name: OPTIQOR_SNAPSHOT_INTERVAL
+              value: {{ default "60s" .Values.ingest.snapshotInterval | quote }}
+            - name: OPTIQOR_EVENTS_CUTOFF
+              value: {{ default "10m" .Values.ingest.eventsCutoff | quote }}
+            {{- if .Values.prometheus.url }}
+            - name: OPTIQOR_PROMETHEUS_URL
+              value: {{ .Values.prometheus.url | quote }}
+            {{- end }}
           ports:
             - name: health
               containerPort: {{ .Values.health.port }}

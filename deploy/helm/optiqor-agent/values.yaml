@@ -23,6 +23,19 @@ health:
 ingest:
   url: "https://ingest.optiqor.dev"
   secretName: optiqor-agent-mtls
+  # snapshotInterval controls how often the agent POSTs a full snapshot.
+  # 60s is the floor — informers serve reads from memory, so a shorter
+  # interval doesn't lower latency, only egress cost.
+  snapshotInterval: 60s
+  # eventsCutoff drops events older than this from each snapshot to
+  # bound payload size after the event cache has grown.
+  eventsCutoff: 10m
+
+# Prometheus query endpoint. Empty disables agent-side scraping (the
+# K8s informer signals still ship). Defaults to the kube-prometheus-stack
+# in-cluster Service so a stock install lights up without overrides.
+prometheus:
+  url: "http://prometheus-operated.monitoring:9090"
 
 # Read-only RBAC scope per ADR-0008. Adding a verb here changes the
 # agent's security posture; needs an ADR amendment.

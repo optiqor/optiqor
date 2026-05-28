@@ -27,6 +27,7 @@ type AgentSnapshot struct {
 	Policies         []PolicySnap     `json:"policies,omitempty"`
 	NodePools        []NodePoolSnap   `json:"node_pools,omitempty"`
 	ProvisionerClass string           `json:"provisioner_class,omitempty"`
+	PromSamples      []PromSampleSnap `json:"prom_samples,omitempty"`
 	Health           *AgentHealthSnap `json:"health,omitempty"`
 }
 
@@ -68,6 +69,20 @@ type NodePoolSnap struct {
 	Requirements      map[string][]string `json:"requirements,omitempty"`
 }
 
+// PromSampleSnap is the per-workload roll-up the agent's Prometheus
+// scraper emits per tick. The validator pipeline reads cpu+memory for
+// statistical sizing; oom_killed_count gates memory cuts under the
+// existing OOMRecent check.
+type PromSampleSnap struct {
+	Namespace      string    `json:"namespace"`
+	Kind           string    `json:"kind"`
+	Name           string    `json:"name"`
+	CPUUsageCores  float64   `json:"cpu_usage_cores"`
+	MemoryWorking  int64     `json:"memory_working_bytes"`
+	OOMKilledCount int       `json:"oom_killed_count"`
+	At             time.Time `json:"at"`
+}
+
 type AgentHealthSnap struct {
 	Version              string `json:"version"`
 	DataFreshnessSeconds int    `json:"data_freshness_seconds"`
@@ -78,6 +93,8 @@ type AgentSnapshotResponse struct {
 	BatchID      string `json:"batch_id"`
 	WorkloadsObs int    `json:"workloads_observed"`
 	EventsObs    int    `json:"events_observed"`
+	HPAsObs      int    `json:"hpas_observed"`
+	PromObs      int    `json:"prom_samples_observed"`
 }
 
 // AgentSnapshotSink persists a verified snapshot. nil-safe: in dev
@@ -176,5 +193,7 @@ func (h *AgentSnapshotHandler) Snapshot(w http.ResponseWriter, r *http.Request) 
 		BatchID:      snap.BatchID,
 		WorkloadsObs: len(snap.Workloads),
 		EventsObs:    len(snap.Events),
+		HPAsObs:      len(snap.HPAs),
+		PromObs:      len(snap.PromSamples),
 	})
 }

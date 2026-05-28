@@ -29,6 +29,7 @@ type Readers struct {
 	Policy    *PolicyR
 	VPA       *VPAR       // nil when the VPA CRD is absent
 	Karpenter *KarpenterR // nil when the Karpenter CRD is absent
+	Workloads *WorkloadIndex
 }
 
 // Start spins up the SharedInformerFactory and blocks until every
@@ -53,6 +54,7 @@ func Start(ctx context.Context, cfg Config) (*Readers, error) {
 	events := newEventsReader(cfg.ClusterID, factory)
 	hpa := newHPAReader(cfg.ClusterID, factory)
 	policy := newPolicyReader(cfg.ClusterID, factory)
+	workloads := startWorkloadIndex(factory)
 
 	stop := cfg.StopCh
 	if stop == nil {
@@ -74,9 +76,10 @@ func Start(ctx context.Context, cfg Config) (*Readers, error) {
 	}
 
 	return &Readers{
-		Events: events,
-		HPA:    hpa,
-		Policy: policy,
+		Events:    events,
+		HPA:       hpa,
+		Policy:    policy,
+		Workloads: workloads,
 	}, nil
 }
 

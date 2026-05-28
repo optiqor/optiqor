@@ -3,6 +3,7 @@ package strategy
 import (
 	"testing"
 
+	"github.com/optiqor/optiqor/internal/agent/provisioner"
 	"github.com/optiqor/optiqor/internal/safety/environment"
 )
 
@@ -15,28 +16,28 @@ func TestFor(t *testing.T) {
 			env: environment.EnvProd,
 			want: Sizing{
 				PercentileTarget: 99, MaxMemoryReductionPct: 10, MaxReplicaReductionPerPR: 0,
-				MinConfidence: "high", ManualApproval: true,
+				MinConfidence: "high", MaxAggressiveness: 100, ManualApproval: true,
 			},
 		},
 		{
 			env: environment.EnvStaging,
 			want: Sizing{
 				PercentileTarget: 95, MaxMemoryReductionPct: 25, MaxReplicaReductionPerPR: 2,
-				MinConfidence: "medium",
+				MinConfidence: "medium", MaxAggressiveness: 100,
 			},
 		},
 		{
 			env: environment.EnvDev,
 			want: Sizing{
 				PercentileTarget: 95, MaxMemoryReductionPct: 0, MaxReplicaReductionPerPR: 100,
-				MinConfidence: "low", AutoMergeEligible: true,
+				MinConfidence: "low", MaxAggressiveness: 100, AutoMergeEligible: true,
 			},
 		},
 		{
 			env: environment.EnvUnknown,
 			want: Sizing{
 				PercentileTarget: 99, MaxMemoryReductionPct: 10, MaxReplicaReductionPerPR: 0,
-				MinConfidence: "high", ManualApproval: true,
+				MinConfidence: "high", MaxAggressiveness: 100, ManualApproval: true,
 			},
 		},
 	} {
@@ -122,5 +123,48 @@ func TestSizing_ReplicaCutAllowed(t *testing.T) {
 				t.Errorf("ReplicaCutAllowed(%d) under cap=%d = %v, want %v", tc.count, tc.strategy.MaxReplicaReductionPerPR, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestForClass_StaticCapsAggressiveness(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		env               environment.Environment
+		class             provisioner.Class
+		wantAggressive    int
+		wantMinConfidence string
+		wantReplicaCap    int
+	}{
+		{"dev karpenter is full aggressive", environment.EnvDev, provisioner.ClassKarpenter, 100, "low", 100},
+		{"dev autoscaler is full aggressive", environment.EnvDev, provisioner.ClassAutoscaler, 100, "low", 100},
+		{"dev static caps replicas and lifts confidence", environment.EnvDev, provisioner.ClassStatic, 50, "medium", 0},
+		{"prod karpenter stays prod-strict", environment.EnvProd, provisioner.ClassKarpenter, 100, "high", 0},
+		{"prod static stays prod-strict", environment.EnvProd, provisioner.ClassStatic, 50, "high", 0},
+		{"staging static lifts confidence", environment.EnvStaging, provisioner.ClassStatic, 50, "medium", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := ForClass(tc.env, tc.class)
+			if s.MaxAggressiveness != tc.wantAggressive {
+				t.Errorf("MaxAggressiveness = %d, want %d", s.MaxAggressiveness, tc.wantAggressive)
+			}
+			if s.MinConfidence != tc.wantMinConfidence {
+				t.Errorf("MinConfidence = %q, want %q", s.MinConfidence, tc.wantMinConfidence)
+			}
+			if s.MaxReplicaReductionPerPR != tc.wantReplicaCap {
+				t.Errorf("MaxReplicaReductionPerPR = %d, want %d", s.MaxReplicaReductionPerPR, tc.wantReplicaCap)
+			}
+		})
+	}
+}
+
+func TestFor_BackCompatDefaultsToKarpenter(t *testing.T) {
+	// The single-arg shape must equal ForClass(env, ClassKarpenter) so
+	// pre-Phase-5 call sites stay byte-stable.
+	for _, env := range []environment.Environment{
+		environment.EnvProd, environment.EnvStaging, environment.EnvDev, environment.EnvUnknown,
+	} {
+		if For(env) != ForClass(env, provisioner.ClassKarpenter) {
+			t.Errorf("For(%q) != ForClass(env, Karpenter) — back-compat broken", env)
+		}
 	}
 }
