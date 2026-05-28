@@ -23,6 +23,9 @@ type ReceiptIssuePayload struct {
 type ReceiptIssue struct {
 	Issuer *receipts.Issuer
 	Store  ReceiptStore
+	// Now defaults to time.Now().UTC(); inject so tests pin a fixed
+	// clock and the receipt's IssuedAtUTC stays byte-stable across reruns.
+	Now func() time.Time
 }
 
 func (ReceiptIssue) Name() string { return "receipt_issue" }
@@ -43,7 +46,7 @@ func (w ReceiptIssue) Execute(ctx context.Context, t tenancy.Context, raw []byte
 	}
 	r := p.Receipt
 	if r.IssuedAtUTC.IsZero() {
-		r.IssuedAtUTC = time.Now().UTC()
+		r.IssuedAtUTC = w.nowOrDefault()
 	}
 	signed, err := w.Issuer.Sign(r)
 	if err != nil {
@@ -53,4 +56,11 @@ func (w ReceiptIssue) Execute(ctx context.Context, t tenancy.Context, raw []byte
 		return fmt.Errorf("receipt_issue: save: %w", err)
 	}
 	return nil
+}
+
+func (w ReceiptIssue) nowOrDefault() time.Time {
+	if w.Now != nil {
+		return w.Now()
+	}
+	return time.Now().UTC()
 }

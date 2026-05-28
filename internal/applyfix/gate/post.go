@@ -101,7 +101,6 @@ func walkLabels(node any, out *[]string) {
 // checkResourceBounds compares CPU/memory requests + limits before vs.
 // after; rejects diffs that shrink any of them by more than the cap.
 func checkResourceBounds(before, after map[string]any, ratioCap float64) error {
-	type tuple struct{ b, a float64 }
 	beforeRes := collectResources(before)
 	afterRes := collectResources(after)
 	for path, b := range beforeRes {
@@ -112,7 +111,6 @@ func checkResourceBounds(before, after map[string]any, ratioCap float64) error {
 		if b > 0 && a < b*(1-ratioCap) {
 			return errors.New("gate/post: " + path + " cut beyond safety floor")
 		}
-		_ = tuple{b: b, a: a}
 	}
 	return nil
 }

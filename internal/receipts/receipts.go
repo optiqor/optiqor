@@ -8,8 +8,11 @@
 package receipts
 
 import (
+	"crypto"
+	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -105,11 +108,20 @@ func (i *Issuer) Sign(r Receipt) (string, error) {
 
 func (i *Issuer) KeyID() string { return i.keyID }
 
-// Registry maps a key id to its public key. Production uses a DB-backed
-// implementation that the audit pipeline reads from; tests use
-// [StaticRegistry].
+// Registry maps a key id to its public key. The interface returns the
+// raw Ed25519 bytes for backwards compatibility; verifiers that need
+// algorithm dispatch implement AlgoRegistry instead.
 type Registry interface {
 	PublicKey(keyID string) (ed25519.PublicKey, error)
+}
+
+// AlgoRegistry is the dispatch-aware shape Verify prefers when given.
+// PublicKey returns whichever crypto.PublicKey matches keyID's algorithm
+// tag (ADR-0017 mandates the algorithm appears in the keyID, e.g.
+// "optiqor-receipt-2026-q3-ecdsa-p256"). Implementations may return
+// either *ecdsa.PublicKey or ed25519.PublicKey.
+type AlgoRegistry interface {
+	PublicKeyAny(keyID string) (crypto.PublicKey, error)
 }
 
 type StaticRegistry struct{ keys map[string]ed25519.PublicKey }
@@ -131,8 +143,13 @@ func (s *StaticRegistry) PublicKey(keyID string) (ed25519.PublicKey, error) {
 }
 
 // Verify decodes a wire-format signed receipt, looks up the issuer
-// key, and checks the signature. A non-nil error always means "do not
-// trust this claim".
+// key, and checks the signature. Dispatches on the keyID's algorithm
+// tag (ADR-0017): keyIDs containing "ecdsa-p256" verify via ECDSA P-256
+// + SHA-256; everything else uses Ed25519. A non-nil error always
+// means "do not trust this claim".
+//
+// Pass either Registry (Ed25519-only) or AlgoRegistry — Verify type-
+// asserts at call time so legacy Ed25519 callers stay source-compatible.
 func Verify(signed string, reg Registry) (Receipt, error) {
 	sigB64, payloadB64, ok := strings.Cut(signed, ".")
 	if !ok {
@@ -152,6 +169,25 @@ func Verify(signed string, reg Registry) (Receipt, error) {
 	}
 	if err := r.Validate(); err != nil {
 		return Receipt{}, err
+	}
+	if strings.Contains(r.IssuerKeyID, "ecdsa-p256") {
+		algo, ok := reg.(AlgoRegistry)
+		if !ok {
+			return Receipt{}, fmt.Errorf("receipts: keyID %q is ECDSA but Registry doesn't satisfy AlgoRegistry", r.IssuerKeyID)
+		}
+		pub, err := algo.PublicKeyAny(r.IssuerKeyID)
+		if err != nil {
+			return Receipt{}, err
+		}
+		ecPub, ok := pub.(*ecdsa.PublicKey)
+		if !ok {
+			return Receipt{}, fmt.Errorf("receipts: keyID %q resolved to non-ECDSA key", r.IssuerKeyID)
+		}
+		digest := sha256.Sum256(payload)
+		if !ecdsa.VerifyASN1(ecPub, digest[:], sig) {
+			return Receipt{}, ErrSignature
+		}
+		return r, nil
 	}
 	pub, err := reg.PublicKey(r.IssuerKeyID)
 	if err != nil {
