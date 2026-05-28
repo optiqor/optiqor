@@ -23,7 +23,7 @@ import (
 
 	"github.com/optiqor/optiqor/internal/agent/cluster"
 	"github.com/optiqor/optiqor/internal/agent/egress"
-	"github.com/optiqor/optiqor/internal/ingestion"
+	"github.com/optiqor/optiqor/internal/agent/prom"
 )
 
 var version = "dev"
@@ -43,6 +43,8 @@ func run() int {
 	resyncStr := flag.String("resync", envOr("OPTIQOR_INFORMER_RESYNC", "10m"), "informer cache resync period")
 	snapshotIntervalStr := flag.String("snapshot-interval", envOr("OPTIQOR_SNAPSHOT_INTERVAL", "60s"), "how often to POST a snapshot to the backend")
 	ingestURL := flag.String("ingest-url", envOr("OPTIQOR_INGEST_URL", ""), "https URL the snapshots POST to; empty disables egress")
+	promURL := flag.String("prometheus-url", envOr("OPTIQOR_PROMETHEUS_URL", ""), "Prometheus /api/v1/query base URL; empty disables scraping")
+	eventsCutoffStr := flag.String("events-cutoff", envOr("OPTIQOR_EVENTS_CUTOFF", "10m"), "drop events older than this from the snapshot")
 	flag.Parse()
 
 	if *showVersion {
@@ -139,7 +141,31 @@ func run() int {
 			logger.Error("egress init failed", "err", err)
 			return 1
 		}
-		go runSnapshotLoop(ctx, logger, egressClient, *clusterID, snapshotInterval)
+		eventsCutoff, perr := time.ParseDuration(*eventsCutoffStr)
+		if perr != nil {
+			logger.Error("bad --events-cutoff", "value", *eventsCutoffStr, "err", perr)
+			return 2
+		}
+		var scraper *prom.Scraper
+		if *promURL != "" {
+			pc, perr := prom.NewHTTPClient(*promURL)
+			if perr != nil {
+				logger.Error("prom client init failed", "url", *promURL, "err", perr)
+				return 1
+			}
+			scraper = prom.NewScraper(pc, nil) // pod owners refreshed each tick
+		} else {
+			logger.Info("prometheus-url empty; scrape loop disabled (verify.sh GAP remains)")
+		}
+		pop := &populator{
+			readers:      readers,
+			scraper:      scraper,
+			clusterID:    *clusterID,
+			agentVersion: version,
+			probe:        newK8sProbe(cs.Discovery(), dynCli),
+			eventsCutoff: eventsCutoff,
+		}
+		go runSnapshotLoop(ctx, logger, egressClient, pop, snapshotInterval)
 	} else {
 		logger.Info("ingest-url empty; running in observe-only mode")
 	}
@@ -180,8 +206,8 @@ func loadK8sConfig(kubeconfig string) (*rest.Config, error) {
 }
 
 // startHealthServer returns 200 on /healthz once readers are non-nil.
-// Kubelet probes hit this; mTLS egress + SaaS reachability are
-// additional concerns layered in Phase 5 PR #2.
+// Kubelet probes hit this; mtls egress + SaaS reachability live on
+// the egress client (see internal/agent/egress for the tls.Config).
 func startHealthServer(addr string, log *slog.Logger, readers *cluster.Readers) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -212,12 +238,12 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// runSnapshotLoop fires every interval until ctx is cancelled. Phase
-// 5 ships the minimal "alive + identity" payload — workload + event
-// + policy bodies grow in PR #3 once the agent owns the
-// readers→payload mapping. The loop never panics; one bad POST logs
-// and waits for the next tick.
-func runSnapshotLoop(ctx context.Context, log *slog.Logger, client *egress.Client, clusterID string, interval time.Duration) {
+// runSnapshotLoop fires every interval until ctx is cancelled. Builds
+// the rich payload via populator, refreshes the Prom scraper's
+// pod→workload index every tick (informer caches drift), then POSTs.
+// Never panics; one bad post logs and waits for the next tick so a
+// transient backend blip doesn't kill the loop.
+func runSnapshotLoop(ctx context.Context, log *slog.Logger, client *egress.Client, pop *populator, interval time.Duration) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	batch := 0
@@ -227,15 +253,14 @@ func runSnapshotLoop(ctx context.Context, log *slog.Logger, client *egress.Clien
 			return
 		case now := <-tick.C:
 			batch++
-			snap := ingestion.AgentSnapshot{
-				BatchID:      fmt.Sprintf("%s-%d", clusterID, batch),
-				CapturedAt:   now.UTC(),
-				ClusterID:    clusterID,
-				AgentVersion: version,
-				Health: &ingestion.AgentHealthSnap{
-					Version:              version,
-					DataFreshnessSeconds: int(interval / time.Second),
-				},
+			if pop.scraper != nil && pop.readers != nil && pop.readers.Workloads != nil {
+				owners := pop.readers.Workloads.PodOwners(ctx)
+				pop.scraper.PodOwners = remapOwnerKeys(owners)
+			}
+			batchID := fmt.Sprintf("%s-%d", pop.clusterID, batch)
+			snap, perr := pop.Build(ctx, batchID, now.UTC(), interval)
+			if perr != nil {
+				log.WarnContext(ctx, "snapshot partial", "batch", batchID, "err", perr)
 			}
 			postCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			resp, err := client.PostSnapshot(postCtx, snap)
@@ -244,8 +269,33 @@ func runSnapshotLoop(ctx context.Context, log *slog.Logger, client *egress.Clien
 				log.WarnContext(ctx, "snapshot post failed", "batch", snap.BatchID, "err", err)
 				continue
 			}
-			log.InfoContext(ctx, "snapshot accepted", "batch", resp.BatchID,
-				"workloads", resp.WorkloadsObs, "events", resp.EventsObs)
+			log.InfoContext(ctx, "snapshot accepted",
+				"batch", resp.BatchID,
+				"workloads", resp.WorkloadsObs,
+				"events", resp.EventsObs,
+				"hpas", resp.HPAsObs,
+				"prom_samples", resp.PromObs,
+				"provisioner_class", snap.ProvisionerClass,
+			)
 		}
 	}
+}
+
+// remapOwnerKeys converts cluster.WorkloadIndex types to the prom
+// scraper's parallel types. The duplication keeps the prom package
+// from importing cluster (which would pull in client-go on the SaaS
+// side); the bridge happens once per tick in the cmd binary.
+func remapOwnerKeys(in map[cluster.PodOwnerKey]cluster.PodWorkloadKey) map[prom.PodKey]prom.WorkloadKey {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[prom.PodKey]prom.WorkloadKey, len(in))
+	for k, v := range in {
+		out[prom.PodKey{Namespace: k.Namespace, Pod: k.Pod}] = prom.WorkloadKey{
+			Namespace: v.Namespace,
+			Kind:      v.Kind,
+			Name:      v.Name,
+		}
+	}
+	return out
 }

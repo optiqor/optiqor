@@ -7,6 +7,7 @@ package strategy
 import (
 	"errors"
 
+	"github.com/optiqor/optiqor/internal/agent/provisioner"
 	"github.com/optiqor/optiqor/internal/safety/environment"
 )
 
@@ -15,12 +16,40 @@ type Sizing struct {
 	MaxMemoryReductionPct    int    // 0 = no cuts allowed (prod-floor when MaxReplicaReductionPerPR is also 0)
 	MaxReplicaReductionPerPR int    // 0 = no replica reductions
 	MinConfidence            string // "high" | "medium" | "low"
+	MaxAggressiveness        int    // 0..100; static node groups cap at 50, autoscaler/karpenter at 100
 	AutoMergeEligible        bool
 	ManualApproval           bool
 }
 
-// For returns the Sizing bundle for env. EnvUnknown aliases prod.
+// For returns the Sizing bundle for env. EnvUnknown aliases prod. The
+// single-arg shape preserves call sites that don't yet know the
+// provisioner class; it defaults to ClassKarpenter (full aggressiveness)
+// because every shipped customer today runs Karpenter or autoscaler.
+// New code should prefer ForClass.
 func For(env environment.Environment) Sizing {
+	return ForClass(env, provisioner.ClassKarpenter)
+}
+
+// ForClass blends the per-env aggressiveness with a node-provisioner
+// cap. Static node groups (T3) cap aggressiveness at 50 and raise the
+// MinConfidence to medium, matching the ROADMAP "T3 = manual-step
+// caveat, confidence Medium" line. Karpenter (T1) and Autoscaler (T2)
+// stay at 100.
+func ForClass(env environment.Environment, class provisioner.Class) Sizing {
+	s := baseSizing(env)
+	s.MaxAggressiveness = aggressivenessCap(class)
+	if class == provisioner.ClassStatic {
+		if s.MinConfidence == "low" {
+			s.MinConfidence = "medium"
+		}
+		// Replica reductions need manual node-group changes when there's
+		// no autoscaler; cap at zero so PRs don't propose them.
+		s.MaxReplicaReductionPerPR = 0
+	}
+	return s
+}
+
+func baseSizing(env environment.Environment) Sizing {
 	switch env {
 	case environment.EnvDev:
 		return Sizing{
@@ -45,6 +74,17 @@ func For(env environment.Environment) Sizing {
 			MinConfidence:            "high",
 			ManualApproval:           true,
 		}
+	}
+}
+
+func aggressivenessCap(class provisioner.Class) int {
+	switch class {
+	case provisioner.ClassStatic:
+		return 50
+	case provisioner.ClassKarpenter, provisioner.ClassAutoscaler:
+		return 100
+	default:
+		return 100 // unknown classifier falls through to full so the validator's other checks still gate
 	}
 }
 
