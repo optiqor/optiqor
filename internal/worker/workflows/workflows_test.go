@@ -338,3 +338,28 @@ func TestAllWorkflows_RegisterableTogether(t *testing.T) {
 		t.Errorf("registered %v, want 4", got)
 	}
 }
+
+func TestReceiptIssue_UsesInjectedClock(t *testing.T) {
+	iss, _, _ := receipts.GenerateIssuer("k1")
+	store := &fakeReceiptStore{}
+	fixed := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	wf := ReceiptIssue{
+		Issuer: iss,
+		Store:  store,
+		Now:    func() time.Time { return fixed },
+	}
+	// IssuedAtUTC zero on the payload — the workflow must fill it from Now.
+	payload, _ := json.Marshal(ReceiptIssuePayload{
+		Receipt: receipts.Receipt{
+			ID: "rcpt_clock", TenantID: "t1", Workload: "api", ApplyFixID: "afix_clock",
+			ObservedFromUTC: fixed.Add(-30 * 24 * time.Hour),
+			ObservedToUTC:   fixed,
+		},
+	})
+	if err := wf.Execute(context.Background(), tenancy.Context{TenantID: "t1"}, payload); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !store.saved[0].Receipt.IssuedAtUTC.Equal(fixed) {
+		t.Errorf("IssuedAtUTC = %v, want %v", store.saved[0].Receipt.IssuedAtUTC, fixed)
+	}
+}
