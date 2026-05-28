@@ -395,8 +395,10 @@ func withPanicRecovery(logger *slog.Logger, next http.Handler) http.Handler {
 				"stack", string(debug.Stack()),
 			)
 			// If the handler already committed the response this is a
-			// no-op + stdlib warning; we still want the log line.
-			http.Error(w, "internal server error", http.StatusInternalServerError)
+			// no-op + stdlib warning; we still want the log line. Use the
+			// structured envelope so panics surface with the same shape
+			// integrators see for any other 5xx.
+			httperr.Internal(w, r, "")
 		}()
 		next.ServeHTTP(w, r)
 	})
@@ -448,7 +450,7 @@ func mountPProf(mux *http.ServeMux, token string) {
 			got := r.Header.Get("X-Admin-Token")
 			// Constant-time compare blocks the timing side-channel.
 			if subtleConstantTimeEq(got, token) != 1 {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				httperr.Unauthorized(w, r, "X-Admin-Token header missing or invalid")
 				return
 			}
 			h.ServeHTTP(w, r)
