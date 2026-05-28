@@ -205,3 +205,100 @@ export function fmtUSD(cents: number): string {
   if (!rem) return `$${dollars.toLocaleString()}`;
   return `$${dollars.toLocaleString()}.${rem.toString().padStart(2, "0")}`;
 }
+
+// ---- Dashboard panels (Phase 5) -------------------------------------
+// Backend handlers in internal/dashboard/handler.go. All three are
+// tenant-scoped via the mux's tenant extractor; the dashboard's same-
+// origin fetch picks up the session cookie automatically.
+
+export type SavingsSummary = {
+  lifetime_cents: number;
+  month_to_date_cents: number;
+  year_to_date_cents: number;
+  merged_count: number;
+  is_demo?: boolean;
+  demo_disclaimer?: string;
+};
+
+export async function fetchSavingsSummary(
+  headers?: HeadersInit,
+  signal?: AbortSignal,
+): Promise<SavingsSummary> {
+  const res = await fetch(`${apiBase}/v1/savings/summary`, {
+    headers,
+    credentials: "include",
+    signal,
+  });
+  if (!res.ok) throw await readApiError(res);
+  return (await res.json()) as SavingsSummary;
+}
+
+export type ApplyFixItem = {
+  id: string;
+  repo: string;
+  pr_url: string;
+  state: "open" | "merged" | "closed" | "rolled-back";
+  monthly_usd_cents: number;
+  opened_at: string;
+  merged_at?: string;
+};
+
+export type ApplyFixList = {
+  items: ApplyFixItem[];
+  next_cursor?: string;
+};
+
+export async function fetchApplyFixes(
+  opts: { state?: ApplyFixItem["state"]; cursor?: string } = {},
+  headers?: HeadersInit,
+  signal?: AbortSignal,
+): Promise<ApplyFixList> {
+  const params = new URLSearchParams();
+  if (opts.state) params.set("state", opts.state);
+  if (opts.cursor) params.set("cursor", opts.cursor);
+  const qs = params.toString();
+  const res = await fetch(`${apiBase}/v1/apply-fixes${qs ? `?${qs}` : ""}`, {
+    headers,
+    credentials: "include",
+    signal,
+  });
+  if (!res.ok) throw await readApiError(res);
+  return (await res.json()) as ApplyFixList;
+}
+
+export type AgentHealth = {
+  status: "healthy" | "degraded" | "offline" | "unknown";
+  last_checkin: string;
+  data_freshness_seconds: number;
+  version?: string;
+};
+
+export async function fetchAgentHealth(
+  headers?: HeadersInit,
+  signal?: AbortSignal,
+): Promise<AgentHealth> {
+  const res = await fetch(`${apiBase}/v1/agent/health`, {
+    headers,
+    credentials: "include",
+    signal,
+  });
+  if (!res.ok) throw await readApiError(res);
+  return (await res.json()) as AgentHealth;
+}
+
+// Pretty-prints a relative duration ("3 min ago", "2 hr ago") that the
+// agent health pill renders. Avoids importing a date library — three
+// branches cover every Phase 5 case.
+export function fmtRelative(iso: string, nowMs: number = Date.now()): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+  const deltaMs = nowMs - t;
+  if (deltaMs < 0) return "just now";
+  const min = Math.floor(deltaMs / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hr ago`;
+  const day = Math.floor(hr / 24);
+  return `${day} day${day === 1 ? "" : "s"} ago`;
+}

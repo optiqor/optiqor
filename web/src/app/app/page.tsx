@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { Eyebrow } from "@/components/section";
+import { SavingsCard } from "./savings-card";
+import { OpenPRsCard } from "./open-prs-card";
+import { AgentHealthPill } from "./agent-health-pill";
 
 export default async function AppHomePage() {
   const session = await auth();
@@ -18,6 +21,12 @@ export default async function AppHomePage() {
         landing in the timeline below within 30 days of first merge.
       </p>
 
+      <div className="mt-10 grid gap-4 md:grid-cols-3">
+        <SavingsCard />
+        <OpenPRsCard />
+        <AgentHealthPill />
+      </div>
+
       <div className="mt-10 grid gap-4 md:grid-cols-2">
         <Card
           title="Analyses"
@@ -28,11 +37,6 @@ export default async function AppHomePage() {
           title="Receipts"
           desc="Ed25519-signed proof of realized savings against your cloud bill."
           status="Phase 6"
-        />
-        <Card
-          title="Apply Fixes"
-          desc="PRs Optiqor opened and your merge history."
-          status="Phase 4"
         />
         <Card
           title="Cost spikes"
