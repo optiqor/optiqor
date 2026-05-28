@@ -27,6 +27,7 @@ import (
 	"github.com/optiqor/optiqor/internal/dashboard"
 	"github.com/optiqor/optiqor/internal/ingestion"
 	"github.com/optiqor/optiqor/internal/onboarding"
+	"github.com/optiqor/optiqor/internal/onboarding/preflight"
 	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/platform/ratelimit"
 	"github.com/optiqor/optiqor/internal/prwriter"
@@ -57,6 +58,7 @@ type domainDeps struct {
 	Spike         *billing.SpikeHandler
 	Auth          *auth.Handler
 	Onboarding    *onboarding.Handler
+	Preflight     *preflight.Handler
 	Dashboard     *dashboard.Handler
 	Attribution   *attribution.Handler // nil until Postgres is wired
 }
@@ -141,6 +143,11 @@ func buildDomainDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) *d
 
 	authH := &auth.Handler{Signer: buildSessionSigner()}
 	onboardingH := &onboarding.Handler{Service: onboarding.NewService(onboarding.NewInMemoryStore())}
+	// Pre-flight runs with a noop probe in dev — the wizard's
+	// preview page only lights up when the operator-side probe lands
+	// (Phase 5 close-out follow-on). Routing the endpoint now so the
+	// web side can call it without a 404 in dev.
+	preflightH := &preflight.Handler{Runner: nil}
 
 	return &domainDeps{
 		Sandbox:       sandboxH,
@@ -151,6 +158,7 @@ func buildDomainDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) *d
 		Spike:         spikeH,
 		Auth:          authH,
 		Onboarding:    onboardingH,
+		Preflight:     preflightH,
 		Dashboard:     &dashboard.Handler{Now: func() time.Time { return time.Now().UTC() }},
 		Attribution:   buildAttributionHandler(pool),
 	}
@@ -240,6 +248,9 @@ func mountDomainRoutes(mux *http.ServeMux, deps *domainDeps) {
 	mux.Handle("POST /v1/apply-fixes", tenantMW(http.HandlerFunc(deps.PRWriter.Preview)))
 	mux.Handle("GET /v1/onboarding/state", tenantMW(http.HandlerFunc(deps.Onboarding.GetState)))
 	mux.Handle("POST /v1/onboarding/transition", tenantMW(http.HandlerFunc(deps.Onboarding.Transition)))
+	if deps.Preflight != nil {
+		mux.Handle("POST /v1/onboarding/preflight", tenantMW(http.HandlerFunc(deps.Preflight.Run)))
+	}
 }
 
 // Compile-time ensure the workflows package is wired so its
@@ -273,6 +284,7 @@ func metaHandler(w http.ResponseWriter, _ *http.Request) {
 			{Method: "POST", Path: "/v1/session/issue", Notes: "Auth.js bridge: mint a backend JWT"},
 			{Method: "GET", Path: "/v1/onboarding/state", Notes: "dashboard: tenant onboarding progress"},
 			{Method: "POST", Path: "/v1/onboarding/transition", Notes: "dashboard: advance onboarding stage"},
+			{Method: "POST", Path: "/v1/onboarding/preflight", Notes: "install wizard: cluster pre-flight checks"},
 			{Method: "GET", Path: "/v1/savings/summary", Notes: "dashboard: lifetime / MTD / YTD savings"},
 			{Method: "GET", Path: "/v1/apply-fixes", Notes: "dashboard: list apply fixes filtered by state"},
 			{Method: "GET", Path: "/v1/agent/health", Notes: "dashboard: agent status + last check-in"},

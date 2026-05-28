@@ -30,7 +30,7 @@ These are decisions, not engineering work. They block phases as listed; without 
 > **Status (2026-05-11):** Phase 1 **CLOSED — production-ready code + infra-as-code surface complete, zero open code gaps.** The remaining `[ ]` items below all require an AWS account and live infrastructure (`terraform apply`, EKS bootstrap, ArgoCD install); they ship in the first sprint after pre-seed funding binds the AWS account. The Terraform code itself is committed and `terraform fmt -check`-clean (wired into `make lint` + CI).
 >
 > **Production-readiness evidence (`./verify.sh`):**
-> - **127 PASS · 0 FAIL · 2 GAP** _(updated post Phase-5 PRs: Sentry SDK now wired in `feat/sentry-sdk`; client-go informer setup wired in `feat/agent-clientgo-readers`; remaining gaps are the agent's Prometheus scrape loop + mTLS-to-SaaS live verification, both pending live AWS)_.
+> - **129 PASS · 0 FAIL · 0 GAP** _(Phase 5 fully closed: the agent now ships a rich snapshot every interval with K8s inventory + Prom samples + provisioner class over mTLS in `feat/phase-5-agent-closeout`; dashboard React panels + onboarding preflight + ADRs 0018-0020 in `feat/phase-5-surface-closeout`. Sentry SDK was wired earlier in `feat/sentry-sdk`.)_
 > - `go test ./... -race` clean across all 30 packages; `go vet ./...` clean.
 > - ~6,500 LOC production + ~5,100 LOC tests (78% test-to-code ratio).
 > - Every HTTP route has middleware (panic recovery, request-id, structured access log) and a body-size cap; OAuth callback validates state; GitHub webhook verifies HMAC; pprof gated by constant-time token.

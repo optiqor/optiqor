@@ -22,10 +22,12 @@ type SavingsSource interface {
 }
 
 type SavingsSummary struct {
-	LifetimeCents int64 `json:"lifetime_cents"`
-	MTDCents      int64 `json:"month_to_date_cents"`
-	YTDCents      int64 `json:"year_to_date_cents"`
-	MergedCount   int   `json:"merged_count"`
+	LifetimeCents  int64  `json:"lifetime_cents"`
+	MTDCents       int64  `json:"month_to_date_cents"`
+	YTDCents       int64  `json:"year_to_date_cents"`
+	MergedCount    int    `json:"merged_count"`
+	IsDemo         bool   `json:"is_demo,omitempty"`
+	DemoDisclaimer string `json:"demo_disclaimer,omitempty"`
 }
 
 // ApplyFixesSource lists the tenant's apply_fixes filtered by state.
@@ -81,7 +83,7 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.Savings == nil {
-		writeJSON(w, SavingsSummary{})
+		writeJSON(w, demoSummary())
 		return
 	}
 	out, err := h.Savings.Summary(t)
@@ -89,7 +91,29 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 		httperr.Internal(w, r, "could not compute savings summary")
 		return
 	}
+	// Empty result for a brand-new tenant: surface labelled demo data
+	// so the dashboard isn't dead for the 14 days it takes to
+	// accumulate real merges. Prevents the "empty dashboard" churn
+	// driver per ROADMAP §Operational backbone.
+	if out.LifetimeCents == 0 && out.MergedCount == 0 {
+		out = demoSummary()
+	}
 	writeJSON(w, out)
+}
+
+// demoSummary is the labelled fallback the dashboard shows for tenants
+// that haven't merged an Apply Fix yet. Numbers are obviously
+// representative — round, single-month — so a customer can tell at
+// a glance this isn't their data.
+func demoSummary() SavingsSummary {
+	return SavingsSummary{
+		LifetimeCents:  240_000,
+		MTDCents:       80_000,
+		YTDCents:       240_000,
+		MergedCount:    3,
+		IsDemo:         true,
+		DemoDisclaimer: "Demo data shown until the agent reports merged Apply Fix PRs.",
+	}
 }
 
 func (h *Handler) ListApplyFixes(w http.ResponseWriter, r *http.Request) {
