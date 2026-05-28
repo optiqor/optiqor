@@ -179,3 +179,31 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+func TestClient_GoroutineBoundedByTimeout(t *testing.T) {
+	// Goroutine must complete within SecondaryTimeout even when the
+	// caller's ctx is already cancelled. Regression test for the
+	// orphaned-goroutine fix.
+	primary := &agent.FakeLLMClient{Responses: []agent.LLMResponse{{Text: "EXPLANATION:\nx\nDIFF:\nA", Model: "sonnet"}}}
+	secondary := &agent.FakeLLMClient{Responses: []agent.LLMResponse{{Text: "EXPLANATION:\nx\nDIFF:\nB", Model: "haiku"}}}
+	rep := &captureReporter{}
+	c := New(primary, secondary, AlwaysSample, rep)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel BEFORE calling Generate
+
+	if _, err := c.Generate(ctx, agent.LLMRequest{}); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	// Give the (bounded) background goroutine a brief moment to complete.
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		if rep.count() > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if rep.count() != 1 {
+		t.Errorf("reporter.count = %d, want 1 (goroutine must still complete via its own bounded ctx)", rep.count())
+	}
+}

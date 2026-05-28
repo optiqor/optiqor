@@ -17,6 +17,7 @@ import (
 
 	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/platform/logging"
+	"github.com/optiqor/optiqor/internal/platform/telemetry"
 	"github.com/optiqor/optiqor/internal/worker"
 )
 
@@ -55,8 +56,9 @@ func run() int {
 		defer pool.Close()
 	}
 
+	metrics := telemetry.NewRegistry()
 	dispatcher := worker.NewInMemory()
-	if err := registerWorkflows(dispatcher, logger, cfg, pool); err != nil {
+	if err := registerWorkflows(dispatcher, logger, cfg, pool, metrics); err != nil {
 		logger.Error("workflow registration failed", "err", err)
 		return 1
 	}

@@ -1,8 +1,5 @@
-// Package latency carries the Prometheus histogram family that powers
-// the Phase-4 "PR comment p95 < 30s" SLO. Each step in the ApplyFix
-// workflow records into the same `optiqor_apply_fix_step_duration_seconds`
-// metric with a `step` label so Grafana can break the budget down per
-// stage.
+// Package latency owns optiqor_apply_fix_step_duration_seconds — the
+// histogram family that drives the PR-comment p95 < 30s SLO.
 package latency
 
 import (
@@ -66,8 +63,8 @@ func NewRecorder(reg *telemetry.Registry) *Recorder {
 	return r
 }
 
-// Observe records a single step's duration. nil-safe so call sites
-// don't have to nil-check when the recorder is disabled in tests.
+// Observe is nil-safe so call sites don't nil-check when the recorder
+// is disabled in tests.
 func (r *Recorder) Observe(step Step, d time.Duration) {
 	if r == nil {
 		return

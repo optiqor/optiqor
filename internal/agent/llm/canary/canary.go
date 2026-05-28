@@ -1,13 +1,7 @@
-// Package canary fans an LLM call out to a Primary client (the one
-// whose output Composer uses) and a Secondary one, then compares the
-// two diffs and emits a divergence alert when they disagree. Catches
-// hallucination patterns that pass the deterministic post-validator —
-// e.g. both models drop the same label, but one introduces a phantom
-// volumeMount.
-//
-// Sample rate is configured per call: 100% gives canary on every
-// request, 5% rides on the same prompt cache prefix. Cost-conscious
-// callers route Secondary to Haiku.
+// Package canary mirrors LLM calls across two models and reports
+// divergence. Primary's output is what Composer sees; Secondary runs
+// on a Sampler-gated goroutine. Catches hallucinations that slip past
+// the deterministic post-validator.
 package canary
 
 import (
@@ -15,13 +9,18 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/optiqor/optiqor/internal/agent"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
-// SampleDecider gates the canary; returns true when this call should
-// be mirrored. Pure func + injected so tests can pin sampling.
+// SecondaryTimeout caps how long the canary goroutine waits for the
+// Secondary model. Bounds the goroutine lifetime so the request
+// context cancelling doesn't leave it orphaned.
+const SecondaryTimeout = 30 * time.Second
+
+// SampleDecider returns true when the canary should mirror this call.
 type SampleDecider func(req agent.LLMRequest) bool
 
 // AlwaysSample mirrors every call.
@@ -90,8 +89,14 @@ func (c *Client) Generate(ctx context.Context, req agent.LLMRequest) (agent.LLMR
 		return primary, nil
 	}
 
-	t, _ := tenancy.FromContext(ctx)
-	go c.compare(ctx, t, req, primary)
+	t, _ := tenancy.FromContext(ctx) // empty tenant is fine; Reporter sees the divergence regardless
+	// Fresh, bounded context so the goroutine isn't orphaned when the
+	// request ctx cancels. Secondary divergence reporting is best-effort.
+	bgCtx, cancel := context.WithTimeout(context.Background(), SecondaryTimeout)
+	go func() {
+		defer cancel()
+		c.compare(bgCtx, t, req, primary)
+	}()
 	return primary, nil
 }
 
