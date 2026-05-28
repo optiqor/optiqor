@@ -18,11 +18,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/agent/ident"
 	"github.com/optiqor/optiqor/internal/agent/llm/anthropic"
 	"github.com/optiqor/optiqor/internal/applyfix/attribution"
 	"github.com/optiqor/optiqor/internal/auth"
 	"github.com/optiqor/optiqor/internal/billing"
 	"github.com/optiqor/optiqor/internal/cost"
+	"github.com/optiqor/optiqor/internal/dashboard"
 	"github.com/optiqor/optiqor/internal/ingestion"
 	"github.com/optiqor/optiqor/internal/onboarding"
 	"github.com/optiqor/optiqor/internal/platform/config"
@@ -47,14 +49,16 @@ const (
 // through to main(). One owner per surface; cmd/api/main.go reaches
 // into this struct rather than building handlers itself.
 type domainDeps struct {
-	Sandbox     *sandbox.Handler
-	Receipts    *receipts.Handler
-	PRWriter    *prwriter.Handler
-	Ingest      *ingestion.Handler
-	Spike       *billing.SpikeHandler
-	Auth        *auth.Handler
-	Onboarding  *onboarding.Handler
-	Attribution *attribution.Handler // nil until Postgres is wired
+	Sandbox       *sandbox.Handler
+	Receipts      *receipts.Handler
+	PRWriter      *prwriter.Handler
+	Ingest        *ingestion.Handler
+	AgentSnapshot *ingestion.AgentSnapshotHandler
+	Spike         *billing.SpikeHandler
+	Auth          *auth.Handler
+	Onboarding    *onboarding.Handler
+	Dashboard     *dashboard.Handler
+	Attribution   *attribution.Handler // nil until Postgres is wired
 }
 
 // noopLLM is the dev-mode LLMClient — returns a deterministic stub so
@@ -139,15 +143,36 @@ func buildDomainDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) *d
 	onboardingH := &onboarding.Handler{Service: onboarding.NewService(onboarding.NewInMemoryStore())}
 
 	return &domainDeps{
-		Sandbox:     sandboxH,
-		Receipts:    receiptsH,
-		PRWriter:    prH,
-		Ingest:      ingestH,
-		Spike:       spikeH,
-		Auth:        authH,
-		Onboarding:  onboardingH,
-		Attribution: buildAttributionHandler(pool),
+		Sandbox:       sandboxH,
+		Receipts:      receiptsH,
+		PRWriter:      prH,
+		Ingest:        ingestH,
+		AgentSnapshot: buildAgentSnapshotHandler(log),
+		Spike:         spikeH,
+		Auth:          authH,
+		Onboarding:    onboardingH,
+		Dashboard:     &dashboard.Handler{Now: func() time.Time { return time.Now().UTC() }},
+		Attribution:   buildAttributionHandler(pool),
 	}
+}
+
+// buildAgentSnapshotHandler returns the verifier-backed handler when
+// OPTIQOR_AGENT_INGEST_SECRET is configured. Dev mode without the
+// secret returns nil and the mux skips the route — agents in dev
+// cannot exercise the path, which is correct (they wouldn't have a
+// secret to issue tokens with either).
+func buildAgentSnapshotHandler(log *slog.Logger) *ingestion.AgentSnapshotHandler {
+	secret := os.Getenv("OPTIQOR_AGENT_INGEST_SECRET")
+	if secret == "" {
+		log.Warn("OPTIQOR_AGENT_INGEST_SECRET unset; agent snapshot endpoint disabled")
+		return nil
+	}
+	ver, err := ident.NewVerifier([]byte(secret))
+	if err != nil {
+		log.Error("agent ident verifier init failed", "err", err)
+		return nil
+	}
+	return &ingestion.AgentSnapshotHandler{Verifier: ver}
 }
 
 // buildAttributionHandler returns the merged-PR cost-attribution
@@ -197,10 +222,21 @@ func mountDomainRoutes(mux *http.ServeMux, deps *domainDeps) {
 	tenantMW := func(next http.Handler) http.Handler {
 		return requireTenant(HeaderTenantExtractor, next)
 	}
-	// /v1/ingest writes against a tenant scope (Phase 5 wires the agent
-	// SPIFFE id); route through the tenant middleware so the handler
-	// can read tenancy.FromContext fail-closed.
+	// agentMW prefers the mTLS-derived SPIFFE id and falls back to the
+	// header in dev/test. Production TLS terminates the cert chain
+	// upstream of the api binary's mux.
+	agentMW := func(next http.Handler) http.Handler {
+		return requireTenant(MTLSTenantExtractor, next)
+	}
 	mux.Handle("POST /v1/ingest", tenantMW(http.HandlerFunc(deps.Ingest.Ingest)))
+	if deps.AgentSnapshot != nil {
+		mux.Handle("POST /v1/agent/snapshot", agentMW(http.HandlerFunc(deps.AgentSnapshot.Snapshot)))
+	}
+	if deps.Dashboard != nil {
+		mux.Handle("GET /v1/savings/summary", tenantMW(http.HandlerFunc(deps.Dashboard.Summary)))
+		mux.Handle("GET /v1/apply-fixes", tenantMW(http.HandlerFunc(deps.Dashboard.ListApplyFixes)))
+		mux.Handle("GET /v1/agent/health", tenantMW(http.HandlerFunc(deps.Dashboard.AgentHealth)))
+	}
 	mux.Handle("POST /v1/apply-fixes", tenantMW(http.HandlerFunc(deps.PRWriter.Preview)))
 	mux.Handle("GET /v1/onboarding/state", tenantMW(http.HandlerFunc(deps.Onboarding.GetState)))
 	mux.Handle("POST /v1/onboarding/transition", tenantMW(http.HandlerFunc(deps.Onboarding.Transition)))
@@ -237,6 +273,9 @@ func metaHandler(w http.ResponseWriter, _ *http.Request) {
 			{Method: "POST", Path: "/v1/session/issue", Notes: "Auth.js bridge: mint a backend JWT"},
 			{Method: "GET", Path: "/v1/onboarding/state", Notes: "dashboard: tenant onboarding progress"},
 			{Method: "POST", Path: "/v1/onboarding/transition", Notes: "dashboard: advance onboarding stage"},
+			{Method: "GET", Path: "/v1/savings/summary", Notes: "dashboard: lifetime / MTD / YTD savings"},
+			{Method: "GET", Path: "/v1/apply-fixes", Notes: "dashboard: list apply fixes filtered by state"},
+			{Method: "GET", Path: "/v1/agent/health", Notes: "dashboard: agent status + last check-in"},
 			{Method: "GET", Path: "/healthz", Notes: "liveness"},
 			{Method: "GET", Path: "/readyz", Notes: "readiness"},
 			{Method: "GET", Path: "/metrics", Notes: "prometheus metrics"},

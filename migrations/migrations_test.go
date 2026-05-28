@@ -408,3 +408,112 @@ func Test0005_VCSInstallations_DownIsClean(t *testing.T) {
 		}
 	}
 }
+
+func Test0006_AgentInventory_StructureAndRLS(t *testing.T) {
+	sql := loadMigration(t, "0006_agent_inventory.sql")
+	for _, want := range []string{
+		"ALTER TABLE tenants ADD COLUMN spiffe_id TEXT UNIQUE",
+		"CREATE TABLE agents",
+		"tenant_id             UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE",
+		"status                TEXT NOT NULL DEFAULT 'healthy' CHECK (status IN ('healthy','degraded','offline'))",
+		"ALTER TABLE agents ENABLE ROW LEVEL SECURITY",
+		"CREATE POLICY tenant_isolation ON agents",
+		"GRANT SELECT, INSERT, UPDATE ON agents TO optiqor_app",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0006 missing: %q", want)
+		}
+	}
+}
+
+func Test0006_AgentInventory_DownIsClean(t *testing.T) {
+	sql := loadMigration(t, "0006_agent_inventory.sql")
+	for _, want := range []string{
+		"DROP POLICY IF EXISTS tenant_isolation ON agents",
+		"DROP TABLE IF EXISTS agents",
+		"ALTER TABLE tenants DROP COLUMN IF EXISTS spiffe_id",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0006 Down missing %q", want)
+		}
+	}
+}
+
+func Test0007_ServiceGraph_StructureAndRLS(t *testing.T) {
+	sql := loadMigration(t, "0007_service_graph.sql")
+	for _, want := range []string{
+		"CREATE TABLE service_graph_snapshots",
+		"tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE",
+		"cluster_id    UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE",
+		"UNIQUE (tenant_id, cluster_id, batch_id)",
+		"ALTER TABLE service_graph_snapshots ENABLE ROW LEVEL SECURITY",
+		"CREATE POLICY tenant_isolation ON service_graph_snapshots",
+		"GRANT SELECT, INSERT, DELETE ON service_graph_snapshots TO optiqor_app",
+		"create_hypertable('service_graph_snapshots'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0007 missing: %q", want)
+		}
+	}
+}
+
+func Test0007_ServiceGraph_DownIsClean(t *testing.T) {
+	sql := loadMigration(t, "0007_service_graph.sql")
+	for _, want := range []string{
+		"DROP POLICY IF EXISTS tenant_isolation ON service_graph_snapshots",
+		"DROP TABLE IF EXISTS service_graph_snapshots",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0007 Down missing %q", want)
+		}
+	}
+}
+
+func Test0008_SlackInstallations_StructureAndRLS(t *testing.T) {
+	sql := loadMigration(t, "0008_slack_installations.sql")
+	for _, want := range []string{
+		"CREATE TABLE slack_installations",
+		"tenant_id               UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE",
+		"webhook_url_ciphertext  BYTEA NOT NULL",
+		"UNIQUE (tenant_id)",
+		"ALTER TABLE slack_installations ENABLE ROW LEVEL SECURITY",
+		"CREATE POLICY tenant_isolation ON slack_installations",
+		"GRANT SELECT, INSERT, UPDATE ON slack_installations TO optiqor_app",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0008 missing: %q", want)
+		}
+	}
+}
+
+func Test0008_SlackInstallations_NoPlaintextWebhookColumn(t *testing.T) {
+	sql := loadMigration(t, "0008_slack_installations.sql")
+	if strings.Contains(sql, "webhook_url             TEXT") || strings.Contains(sql, "webhook_url TEXT") {
+		t.Error("0008 must never store plaintext webhook URLs — encrypt via KMS")
+	}
+}
+
+func Test0008_SlackInstallations_DownIsClean(t *testing.T) {
+	sql := loadMigration(t, "0008_slack_installations.sql")
+	for _, want := range []string{
+		"DROP POLICY IF EXISTS tenant_isolation ON slack_installations",
+		"DROP TABLE IF EXISTS slack_installations",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0008 Down missing %q", want)
+		}
+	}
+}
+
+func Test0009_SkepticModeDefault_StructureAndBackfill(t *testing.T) {
+	sql := loadMigration(t, "0009_skeptic_mode_default.sql")
+	for _, want := range []string{
+		"ADD COLUMN skeptic_mode_default BOOLEAN NOT NULL DEFAULT true",
+		"UPDATE tenants SET skeptic_mode_default = false",
+		"ALTER TABLE tenants DROP COLUMN IF EXISTS skeptic_mode_default",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0009 missing: %q", want)
+		}
+	}
+}

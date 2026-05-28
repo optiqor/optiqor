@@ -44,9 +44,12 @@ type Config struct {
 	GitHubAppPrivateKeyPEM string
 	GitHubAppWebhookSecret string
 
-	AWSRegion string
-	SentryDSN string
-	OTELHTTP  string
+	AWSRegion         string
+	SentryDSN         string
+	SentryEnvironment string  // dev | staging | prod; falls back to Env
+	SentryRelease     string  // e.g. "api@1.4.2"; useful for issue grouping
+	SentrySampleRate  float64 // 0..1; default 1 in prod, 1 elsewhere
+	OTELHTTP          string
 
 	ShutdownGrace time.Duration
 }
@@ -70,6 +73,9 @@ func Load() (Config, error) {
 		GitHubAppWebhookSecret: os.Getenv("OPTIQOR_GITHUB_APP_WEBHOOK_SECRET"),
 		AWSRegion:              envOr("AWS_REGION", "us-east-1"),
 		SentryDSN:              os.Getenv("OPTIQOR_SENTRY_DSN"),
+		SentryEnvironment:      os.Getenv("OPTIQOR_SENTRY_ENVIRONMENT"),
+		SentryRelease:          os.Getenv("OPTIQOR_SENTRY_RELEASE"),
+		SentrySampleRate:       envFloat("OPTIQOR_SENTRY_SAMPLE_RATE", 1.0),
 		OTELHTTP:               envOr("OPTIQOR_OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		ShutdownGrace:          envDuration("OPTIQOR_SHUTDOWN_GRACE", 10*time.Second),
 	}
@@ -156,4 +162,16 @@ func envInt(key string, fallback int) int { //nolint:unused // reserved for futu
 		return fallback
 	}
 	return n
+}
+
+func envFloat(key string, fallback float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return fallback
+	}
+	return f
 }

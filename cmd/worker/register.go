@@ -64,6 +64,12 @@ func registerWorkflows(d *worker.InMemory, log *slog.Logger, cfg config.Config, 
 			Validator: validatorPipeline,
 			Publisher: &loggingPRPublisher{log: log},
 			Latency:   latencyRecorder,
+			// Skeptic mode default-on for design partner #1 — safest
+			// posture until each tenant's onboarding handler opts out.
+			// Phase 5 plan: backend reads tenants.skeptic_mode_default
+			// per-tenant at dispatch; this worker default sets the
+			// fallback for dev / paths that bypass the read.
+			SkepticMode: true,
 		},
 		workflows.ReceiptIssue{
 			Issuer: issuer,

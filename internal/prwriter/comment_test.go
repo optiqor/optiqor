@@ -141,6 +141,32 @@ func TestRender(t *testing.T) {
 			},
 		},
 		{
+			name: "provisioner-note-renders-above-disclosure",
+			mut: func(c *Comment) {
+				c.ProvisionerNote = "Cluster Autoscaler detected — verify ASG bounds before merging."
+			},
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if !strings.Contains(out, "Provisioner context") {
+					t.Errorf("provisioner footer missing:\n%s", out)
+				}
+				pIdx := strings.Index(out, "Provisioner context")
+				dIdx := strings.Index(out, AccuracyDisclosureSandbox)
+				if pIdx < 0 || dIdx < 0 || pIdx > dIdx {
+					t.Errorf("provisioner note must appear before disclosure:\n%s", out)
+				}
+			},
+		},
+		{
+			name: "provisioner-note-omitted-when-empty",
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if strings.Contains(out, "Provisioner context") {
+					t.Errorf("provisioner section must not render when ProvisionerNote empty")
+				}
+			},
+		},
+		{
 			name: "sandbox-disclosure-matches-cli",
 			mut:  func(c *Comment) { c.Mode = ModeSandbox },
 			assert: func(t *testing.T, out string) {

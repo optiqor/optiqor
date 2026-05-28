@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -47,6 +48,17 @@ func run() int {
 	logger := logging.New(os.Stdout, cfg.LogLevel)
 	slog.SetDefault(logger)
 
+	if reporter, err := initSentry(cfg); err != nil {
+		logger.Warn("sentry init failed; falling back to noop", "err", err)
+	} else if reporter != nil {
+		prev := telemetry.SetReporter(reporter)
+		defer func() {
+			_ = reporter.Flush(2000)
+			telemetry.SetReporter(prev)
+		}()
+		logger.Info("sentry reporter wired", "env", cfg.SentryEnvironment, "release", cfg.SentryRelease)
+	}
+
 	pool, err := openPool(cfg, logger)
 	if err != nil {
 		logger.Error("pool init failed", "err", err)
@@ -84,6 +96,35 @@ func run() int {
 	}
 	logger.Info("worker stopped")
 	return 0
+}
+
+// initSentry mirrors cmd/api/initSentry — empty DSN returns (nil, nil)
+// so the worker boots without a reporter when not configured.
+func initSentry(cfg config.Config) (telemetry.ErrorReporter, error) {
+	if cfg.SentryDSN == "" {
+		return nil, nil
+	}
+	env := cfg.SentryEnvironment
+	if env == "" {
+		env = string(cfg.Env)
+	}
+	rate := cfg.SentrySampleRate
+	if rate <= 0 {
+		rate = 1.0
+	}
+	r, err := telemetry.NewSentryReporter(telemetry.SentryConfig{
+		DSN:         cfg.SentryDSN,
+		Environment: env,
+		Release:     cfg.SentryRelease,
+		SampleRate:  rate,
+	})
+	if err != nil {
+		if errors.Is(err, telemetry.ErrSentryNotConfigured) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return r, nil
 }
 
 // openPool returns a pgxpool when cfg.PostgresDSN is set. Dev mode

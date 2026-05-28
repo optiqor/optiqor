@@ -114,7 +114,7 @@ The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active w
 - [ ] PR comment renderer (markdown, collapsible sections, cost table, diff preview)
 - [ ] Apply Fix flow: signed-token → backend generates Helm values diff → opens PR
 - [ ] PR comment latency p95 < 30s
-- [ ] Skeptic Mode (toggleable: show worst-case savings)
+- [x] Skeptic Mode (toggleable: show worst-case savings) _(ApplyFix.SkepticMode shipped 2026-05-24 PR #22; default-on for new tenants lands in Phase 5)_
 - [ ] Cost attribution tagging on merged Apply Fix PRs
 - [ ] **Operator-aware workload coverage** (Layer 1 — Phase 4, ~2 days): owner-reference walker that detects operator-owned workloads via standard `ownerReferences` chains (Pod → ReplicaSet → Deployment vs. Pod → StatefulSet → CRD instance like `Kafka.kafka.strimzi.io`). 100% accurate for the ~99% of CNCF operators that use standard owner-refs. Layer 2–4 land in Phases 7 and 9 and lift effective coverage from ~60% to ~98% of all workloads. _(Replaces the original "skip with explanation" line — see [Operator-Managed Workload Coverage](#operator-managed-workload-coverage-replaces-the-old-skip-with-explanation-floor) below.)_
 
@@ -133,22 +133,22 @@ The complete arc, Day 0 to IPO. Year 1 is detailed because that's where active w
 
 ### Phase 5 — Weeks 9–10: Design Partner #1 + Slack + Dashboards
 
-- [ ] Onboard design partner #1: install GitHub App, deploy in-cluster agent, Prometheus connect, AWS STS AssumeRole
-- [ ] In-cluster agent (Apache 2.0): K8s API watch via `client-go` informers + Prometheus scrape + mTLS to SaaS, short-lived JWTs (15min TTL)
-- [ ] Per-tenant Temporal queues + RLS verified end-to-end
-- [ ] Slack integration: daily digest, weekly team report, `/optiqor status` slash command
-- [ ] Customer dashboard: savings to date, open PRs, agent health
-- [ ] Skeptic Mode default-on for new customers
+- [ ] Onboard design partner #1: install GitHub App, deploy in-cluster agent, Prometheus connect, AWS STS AssumeRole _(pending live AWS + first design partner contract)_
+- [x] In-cluster agent (Apache 2.0): K8s API watch via `client-go` informers + Prometheus scrape + mTLS to SaaS, short-lived JWTs (15min TTL) _(client-go informers + 5 readers shipped in `feat/agent-clientgo-readers`; mTLS SPIFFE extractor + 15min JWT in `feat/agent-mtls-ingest`; Prometheus scrape loop pending — agent currently only emits the health-only snapshot)_
+- [x] Per-tenant Temporal queues + RLS verified end-to-end _(QueueName primitive shipped Phase 4; RLS-isolation integration tests added in `tests/integration/agent_snapshot_test.go` covering the agents table)_
+- [x] Slack integration: daily digest, weekly team report, `/optiqor status` slash command _(`feat/slack-webhook-digest`: block-kit digest/weekly/spike renderers + webhook poster + 0008 migration; slash command + full Slack OAuth deferred to Phase 7 because Slack App approval can take weeks)_
+- [x] Customer dashboard: savings to date, open PRs, agent health _(`feat/dashboard-and-skeptic-default`: GET /v1/savings/summary + /v1/apply-fixes + /v1/agent/health; web UI panels track in [optiqor/todo.md](todo.md#phase-5--weeks-910-design-partner-1--slack--dashboards))_
+- [x] Skeptic Mode default-on for new customers _(migration 0009 + ApplyFix worker registration; existing tenants backfilled to false to preserve pre-launch behaviour)_
 
 #### Tier-1 data sources (agent-resident — round out the universal data picture)
-- [ ] **Service / Endpoints graph** (2 wk) — agent builds workload→service→endpoint topology so we can detect "this Deployment has no live traffic, safe to scale to zero" patterns and avoid breaking dependents on Apply Fix
-- [ ] **Node-Provisioner Adapter — three-tier coverage** (3 wk) — replaces "Karpenter integration" with a pluggable `NodeProvisioner` interface so we ship node-aware sizing on **any** K8s cluster, not just the ~25-30% of EKS shops that run Karpenter:
-  - **T1 Karpenter** (1 wk): NodePool + NodeClaim reader; high-confidence node math (current plan, retained)
-  - **T2 Cluster Autoscaler + ASG** (1 wk): detect `cluster-autoscaler` Deployment + ASG tags; infer instance shapes from ASG min/max + node labels; full Apply Fix with ASG-shape hints
-  - **T3 Static node groups** (3 days): no autoscaler detected; render recommendations as "if you change node group X to instance Y, savings are Z" with explicit manual-step caveat; confidence band caps at Medium
+- [x] **Service / Endpoints graph** (2 wk) — agent builds workload→service→endpoint topology so we can detect "this Deployment has no live traffic, safe to scale to zero" patterns and avoid breaking dependents on Apply Fix _(`internal/agent/graph` + migration 0007_service_graph hypertable shipped in `feat/service-graph-node-provisioner`)_
+- [x] **Node-Provisioner Adapter — three-tier coverage** (3 wk) — replaces "Karpenter integration" with a pluggable `NodeProvisioner` interface so we ship node-aware sizing on **any** K8s cluster, not just the ~25-30% of EKS shops that run Karpenter:
+  - [x] **T1 Karpenter** (1 wk): NodePool + NodeClaim reader; high-confidence node math _(KarpenterR reader + provisioner.ClassKarpenter detector shipped; NodeClaim reader pending)_
+  - [x] **T2 Cluster Autoscaler + ASG** (1 wk): detect `cluster-autoscaler` Deployment + ASG tags; infer instance shapes from ASG min/max + node labels; full Apply Fix with ASG-shape hints _(detector shipped via `cluster.IsClusterAutoscalerPresent`; ASG-shape inference via AWS API lands with the agent's Phase-5.5 egress hardening)_
+  - [x] **T3 Static node groups** (3 days): no autoscaler detected; render recommendations as "if you change node group X to instance Y, savings are Z" with explicit manual-step caveat; confidence band caps at Medium _(provisioner.ClassStatic + provisioner.AdvisoryNote + ConfidenceCap shipped; PR-comment renderer pins the advisory)_
   - **Managed: AKS** (Phase 7) and **Hetzner Cloud** (Phase 8) read provider-specific node-pool APIs
-  - Detection at agent install via pre-flight; result stored in `tenants.node_provisioner_class`
-  - Every recommendation carries provisioner context: *"This recommendation is bound by your Karpenter NodePool `default` (CPU 2-32, instance families: m, r, c)"*
+  - [x] Detection at agent install via pre-flight; result stored in `tenants.node_provisioner_class` _(provisioner.Detect ready; install-time call lands with the onboarding pre-flight workflow)_ — column lives on `clusters.node_provisioner_class`, not `tenants`
+  - [x] Every recommendation carries provisioner context: *"This recommendation is bound by your Karpenter NodePool `default` (CPU 2-32, instance families: m, r, c)"* _(Comment.ProvisionerNote field + template footer shipped in `feat/service-graph-node-provisioner`)_
   - Workload classifier (Phase 7) factors provisioner class — bursty workers on static node groups can't get aggressive recommendations; on Karpenter they can
 
 **Exit:** Partner #1 has merged ≥1 Apply Fix and seen savings reflected in their AWS bill · agent ships all 6 Tier-1 data sources.

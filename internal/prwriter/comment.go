@@ -47,6 +47,11 @@ type Comment struct {
 	// Narrative is the 1-2 sentence plain-English summary above the
 	// cost table; empty falls back to the deterministic savings line.
 	Narrative string
+	// ProvisionerNote is the node-provisioner advisory pin
+	// (provisioner.AdvisoryNote output). Empty for T1 (Karpenter)
+	// because the recommendation is high-confidence by itself; non-empty
+	// for T2/T3 to set merge-time expectations.
+	ProvisionerNote string
 	// SecurityVisible defaults off; customers opt in after they've
 	// cleaned up cost.
 	SecurityVisible bool
@@ -72,6 +77,7 @@ func Render(c Comment) (string, error) {
 		AnnualUSD:          fmtUSD(c.AnnualSavingsUSDCents),
 		ShowSavings:        c.MonthlySavingsUSDCents > 0,
 		Narrative:          c.Narrative,
+		ProvisionerNote:    c.ProvisionerNote,
 		AccuracyDisclosure: AccuracyDisclosureSandbox,
 		OptiqorAnalysisURL: c.OptiqorAnalysisURL,
 		ApplyFixURL:        c.ApplyFixURL,
@@ -105,6 +111,7 @@ type view struct {
 	AnnualUSD          string
 	ShowSavings        bool
 	Narrative          string
+	ProvisionerNote    string
 	UnifiedDiff        string
 	DiffFence          string
 	DiffLines          int
@@ -248,6 +255,10 @@ _Spotted while parsing your chart. Cost is the headline; this is a side-effect._
 
 ---
 
+{{ if .ProvisionerNote -}}
+> **Provisioner context** — {{.ProvisionerNote}}
+
+{{ end -}}
 > {{.AccuracyDisclosure}}
 
 {{ if .OptiqorAnalysisURL -}}

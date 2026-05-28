@@ -79,17 +79,9 @@ func (c SentryConfig) Validate() error {
 // ErrSentryNotConfigured signals callers to fall back to NoopReporter.
 var ErrSentryNotConfigured = errors.New("sentry: DSN not configured")
 
-// NewSentryReporter is a Phase 1 stub: returns ErrSentryNotConfigured
-// even with a non-empty DSN so api/worker boot compiles without pulling
-// in sentry-go. Phase 5 replaces the body.
+// NewSentryReporter delegates to InitSentry — the real sentry-go SDK
+// adapter. Returns ErrSentryNotConfigured on empty DSN so callers can
+// fall back to NoopReporter without conditional imports.
 func NewSentryReporter(cfg SentryConfig) (ErrorReporter, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
-	if cfg.DSN == "" {
-		return nil, ErrSentryNotConfigured
-	}
-	// TODO(phase-5): import getsentry/sentry-go, init the SDK with
-	// PII-redaction transport, tenant-tagging via beforeSend hook.
-	return nil, ErrSentryNotConfigured
+	return InitSentry(cfg)
 }

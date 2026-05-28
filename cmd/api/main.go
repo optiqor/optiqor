@@ -22,6 +22,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/optiqor/optiqor/internal/agent/mtls"
 	"github.com/optiqor/optiqor/internal/applyfix/attribution"
 	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/platform/healthz"
@@ -57,6 +58,17 @@ func run() int {
 
 	logger := logging.New(os.Stdout, cfg.LogLevel)
 	slog.SetDefault(logger)
+
+	if reporter, err := initSentry(cfg); err != nil {
+		logger.Warn("sentry init failed; falling back to noop", "err", err)
+	} else if reporter != nil {
+		prev := telemetry.SetReporter(reporter)
+		defer func() {
+			_ = reporter.Flush(2000)
+			telemetry.SetReporter(prev)
+		}()
+		logger.Info("sentry reporter wired", "env", cfg.SentryEnvironment, "release", cfg.SentryRelease)
+	}
 
 	checks := healthz.NewRegistry()
 	checks.Register("self", healthz.AlwaysOK)
@@ -192,6 +204,36 @@ func dispatchGitHubEvent(ctx context.Context, log *slog.Logger, deps *domainDeps
 			"delivery", delivery, "repo", ev.RepoOwner+"/"+ev.RepoName,
 			"pr", ev.PRNumber, "err", err)
 	}
+}
+
+// initSentry builds the production reporter from cfg. Empty DSN
+// returns (nil, nil) so the caller leaves NoopReporter in place; any
+// other error returns nil + the error so the boot warns + continues.
+func initSentry(cfg config.Config) (telemetry.ErrorReporter, error) {
+	if cfg.SentryDSN == "" {
+		return nil, nil
+	}
+	env := cfg.SentryEnvironment
+	if env == "" {
+		env = string(cfg.Env)
+	}
+	rate := cfg.SentrySampleRate
+	if rate <= 0 {
+		rate = 1.0
+	}
+	r, err := telemetry.NewSentryReporter(telemetry.SentryConfig{
+		DSN:         cfg.SentryDSN,
+		Environment: env,
+		Release:     cfg.SentryRelease,
+		SampleRate:  rate,
+	})
+	if err != nil {
+		if errors.Is(err, telemetry.ErrSentryNotConfigured) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return r, nil
 }
 
 // openPool returns a pgxpool when cfg.PostgresDSN is set. Dev mode
@@ -334,6 +376,16 @@ func HeaderTenantExtractor(r *http.Request) (tenancy.Context, error) {
 	}, nil
 }
 
+// MTLSTenantExtractor pulls the tenant id from a SPIFFE URI SAN on
+// the verified client cert. Falls through to HeaderTenantExtractor
+// when no client cert is present so dev paths still work.
+func MTLSTenantExtractor(r *http.Request) (tenancy.Context, error) {
+	if t, err := mtls.ExtractTenant(r); err == nil {
+		return t, nil
+	}
+	return HeaderTenantExtractor(r)
+}
+
 // requireTenant guarantees a validated tenant scope in the context of
 // every request reaching next.
 func requireTenant(extract TenantExtractor, next http.Handler) http.Handler {
@@ -388,12 +440,17 @@ func withPanicRecovery(logger *slog.Logger, next http.Handler) http.Handler {
 			if rec == nil {
 				return
 			}
+			panicErr := fmt.Errorf("panic: %v", rec)
 			logger.ErrorContext(r.Context(), "panic recovered",
 				"err", fmt.Sprintf("%v", rec),
 				"path", r.URL.Path,
 				"method", r.Method,
 				"stack", string(debug.Stack()),
 			)
+			telemetry.Capture(r.Context(), panicErr, map[string]string{
+				"path":   r.URL.Path,
+				"method": r.Method,
+			})
 			// If the handler already committed the response this is a
 			// no-op + stdlib warning; we still want the log line. Use the
 			// structured envelope so panics surface with the same shape
