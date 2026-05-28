@@ -38,13 +38,19 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - "--ingest-url=$(OPTIQOR_INGEST_URL)"
+            - "--cluster-id=$(OPTIQOR_CLUSTER_ID)"
+            - "--health-addr=:{{ .Values.health.port }}"
           env:
             - name: OPTIQOR_TENANT_ID
               value: {{ required ".Values.tenantID is required" .Values.tenantID | quote }}
+            - name: OPTIQOR_CLUSTER_ID
+              value: {{ required ".Values.clusterID is required" .Values.clusterID | quote }}
             - name: OPTIQOR_INGEST_URL
               value: {{ .Values.ingest.url | quote }}
           ports:
+            - name: health
+              containerPort: {{ .Values.health.port }}
+              protocol: TCP
             {{- if .Values.metrics.enabled }}
             - name: metrics
               containerPort: {{ .Values.metrics.port }}
@@ -52,14 +58,14 @@ spec:
             {{- end }}
           readinessProbe:
             httpGet:
-              path: /readyz
-              port: metrics
+              path: /healthz
+              port: health
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /healthz
-              port: metrics
+              port: health
             initialDelaySeconds: 15
             periodSeconds: 30
           resources:

@@ -12,10 +12,14 @@ rules:
     resources:
       - pods
       - services
+      - endpoints
       - namespaces
       - nodes
       - persistentvolumeclaims
       - configmaps
+      - events
+      - resourcequotas
+      - limitranges
     verbs: {{ toYaml .Values.rbac.verbs | nindent 6 }}
   - apiGroups: ["apps"]
     resources:
