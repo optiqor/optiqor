@@ -1,7 +1,6 @@
 allowBuilds:
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
-ignoredBuiltDependencies:
+  sharp: true
+  unrs-resolver: true
+onlyBuiltDependencies:
   - sharp
   - unrs-resolver
-onlyBuiltDependencies: '["sharp","unrs-resolver"]'

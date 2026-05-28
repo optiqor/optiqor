@@ -56,19 +56,23 @@ func registerWorkflows(d *worker.InMemory, log *slog.Logger, cfg config.Config, 
 
 	latencyRecorder := latency.NewRecorder(reg)
 
+	var tenantSettings workflows.TenantSettingsSource
+	if pool != nil {
+		tenantSettings = workflows.NewTenantSettingsPgSource(pool)
+	}
+
 	bound := []worker.Workflow{
 		workflows.NewEcho(log),
 		workflows.ApplyFix{
-			Composer:  composer,
-			Gate:      gatePipeline,
-			Validator: validatorPipeline,
-			Publisher: &loggingPRPublisher{log: log},
-			Latency:   latencyRecorder,
-			// Skeptic mode default-on for design partner #1 — safest
-			// posture until each tenant's onboarding handler opts out.
-			// Phase 5 plan: backend reads tenants.skeptic_mode_default
-			// per-tenant at dispatch; this worker default sets the
-			// fallback for dev / paths that bypass the read.
+			Composer:       composer,
+			Gate:           gatePipeline,
+			Validator:      validatorPipeline,
+			Publisher:      &loggingPRPublisher{log: log},
+			Latency:        latencyRecorder,
+			TenantSettings: tenantSettings,
+			// Fallback when TenantSettings is nil (dev) or the read
+			// errors. tenants.skeptic_mode_default per-tenant wins
+			// when wired.
 			SkepticMode: true,
 		},
 		workflows.ReceiptIssue{

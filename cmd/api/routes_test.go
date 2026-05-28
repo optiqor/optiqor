@@ -16,7 +16,7 @@ import (
 // domain handler. Lets the wiring tests skip the real socket.
 func fullMux() *http.ServeMux {
 	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil, nil)
-	mountDomainRoutes(mux, buildDomainDeps(config.Config{}, nil, silentLogger()))
+	mountDomainRoutes(mux, buildDomainDeps(config.Config{}, nil, silentLogger()), config.EnvDev)
 	mux.HandleFunc("GET /v1/meta", metaHandler)
 	return mux
 }

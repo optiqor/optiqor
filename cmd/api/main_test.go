@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/platform/healthz"
 	"github.com/optiqor/optiqor/internal/platform/telemetry"
 	"github.com/optiqor/optiqor/internal/tenancy"
@@ -511,5 +512,21 @@ func TestSubtleConstantTimeEq(t *testing.T) {
 				t.Errorf("eq(%q,%q) = %d, want %d", tc.a, tc.b, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestMTLSTenantExtractor_ProdRejectsHeaderFallback(t *testing.T) {
+	prodExtract := MTLSTenantExtractor(config.EnvProd)
+	devExtract := MTLSTenantExtractor(config.EnvDev)
+
+	r := httptest.NewRequest(http.MethodPost, "/x", http.NoBody)
+	r.Header.Set("X-Optiqor-Tenant", "tenant-via-header")
+
+	if _, err := prodExtract(r); err == nil {
+		t.Error("prod must reject the header fallback when no mTLS cert is present")
+	}
+	tc, err := devExtract(r)
+	if err != nil || tc.TenantID != "tenant-via-header" {
+		t.Errorf("dev must fall through to header: tc=%+v err=%v", tc, err)
 	}
 }

@@ -157,6 +157,44 @@ func TestForClass_StaticCapsAggressiveness(t *testing.T) {
 	}
 }
 
+func TestSizing_EffectiveCaps_ScaleByAggressiveness(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		s        Sizing
+		wantMem  int
+		wantReps int
+	}{
+		{"full agg keeps base", Sizing{MaxMemoryReductionPct: 25, MaxReplicaReductionPerPR: 4, MaxAggressiveness: 100}, 25, 4},
+		{"half agg halves base", Sizing{MaxMemoryReductionPct: 30, MaxReplicaReductionPerPR: 4, MaxAggressiveness: 50}, 15, 2},
+		{"zero agg zeroes base", Sizing{MaxMemoryReductionPct: 30, MaxReplicaReductionPerPR: 4, MaxAggressiveness: 0}, 0, 0},
+		{"unset agg zeroes base", Sizing{MaxMemoryReductionPct: 30, MaxReplicaReductionPerPR: 4}, 0, 0},
+		{"agg over 100 caps at base", Sizing{MaxMemoryReductionPct: 10, MaxReplicaReductionPerPR: 1, MaxAggressiveness: 200}, 10, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.s.EffectiveMemoryCap(); got != tc.wantMem {
+				t.Errorf("EffectiveMemoryCap = %d, want %d", got, tc.wantMem)
+			}
+			if got := tc.s.EffectiveReplicaCap(); got != tc.wantReps {
+				t.Errorf("EffectiveReplicaCap = %d, want %d", got, tc.wantReps)
+			}
+		})
+	}
+}
+
+func TestSizing_MemoryCutAllowed_ConsumesAggressiveness(t *testing.T) {
+	full := Sizing{MaxMemoryReductionPct: 20, MaxAggressiveness: 100}
+	half := Sizing{MaxMemoryReductionPct: 20, MaxAggressiveness: 50}
+	if !full.MemoryCutAllowed(15) {
+		t.Error("full agg 15%% should be allowed (cap=20)")
+	}
+	if half.MemoryCutAllowed(15) {
+		t.Error("half agg 15%% should be rejected (effective cap=10)")
+	}
+	if !half.MemoryCutAllowed(10) {
+		t.Error("half agg 10%% boundary should be allowed")
+	}
+}
+
 func TestFor_BackCompatDefaultsToKarpenter(t *testing.T) {
 	// The single-arg shape must equal ForClass(env, ClassKarpenter) so
 	// pre-Phase-5 call sites stay byte-stable.
