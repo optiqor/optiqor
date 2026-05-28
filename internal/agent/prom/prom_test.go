@@ -146,3 +146,37 @@ func TestScraper_PartialFailureKeepsGoing(t *testing.T) {
 		t.Error("scrape with all-failing client should surface the last error")
 	}
 }
+
+func TestScraper_ConcurrentSetPodOwnersAndScrape(t *testing.T) {
+	// Race detector pins the Set/Read invariant. Without the mutex
+	// guard this test crashes "concurrent map iteration and write"
+	// under `go test -race` within ~10 iterations.
+	c := NewInMemoryClient()
+	c.Add(DefaultProfile.CPURate, []Sample{
+		{Labels: map[string]string{"namespace": "prod", "pod": "api-1"}, Value: 1, At: time.Unix(1700, 0)},
+	})
+	s := NewScraper(c, map[PodKey]WorkloadKey{
+		{Namespace: "prod", Pod: "api-1"}: {Namespace: "prod", Kind: "Deployment", Name: "api"},
+	})
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_, _ = s.Scrape(context.Background())
+			}
+		}
+	}()
+	for i := 0; i < 200; i++ {
+		s.SetPodOwners(map[PodKey]WorkloadKey{
+			{Namespace: "prod", Pod: "api-1"}: {Namespace: "prod", Kind: "Deployment", Name: "api"},
+		})
+	}
+	close(stop)
+	<-done
+}

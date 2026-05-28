@@ -154,12 +154,12 @@ func buildDomainDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) *d
 		Receipts:      receiptsH,
 		PRWriter:      prH,
 		Ingest:        ingestH,
-		AgentSnapshot: buildAgentSnapshotHandler(log),
+		AgentSnapshot: buildAgentSnapshotHandler(log, pool),
 		Spike:         spikeH,
 		Auth:          authH,
 		Onboarding:    onboardingH,
 		Preflight:     preflightH,
-		Dashboard:     &dashboard.Handler{Now: func() time.Time { return time.Now().UTC() }},
+		Dashboard:     buildDashboardHandler(pool),
 		Attribution:   buildAttributionHandler(pool),
 	}
 }
@@ -168,8 +168,10 @@ func buildDomainDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) *d
 // OPTIQOR_AGENT_INGEST_SECRET is configured. Dev mode without the
 // secret returns nil and the mux skips the route — agents in dev
 // cannot exercise the path, which is correct (they wouldn't have a
-// secret to issue tokens with either).
-func buildAgentSnapshotHandler(log *slog.Logger) *ingestion.AgentSnapshotHandler {
+// secret to issue tokens with either). Production wires a PgSink so
+// snapshots refresh the agents table + clusters.node_provisioner_class
+// rather than evaporating at the 202 boundary.
+func buildAgentSnapshotHandler(log *slog.Logger, pool *pgxpool.Pool) *ingestion.AgentSnapshotHandler {
 	secret := os.Getenv("OPTIQOR_AGENT_INGEST_SECRET")
 	if secret == "" {
 		log.Warn("OPTIQOR_AGENT_INGEST_SECRET unset; agent snapshot endpoint disabled")
@@ -180,7 +182,25 @@ func buildAgentSnapshotHandler(log *slog.Logger) *ingestion.AgentSnapshotHandler
 		log.Error("agent ident verifier init failed", "err", err)
 		return nil
 	}
-	return &ingestion.AgentSnapshotHandler{Verifier: ver}
+	var sink ingestion.AgentSnapshotSink
+	if pool != nil {
+		sink = ingestion.NewAgentSnapshotPgSink(pool)
+	} else {
+		log.Warn("no Postgres pool; agent snapshot persistence disabled (dashboard agent-health pill will report offline)")
+	}
+	return &ingestion.AgentSnapshotHandler{Verifier: ver, Sink: sink}
+}
+
+// buildDashboardHandler wires AgentHealthPgStore when Postgres is
+// available. SavingsSource + ApplyFixesSource stay nil — both already
+// fall back to the demo-data shape inside the handler, which is the
+// right UX for Phase 5 (real merges land in Phase 6 alongside CUR).
+func buildDashboardHandler(pool *pgxpool.Pool) *dashboard.Handler {
+	h := &dashboard.Handler{Now: func() time.Time { return time.Now().UTC() }}
+	if pool != nil {
+		h.Agent = dashboard.NewAgentHealthPgStore(pool)
+	}
+	return h
 }
 
 // buildAttributionHandler returns the merged-PR cost-attribution
@@ -213,7 +233,7 @@ func buildSessionSigner() *auth.Signer {
 // mountDomainRoutes wires every domain route on mux. Sandbox is
 // IP-rate-limited; apply-fixes + onboarding go through the tenant
 // extractor; everything else is unauth public.
-func mountDomainRoutes(mux *http.ServeMux, deps *domainDeps) {
+func mountDomainRoutes(mux *http.ServeMux, deps *domainDeps, env config.Env) {
 	// Bypass Handler.Mount so the limiter gets in front of the unauth
 	// sandbox routes. FailOpen so a limiter blip can't 503 the sandbox.
 	sandboxMW := ratelimit.Middleware(ratelimit.Options{
@@ -230,11 +250,13 @@ func mountDomainRoutes(mux *http.ServeMux, deps *domainDeps) {
 	tenantMW := func(next http.Handler) http.Handler {
 		return requireTenant(HeaderTenantExtractor, next)
 	}
-	// agentMW prefers the mTLS-derived SPIFFE id and falls back to the
-	// header in dev/test. Production TLS terminates the cert chain
-	// upstream of the api binary's mux.
+	// agentMW prefers the mTLS-derived SPIFFE id. Header fallback is
+	// dev/staging only — production cannot accept a tenant id from a
+	// caller-controlled header on the agent ingest path. Production
+	// TLS terminates the cert chain upstream of the api binary's mux.
+	agentExtractor := MTLSTenantExtractor(env)
 	agentMW := func(next http.Handler) http.Handler {
-		return requireTenant(MTLSTenantExtractor, next)
+		return requireTenant(agentExtractor, next)
 	}
 	mux.Handle("POST /v1/ingest", tenantMW(http.HandlerFunc(deps.Ingest.Ingest)))
 	if deps.AgentSnapshot != nil {

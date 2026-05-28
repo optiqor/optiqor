@@ -255,7 +255,7 @@ func runSnapshotLoop(ctx context.Context, log *slog.Logger, client *egress.Clien
 			batch++
 			if pop.scraper != nil && pop.readers != nil && pop.readers.Workloads != nil {
 				owners := pop.readers.Workloads.PodOwners(ctx)
-				pop.scraper.PodOwners = remapOwnerKeys(owners)
+				pop.scraper.SetPodOwners(remapOwnerKeys(owners))
 			}
 			batchID := fmt.Sprintf("%s-%d", pop.clusterID, batch)
 			snap, perr := pop.Build(ctx, batchID, now.UTC(), interval)

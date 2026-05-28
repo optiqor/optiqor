@@ -93,7 +93,7 @@ func run() int {
 
 	deps := buildDomainDeps(cfg, pool, logger)
 	mux := buildMux(checks, logger, []byte(cfg.GitHubAppWebhookSecret), metrics, deps)
-	mountDomainRoutes(mux, deps)
+	mountDomainRoutes(mux, deps, cfg.Env)
 	mux.HandleFunc("GET /v1/meta", metaHandler)
 	handler := http.Handler(mux)
 	handler = withAccessLog(logger, httpRequests, httpLatency, handler)
@@ -378,12 +378,20 @@ func HeaderTenantExtractor(r *http.Request) (tenancy.Context, error) {
 
 // MTLSTenantExtractor pulls the tenant id from a SPIFFE URI SAN on
 // the verified client cert. Falls through to HeaderTenantExtractor
-// when no client cert is present so dev paths still work.
-func MTLSTenantExtractor(r *http.Request) (tenancy.Context, error) {
-	if t, err := mtls.ExtractTenant(r); err == nil {
-		return t, nil
+// ONLY when not running in prod; in prod a missing/malformed cert is
+// a hard rejection so a spoofed X-Optiqor-Tenant header cannot
+// impersonate any tenant (Phase-5 audit follow-up).
+func MTLSTenantExtractor(env config.Env) TenantExtractor {
+	allowHeaderFallback := env != config.EnvProd
+	return func(r *http.Request) (tenancy.Context, error) {
+		if t, err := mtls.ExtractTenant(r); err == nil {
+			return t, nil
+		}
+		if !allowHeaderFallback {
+			return tenancy.Context{}, tenancy.ErrNoTenant
+		}
+		return HeaderTenantExtractor(r)
 	}
-	return HeaderTenantExtractor(r)
 }
 
 // requireTenant guarantees a validated tenant scope in the context of

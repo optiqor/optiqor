@@ -3,6 +3,7 @@ package prom
 import (
 	"context"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -42,14 +43,18 @@ var DefaultProfile = QueryProfile{
 }
 
 // Scraper aggregates the canonical query set into a slice of
-// WorkloadObservation. PodOwners maps pod names to their controller
-// (Deployment / StatefulSet / DaemonSet) so the scraper can re-project
-// per-pod metrics onto per-workload rows.
+// WorkloadObservation. The pod→workload index is refreshed every tick
+// by the snapshot loop while Scrape() reads it concurrently; the
+// mutex on `owners` makes the swap race-free. Access only via
+// SetPodOwners + the internal reader inside Scrape — direct field
+// reads from outside the package will trigger the data-race detector.
 type Scraper struct {
-	Client    Client
-	Profile   QueryProfile
-	PodOwners map[PodKey]WorkloadKey
-	NowFunc   func() time.Time
+	Client  Client
+	Profile QueryProfile
+	NowFunc func() time.Time
+
+	mu     sync.RWMutex
+	owners map[PodKey]WorkloadKey
 }
 
 // PodKey + WorkloadKey are deliberately separate types so a caller
@@ -69,11 +74,32 @@ type WorkloadKey struct {
 // DefaultProfile; nil clock uses time.Now (callers inject for tests).
 func NewScraper(client Client, owners map[PodKey]WorkloadKey) *Scraper {
 	return &Scraper{
-		Client:    client,
-		Profile:   DefaultProfile,
-		PodOwners: owners,
-		NowFunc:   time.Now,
+		Client:  client,
+		Profile: DefaultProfile,
+		NowFunc: time.Now,
+		owners:  owners,
 	}
+}
+
+// SetPodOwners swaps the pod→workload index. The snapshot loop calls
+// this every tick after rebuilding the index from the informer caches.
+// The new map fully replaces the old; the old map is never mutated
+// after publication so a concurrent Scrape() holding a snapshot stays
+// consistent for its iteration.
+func (s *Scraper) SetPodOwners(owners map[PodKey]WorkloadKey) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.owners = owners
+	s.mu.Unlock()
+}
+
+func (s *Scraper) ownerFor(pk PodKey) (WorkloadKey, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	wk, ok := s.owners[pk]
+	return wk, ok
 }
 
 // Scrape runs every query in the profile and merges the results by
@@ -91,7 +117,7 @@ func (s *Scraper) Scrape(ctx context.Context) ([]WorkloadObservation, error) {
 	apply := func(samples []Sample, set func(o *WorkloadObservation, v float64)) {
 		for _, sm := range samples {
 			pk := PodKey{Namespace: sm.Labels["namespace"], Pod: sm.Labels["pod"]}
-			wk, ok := s.PodOwners[pk]
+			wk, ok := s.ownerFor(pk)
 			if !ok {
 				continue
 			}

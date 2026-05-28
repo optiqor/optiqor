@@ -92,19 +92,44 @@ func (s Sizing) ConfidenceMeets(candidateConfidence string) bool {
 	return confidenceRank(candidateConfidence) >= confidenceRank(s.MinConfidence)
 }
 
-// MemoryCutAllowed treats MaxMemoryReductionPct = 0 as "no cuts at all".
+// MemoryCutAllowed treats EffectiveMemoryCap = 0 as "no cuts at all".
+// The cap scales with MaxAggressiveness so a static-node cluster
+// (Aggressiveness 50) gets half the env's base reduction allowance.
 func (s Sizing) MemoryCutAllowed(reductionPct int) bool {
-	if s.MaxMemoryReductionPct == 0 {
+	maxPct := s.EffectiveMemoryCap()
+	if maxPct == 0 {
 		return reductionPct == 0
 	}
-	return reductionPct <= s.MaxMemoryReductionPct
+	return reductionPct <= maxPct
 }
 
 func (s Sizing) ReplicaCutAllowed(reductionCount int) bool {
 	if reductionCount <= 0 {
 		return true
 	}
-	return reductionCount <= s.MaxReplicaReductionPerPR
+	return reductionCount <= s.EffectiveReplicaCap()
+}
+
+// EffectiveMemoryCap is MaxMemoryReductionPct scaled by MaxAggressiveness.
+// MaxAggressiveness 100 keeps the base cap; 50 halves it; 0 zeroes it.
+// Exported so the validator and PR-writer can show the live ceiling.
+func (s Sizing) EffectiveMemoryCap() int {
+	return scaleByAggressiveness(s.MaxMemoryReductionPct, s.MaxAggressiveness)
+}
+
+// EffectiveReplicaCap mirrors EffectiveMemoryCap for replicas.
+func (s Sizing) EffectiveReplicaCap() int {
+	return scaleByAggressiveness(s.MaxReplicaReductionPerPR, s.MaxAggressiveness)
+}
+
+func scaleByAggressiveness(base, agg int) int {
+	if agg <= 0 || base <= 0 {
+		return 0
+	}
+	if agg >= 100 {
+		return base
+	}
+	return base * agg / 100
 }
 
 // ErrUnknownEnv is for callers that want to fail explicitly on

@@ -517,3 +517,17 @@ func Test0009_SkepticModeDefault_StructureAndBackfill(t *testing.T) {
 		}
 	}
 }
+
+func Test0010_AgentsUniqueIndex_StructureAndDown(t *testing.T) {
+	sql := loadMigration(t, "0010_agents_unique_per_cluster.sql")
+	for _, want := range []string{
+		"CREATE UNIQUE INDEX IF NOT EXISTS agents_tenant_cluster_uniq",
+		"ON agents (tenant_id, cluster_id)",
+		"WHERE cluster_id IS NOT NULL",
+		"DROP INDEX IF EXISTS agents_tenant_cluster_uniq",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("0010 missing: %q", want)
+		}
+	}
+}
