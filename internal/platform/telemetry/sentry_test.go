@@ -68,23 +68,26 @@ func TestSetReporter_NilFallsBackToNoop(t *testing.T) {
 	Capture(context.Background(), errors.New("x"), nil)
 }
 
-func TestNewSentryReporter(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		cfg  SentryConfig
-	}{
-		{"empty dsn not configured", SentryConfig{SampleRate: 1}},
-		// Phase 1 stub: even a valid DSN returns ErrSentryNotConfigured
-		// until Phase 5 wires the real Sentry SDK.
-		{"dsn present still returns stub error", SentryConfig{DSN: "https://foo@sentry.io/123", SampleRate: 1}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewSentryReporter(tc.cfg)
-			if !errors.Is(err, ErrSentryNotConfigured) {
-				t.Errorf("expected ErrSentryNotConfigured, got %v", err)
-			}
-		})
+func TestNewSentryReporter_EmptyDSN_ReturnsNotConfigured(t *testing.T) {
+	_, err := NewSentryReporter(SentryConfig{SampleRate: 1})
+	if !errors.Is(err, ErrSentryNotConfigured) {
+		t.Errorf("expected ErrSentryNotConfigured, got %v", err)
 	}
+}
+
+func TestNewSentryReporter_PresentDSN_BuildsRealReporter(t *testing.T) {
+	// A syntactically-valid DSN is enough — the SDK lazy-connects so
+	// init succeeds against an offline localhost target. The reporter
+	// returned must satisfy the ErrorReporter contract.
+	r, err := NewSentryReporter(SentryConfig{DSN: "https://test@localhost/1", SampleRate: 1})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if r == nil {
+		t.Fatal("nil reporter for non-empty DSN")
+	}
+	// Flush against an offline target returns within the timeout.
+	r.Flush(50)
 }
 
 func TestSentryConfig_Validate(t *testing.T) {

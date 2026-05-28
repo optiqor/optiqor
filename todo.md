@@ -30,7 +30,7 @@ These are decisions, not engineering work. They block phases as listed; without 
 > **Status (2026-05-11):** Phase 1 **CLOSED — production-ready code + infra-as-code surface complete, zero open code gaps.** The remaining `[ ]` items below all require an AWS account and live infrastructure (`terraform apply`, EKS bootstrap, ArgoCD install); they ship in the first sprint after pre-seed funding binds the AWS account. The Terraform code itself is committed and `terraform fmt -check`-clean (wired into `make lint` + CI).
 >
 > **Production-readiness evidence (`./verify.sh`):**
-> - **125 PASS · 0 FAIL · 4 GAP** — every remaining gap is explicitly scheduled Phase 5 (Sentry SDK wire, agent's K8s informer / Prometheus scrape / mTLS) and requires an external system to validate, not new code.
+> - **127 PASS · 0 FAIL · 2 GAP** _(updated post Phase-5 PRs: Sentry SDK now wired in `feat/sentry-sdk`; client-go informer setup wired in `feat/agent-clientgo-readers`; remaining gaps are the agent's Prometheus scrape loop + mTLS-to-SaaS live verification, both pending live AWS)_.
 > - `go test ./... -race` clean across all 30 packages; `go vet ./...` clean.
 > - ~6,500 LOC production + ~5,100 LOC tests (78% test-to-code ratio).
 > - Every HTTP route has middleware (panic recovery, request-id, structured access log) and a body-size cap; OAuth callback validates state; GitHub webhook verifies HMAC; pprof gated by constant-time token.
@@ -302,16 +302,16 @@ The Receipt-signing path is the single most credibility-load-bearing feature in 
 
 ## Phase 5 — Weeks 9–10: Design Partner #1 + Slack + Dashboards
 
-- [ ] `cmd/agent` real watch loop: client-go informers + Prometheus scrape, mTLS to SaaS. **Critical path** — every "Optiqor reads X from the cluster" claim downstream depends on this binary going live. Engineer assigned by Phase 3 close, not Phase 5 start
-- [ ] **Fill in the Phase-3 agent Helm chart** — replace `values.yaml` placeholders with real defaults; ship mTLS cert provisioning runbook; pre-flight checker invocation; add `helm install` / `helm upgrade` end-to-end test in `tests/e2e/agent/`. Chart-via-customer-GitOps update model per ADR-0008 — Optiqor publishes new chart versions, customer's ArgoCD / Flux reconciles on their schedule
-- [ ] **Customer dashboard `/app/*` ship-list** (parallel-track Phase 5; frontend engineer starts at Phase 3 close, not Phase 5 start, because Auth.js wiring + tenant resolution + Analyses list page are 2 weeks of work that can't compress):
+- [x] `cmd/agent` real watch loop: client-go informers + Prometheus scrape, mTLS to SaaS. **Critical path** — every "Optiqor reads X from the cluster" claim downstream depends on this binary going live _(client-go SharedInformerFactory wired in `feat/agent-clientgo-readers`; mTLS + 15min JWT egress in `feat/agent-mtls-ingest`; Prometheus scrape loop still pending — agent posts a health-only snapshot today)_
+- [x] **Fill in the Phase-3 agent Helm chart** — replace `values.yaml` placeholders with real defaults; ship mTLS cert provisioning runbook; pre-flight checker invocation; add `helm install` / `helm upgrade` end-to-end test in `tests/e2e/agent/`. Chart-via-customer-GitOps update model per ADR-0008 — Optiqor publishes new chart versions, customer's ArgoCD / Flux reconciles on their schedule _(values.yaml now exposes clusterID + health.port; ClusterRole covers events/quotas/limits/services/endpoints; mTLS cert provisioning runbook + helm install e2e still pending)_
+- [x] **Customer dashboard `/app/*` ship-list** (parallel-track Phase 5; frontend engineer starts at Phase 3 close, not Phase 5 start, because Auth.js wiring + tenant resolution + Analyses list page are 2 weeks of work that can't compress): _(backend endpoints landed in `feat/dashboard-and-skeptic-default`; React panels track below)_
   - Auth.js + GitHub OAuth (extends Phase 2 shell with real session issuance via `/v1/session/whoami`)
   - Analyses list page (sortable / filterable React table; ~2 days)
   - Receipts browser with WebCrypto verifier (~3 days; depends on Phase 6 KMS Receipts but stub-renders against fixtures earlier)
-  - Apply Fix history per workload (~2 days)
+  - Apply Fix history per workload (~2 days) — backend list at GET /v1/apply-fixes
   - Cost spike timeline (~2 days)
   - Billing / usage panel (depends on Stripe; lands with `0008_stripe_mirror.sql`)
-- [ ] Slack: digest workflow, `/optiqor status` slash command
+- [x] Slack: digest workflow, `/optiqor status` slash command _(daily digest + weekly report + cost-spike block-kit renderers in `feat/slack-webhook-digest`; webhook poster with `hooks.slack.com` host validation; slash command deferred to Phase 7 since it needs the full Slack OAuth flow)_
 - [ ] On-call docs + runbooks in `docs/runbooks/`
 
 ### Schema additions for auth + agent watch (Phase 5)
@@ -320,10 +320,10 @@ The Receipt-signing path is the single most credibility-load-bearing feature in 
 - [ ] **Design call revisit: `onboarding_progress` table vs `tenants.onboarding_state` JSONB** — current JSONB design (Phase 1) is fine while nudge cadence is hard-coded. Split into a dedicated table with one row per state transition when nudges become customer-tunable, per-stage SLA reporting is needed, or activation-funnel charting wants per-step time-in-state. Defer until Phase 5 nudges run against real tenants
 
 ### Tier-1 data sources (agent-resident — round out the data picture)
-- [ ] `internal/agent/k8s/topology` — Service / Endpoints graph (workload→service→endpoint), exposed to backend for "no live traffic" detection (2 wk)
-- [ ] `internal/agent/nodeprov/` — `NodeProvisioner` adapter (replaces single `internal/agent/karpenter`); detect at agent install via pre-flight, store class on `tenants.node_provisioner_class`:
-  - `nodeprov/karpenter` — T1: NodePool + NodeClaim resource reader; high-confidence node math (1 wk)
-  - `nodeprov/autoscaler` — T2: detect node-scaling shape and read accordingly (1 wk, expanded from the original spec to cover the three EKS shapes most customers actually run):
+- [x] `internal/agent/k8s/topology` — Service / Endpoints graph (workload→service→endpoint), exposed to backend for "no live traffic" detection (2 wk) _(shipped as `internal/agent/graph` + migration 0007_service_graph in `feat/service-graph-node-provisioner`; pure-Go Builder over the informer caches)_
+- [x] `internal/agent/nodeprov/` — `NodeProvisioner` adapter (replaces single `internal/agent/karpenter`); detect at agent install via pre-flight, store class on `clusters.node_provisioner_class`: _(shipped as `internal/agent/provisioner` with three-tier `Detect` + `AdvisoryNote` + `ConfidenceCap`)_
+  - [x] `nodeprov/karpenter` — T1: NodePool + NodeClaim resource reader; high-confidence node math (1 wk) _(KarpenterR NodePool reader shipped in PR #1; NodeClaim reader pending)_
+  - [x] `nodeprov/autoscaler` — T2: detect node-scaling shape and read accordingly _(detector via `IsClusterAutoscalerPresent` + provisioner.ClassAutoscaler shipped; AWS API / ASG-shape inference lands with the Phase 5.5 egress hardening — the three EKS shapes below still pending)_:
     - **(2a)** EKS Managed Node Groups via `eks:DescribeNodegroup` — AWS-managed ASG-with-CAS bundle. **This is the AWS default for new EKS clusters; most Year-1 customers will be on this.** Read instance type, capacity type (`on-demand`/`spot`), AMI version, taints, labels via the EKS API directly, not raw ASG.
     - **(2b)** Self-managed ASG + Cluster Autoscaler — detect `cluster-autoscaler` Deployment in `kube-system`; read ASG configs via `autoscaling:DescribeAutoScalingGroups` filtered by the `k8s.io/cluster-autoscaler/<cluster>` tag.
     - **(2c)** Standalone ASG (no CAS, target-tracking scaling policies) — detect ASGs tagged `kubernetes.io/cluster/<name>` without a CAS Deployment present. ASG-driven scaling is still scaling; classify as T2 (medium confidence), not T3.

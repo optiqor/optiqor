@@ -22,6 +22,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/optiqor/optiqor/internal/agent/cluster"
+	"github.com/optiqor/optiqor/internal/agent/egress"
+	"github.com/optiqor/optiqor/internal/ingestion"
 )
 
 var version = "dev"
@@ -35,9 +37,12 @@ func main() {
 func run() int {
 	showVersion := flag.Bool("version", false, "print version and exit")
 	kubeconfig := flag.String("kubeconfig", "", "absolute path to a kubeconfig (out-of-cluster dev only; empty uses in-cluster config)")
+	tenantID := flag.String("tenant-id", os.Getenv("OPTIQOR_TENANT_ID"), "owning tenant id; required for egress")
 	clusterID := flag.String("cluster-id", os.Getenv("OPTIQOR_CLUSTER_ID"), "stable cluster identifier; required")
 	healthAddr := flag.String("health-addr", envOr("OPTIQOR_HEALTH_ADDR", ":8088"), "address for /healthz")
 	resyncStr := flag.String("resync", envOr("OPTIQOR_INFORMER_RESYNC", "10m"), "informer cache resync period")
+	snapshotIntervalStr := flag.String("snapshot-interval", envOr("OPTIQOR_SNAPSHOT_INTERVAL", "60s"), "how often to POST a snapshot to the backend")
+	ingestURL := flag.String("ingest-url", envOr("OPTIQOR_INGEST_URL", ""), "https URL the snapshots POST to; empty disables egress")
 	flag.Parse()
 
 	if *showVersion {
@@ -107,10 +112,43 @@ func run() int {
 
 	healthSrv := startHealthServer(*healthAddr, logger, readers)
 
+	snapshotInterval, err := time.ParseDuration(*snapshotIntervalStr)
+	if err != nil {
+		logger.Error("bad --snapshot-interval", "value", *snapshotIntervalStr, "err", err)
+		return 2
+	}
+	var egressClient *egress.Client
+	if *ingestURL != "" {
+		secret := []byte(os.Getenv("OPTIQOR_INGEST_SECRET"))
+		if len(secret) < 32 {
+			logger.Error("OPTIQOR_INGEST_SECRET must be >= 32 bytes when --ingest-url is set")
+			return 2
+		}
+		if *tenantID == "" {
+			logger.Error("--tenant-id is required when --ingest-url is set")
+			return 2
+		}
+		egressClient, err = egress.New(egress.Config{
+			BackendURL:   *ingestURL,
+			TenantID:     *tenantID,
+			ClusterID:    *clusterID,
+			AgentVersion: version,
+			IngestSecret: secret,
+		})
+		if err != nil {
+			logger.Error("egress init failed", "err", err)
+			return 1
+		}
+		go runSnapshotLoop(ctx, logger, egressClient, *clusterID, snapshotInterval)
+	} else {
+		logger.Info("ingest-url empty; running in observe-only mode")
+	}
+
 	logger.Info("agent ready",
 		"cluster_id", *clusterID,
 		"vpa", vpa != nil,
 		"karpenter", karpenter != nil,
+		"egress", egressClient != nil,
 	)
 
 	<-ctx.Done()
@@ -172,4 +210,42 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// runSnapshotLoop fires every interval until ctx is cancelled. Phase
+// 5 ships the minimal "alive + identity" payload — workload + event
+// + policy bodies grow in PR #3 once the agent owns the
+// readers→payload mapping. The loop never panics; one bad POST logs
+// and waits for the next tick.
+func runSnapshotLoop(ctx context.Context, log *slog.Logger, client *egress.Client, clusterID string, interval time.Duration) {
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+	batch := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-tick.C:
+			batch++
+			snap := ingestion.AgentSnapshot{
+				BatchID:      fmt.Sprintf("%s-%d", clusterID, batch),
+				CapturedAt:   now.UTC(),
+				ClusterID:    clusterID,
+				AgentVersion: version,
+				Health: &ingestion.AgentHealthSnap{
+					Version:              version,
+					DataFreshnessSeconds: int(interval / time.Second),
+				},
+			}
+			postCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			resp, err := client.PostSnapshot(postCtx, snap)
+			cancel()
+			if err != nil {
+				log.WarnContext(ctx, "snapshot post failed", "batch", snap.BatchID, "err", err)
+				continue
+			}
+			log.InfoContext(ctx, "snapshot accepted", "batch", resp.BatchID,
+				"workloads", resp.WorkloadsObs, "events", resp.EventsObs)
+		}
+	}
 }
