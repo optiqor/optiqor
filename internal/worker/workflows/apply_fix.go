@@ -200,6 +200,8 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 		AnnualSavingsUSDCents:  p.Finding.MonthlyUSDCents * 12,
 		Mode:                   prwriter.ModeAgent,
 		GeneratedAt:            p.Now,
+		UnifiedDiff:            resp.UnifiedDiff,
+		Narrative:              resp.Explanation,
 		SecurityVisible:        p.Finding.Category == rules.CategorySecurity,
 	})
 	w.Latency.Observe(latency.StepRender, time.Since(renderStart))
@@ -214,7 +216,7 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 		HeadBranch:  fmt.Sprintf("optiqor/apply-fix/%s", p.ApplyFixID),
 		BaseBranch:  p.BaseBranch,
 		Title:       fmt.Sprintf("optiqor: %s — %s", p.Finding.Workload, p.Finding.Title),
-		Body:        body + "\n\n---\n" + resp.Explanation,
+		Body:        body,
 		UnifiedDiff: resp.UnifiedDiff,
 		ApplyFixID:  p.ApplyFixID,
 	})

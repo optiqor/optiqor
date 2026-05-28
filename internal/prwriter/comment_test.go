@@ -58,16 +58,16 @@ func TestRender(t *testing.T) {
 			name: "security-is-bonus-section",
 			assert: func(t *testing.T, out string) {
 				t.Helper()
-				if !strings.Contains(out, "### Security findings (bonus)") {
+				if !strings.Contains(out, "Security findings</b> (bonus)") {
 					t.Errorf("security section missing bonus marker:\n%s", out)
 				}
 				if !strings.Contains(out, "side-effect") {
 					t.Errorf("missing bonus framing\n%s", out)
 				}
-				cost := strings.Index(out, "### Cost optimisations")
-				sec := strings.Index(out, "### Security findings")
+				cost := strings.Index(out, "Cost optimisations</b>")
+				sec := strings.Index(out, "Security findings</b>")
 				if cost < 0 || sec < 0 || cost > sec {
-					t.Errorf("cost section must precede security section")
+					t.Errorf("cost section must precede security section\n%s", out)
 				}
 			},
 		},
@@ -76,8 +76,67 @@ func TestRender(t *testing.T) {
 			mut:  func(c *Comment) { c.SecurityVisible = false },
 			assert: func(t *testing.T, out string) {
 				t.Helper()
-				if strings.Contains(out, "### Security findings") {
+				if strings.Contains(out, "Security findings</b>") {
 					t.Errorf("security section should not render when toggle off")
+				}
+			},
+		},
+		{
+			name: "cost-section-is-collapsible-details",
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if !strings.Contains(out, "<details open>\n<summary><b>Cost optimisations</b>") {
+					t.Errorf("cost table not wrapped in default-open details:\n%s", out)
+				}
+			},
+		},
+		{
+			name: "diff-preview-renders-when-set",
+			mut: func(c *Comment) {
+				c.UnifiedDiff = "--- a/values.yaml\n+++ b/values.yaml\n@@ -1,3 +1,3 @@\n-cpu: \"2\"\n+cpu: \"1500m\""
+			},
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if !strings.Contains(out, "Apply Fix preview</b>") {
+					t.Errorf("diff preview summary missing:\n%s", out)
+				}
+				if !strings.Contains(out, "```diff\n--- a/values.yaml") {
+					t.Errorf("diff body missing inside fence:\n%s", out)
+				}
+			},
+		},
+		{
+			name: "diff-section-omitted-when-no-diff",
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if strings.Contains(out, "Apply Fix preview") {
+					t.Errorf("diff section should not render when UnifiedDiff empty")
+				}
+			},
+		},
+		{
+			name: "diff-fence-escapes-embedded-backticks",
+			mut: func(c *Comment) {
+				c.UnifiedDiff = "@@ -1 +1 @@\n-name: ```literal```\n+name: ````literal````"
+			},
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				if !strings.Contains(out, "`````diff") {
+					t.Errorf("fence must be 5 backticks to escape 4-backtick body:\n%s", out)
+				}
+			},
+		},
+		{
+			name: "narrative-renders-above-workloads",
+			mut: func(c *Comment) {
+				c.Narrative = "Trim api's CPU request from 2 to 1.5 vCPU based on 30d P95 of 1.2."
+			},
+			assert: func(t *testing.T, out string) {
+				t.Helper()
+				nIdx := strings.Index(out, "Trim api's CPU")
+				wIdx := strings.Index(out, "Workloads analysed")
+				if nIdx < 0 || wIdx < 0 || nIdx > wIdx {
+					t.Errorf("narrative must render above workloads line:\n%s", out)
 				}
 			},
 		},

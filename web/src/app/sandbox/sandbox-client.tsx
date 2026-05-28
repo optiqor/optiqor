@@ -72,6 +72,7 @@ export function SandboxClient() {
       <Results
         status={status}
         copied={copied}
+        onRetry={run}
         onCopy={() => {
           if (status.kind === "ok") {
             navigator.clipboard.writeText(status.data.share_url);
@@ -161,10 +162,12 @@ function Results({
   status,
   copied,
   onCopy,
+  onRetry,
 }: {
   status: Status;
   copied: boolean;
   onCopy: () => void;
+  onRetry: () => void;
 }) {
   return (
     <div className="overflow-hidden rounded-[var(--radius-lg)] bg-[color:var(--color-ink-1)] hairline flex flex-col">
@@ -182,7 +185,9 @@ function Results({
       <div className="flex-1 px-5 py-5">
         {status.kind === "idle" && <EmptyState />}
         {status.kind === "loading" && <LoadingState />}
-        {status.kind === "err" && <ErrorState message={status.message} />}
+        {status.kind === "err" && (
+          <ErrorState message={status.message} onRetry={onRetry} />
+        )}
         {status.kind === "ok" && (
           <ResultsBody data={status.data} copied={copied} onCopy={onCopy} />
         )}
@@ -410,15 +415,36 @@ function LoadingState() {
   );
 }
 
-function ErrorState({ message }: { message: string }) {
+function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
   return (
-    <div className="rounded-[var(--radius-md)] hairline bg-[color:var(--color-ink-2)] p-4">
+    <div
+      role="alert"
+      className="rounded-[var(--radius-md)] hairline bg-[color:var(--color-ink-2)] p-4"
+    >
       <p className="font-mono text-[11px] tracking-[0.08em] uppercase text-[color:var(--color-high)]">
         could not analyze
       </p>
       <p className="mt-2 text-[13px] leading-relaxed text-[color:var(--color-ink-8)] break-words">
         {message}
       </p>
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex h-7 items-center rounded-[var(--radius-sm)] bg-[color:var(--color-ink-9)] px-3 font-mono text-[11px] text-[color:var(--color-ink-0)] hover:bg-white transition-colors"
+        >
+          Retry analysis
+        </button>
+        <span className="font-mono text-[10px] tracking-[0.08em] uppercase text-[color:var(--color-ink-6)]">
+          editing the yaml then ⌘+Enter also re-runs
+        </span>
+      </div>
     </div>
   );
 }

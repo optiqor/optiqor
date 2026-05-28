@@ -34,11 +34,11 @@ func TestHandler_Ingest(t *testing.T) {
 			wantCode: http.StatusBadRequest,
 		},
 		{
-			name:     "missing tenant context returns 400",
+			name:     "missing tenant context returns 401",
 			method:   http.MethodPost,
 			req:      &IngestRequest{PrometheusJSON: []byte(promMatrixOK)},
 			omitCtx:  true,
-			wantCode: http.StatusBadRequest,
+			wantCode: http.StatusUnauthorized,
 		},
 		{
 			name:     "body tenant mismatches context returns 400",

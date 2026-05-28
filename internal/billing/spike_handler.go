@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/optiqor/optiqor/internal/platform/config"
+	"github.com/optiqor/optiqor/internal/platform/httperr"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
@@ -38,11 +39,11 @@ type SpikeHandler struct {
 
 func (h *SpikeHandler) Receive(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		httperr.MethodNotAllowed(w, r, "POST")
 		return
 	}
 	if h.Dispatcher == nil {
-		http.Error(w, "dispatcher not configured", http.StatusInternalServerError)
+		httperr.Internal(w, r, "cost-spike dispatcher not configured")
 		return
 	}
 	body := http.MaxBytesReader(w, r.Body, config.BillingSpikeWebhookMaxBytes)
@@ -51,19 +52,34 @@ func (h *SpikeHandler) Receive(w http.ResponseWriter, r *http.Request) {
 	dec.DisallowUnknownFields()
 	var env SpikeEnvelope
 	if err := dec.Decode(&env); err != nil {
-		http.Error(w, "json: "+err.Error(), http.StatusBadRequest)
+		if httperr.IsBodyTooLarge(err) {
+			httperr.BodyTooLarge(w, r, config.BillingSpikeWebhookMaxBytes)
+			return
+		}
+		httperr.InvalidJSON(w, r, err)
 		return
 	}
-	if env.Tenant == "" || env.WorkloadID == "" {
-		http.Error(w, "tenant and workload_id required", http.StatusBadRequest)
+	if env.Tenant == "" {
+		httperr.MissingField(w, r, "tenant")
+		return
+	}
+	if env.WorkloadID == "" {
+		httperr.MissingField(w, r, "workload_id")
 		return
 	}
 
 	if err := h.Dispatcher.DispatchSpike(tenancy.Context{TenantID: env.Tenant}, env); err != nil {
-		http.Error(w, "dispatch: "+err.Error(), http.StatusBadGateway)
+		httperr.Upstream(w, r, "could not dispatch cost-spike workflow")
 		return
 	}
+	w.Header().Set("Retry-After", "5")
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":              "accepted",
+		"workflow":            "cost_spike",
+		"retry_after_seconds": 5,
+	})
 }
 
 func (h *SpikeHandler) Mount(mux *http.ServeMux) {

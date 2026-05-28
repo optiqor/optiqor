@@ -27,7 +27,7 @@ func silentLogger() *slog.Logger {
 }
 
 func TestHealthz_OK(t *testing.T) {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody))
 	if rec.Code != http.StatusOK {
@@ -117,7 +117,7 @@ func TestReadyz(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := healthz.NewRegistry()
 			tc.setup(r)
-			mux := buildMux(r, silentLogger(), nil, nil)
+			mux := buildMux(r, silentLogger(), nil, nil, nil)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody))
 			if tc.wantCode != 0 && rec.Code != tc.wantCode {
@@ -140,7 +140,7 @@ func TestRequestID(t *testing.T) {
 		{name: "echoed when present", headers: map[string]string{"X-Request-ID": "abc-123"}, want: "abc-123"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
+			mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil, nil)
 			req := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
 			for k, v := range tc.headers {
 				req.Header.Set(k, v)
@@ -215,7 +215,7 @@ func TestGitHubWebhook(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mux := buildMux(healthz.NewRegistry(), silentLogger(), tc.secret, nil)
+			mux := buildMux(healthz.NewRegistry(), silentLogger(), tc.secret, nil, nil)
 			req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader(tc.body))
 			for k, v := range tc.headers {
 				req.Header.Set(k, v)
@@ -323,7 +323,7 @@ func TestMetrics_ExposesRegistry(t *testing.T) {
 	c := reg.NewCounter("optiqor_test_total", "test counter", nil)
 	c.Add(7)
 
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, reg)
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, reg, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody))
 
@@ -438,10 +438,10 @@ func TestRecordingWriter(t *testing.T) {
 
 func TestGitHubOAuthCallback(t *testing.T) {
 	for _, tc := range []struct {
-		name     string
-		url      string
-		wantCode int
-		wantBody string
+		name         string
+		url          string
+		wantCode     int
+		wantLocation string
 	}{
 		{
 			name:     "missing code is 400",
@@ -449,21 +449,21 @@ func TestGitHubOAuthCallback(t *testing.T) {
 			wantCode: http.StatusBadRequest,
 		},
 		{
-			name:     "code accepted",
-			url:      "/oauth/github/callback?state=abc&code=xyz",
-			wantCode: http.StatusOK,
-			wantBody: `"phase":"1"`,
+			name:         "code redirects to dashboard with state",
+			url:          "/oauth/github/callback?state=abc&code=xyz",
+			wantCode:     http.StatusSeeOther,
+			wantLocation: "/app?oauth=github&state=abc",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
+			mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil, nil)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.url, http.NoBody))
 			if rec.Code != tc.wantCode {
-				t.Fatalf("status = %d, want %d", rec.Code, tc.wantCode)
+				t.Fatalf("status = %d, want %d body=%s", rec.Code, tc.wantCode, rec.Body.String())
 			}
-			if tc.wantBody != "" && !strings.Contains(rec.Body.String(), tc.wantBody) {
-				t.Errorf("body missing %q: %s", tc.wantBody, rec.Body.String())
+			if tc.wantLocation != "" && !strings.Contains(rec.Header().Get("Location"), tc.wantLocation) {
+				t.Errorf("Location = %q, want substring %q", rec.Header().Get("Location"), tc.wantLocation)
 			}
 		})
 	}

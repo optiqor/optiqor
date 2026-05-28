@@ -8,10 +8,12 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 	"github.com/optiqor/optiqor/internal/agent/llm/sanitizer"
@@ -20,19 +22,27 @@ import (
 
 // LLMRequest stays small so adapters only marshal; prompt
 // construction is the orchestrator's job.
+//
+// CachedSystem and System are sent as separate system blocks: the
+// Anthropic adapter marks CachedSystem with cache_control: ephemeral so
+// repeated calls hit the prompt cache. Keep CachedSystem byte-stable
+// across calls — Anthropic keys the cache on equality.
 type LLMRequest struct {
-	System    string
-	User      string
-	Model     string // adapter-specific identifier (e.g. "claude-sonnet-4-6")
-	MaxTokens int
+	CachedSystem string
+	System       string
+	User         string
+	Model        string // adapter-specific identifier (e.g. "claude-sonnet-4-6")
+	MaxTokens    int
 }
 
 type LLMResponse struct {
-	Text         string
-	InputTokens  int
-	OutputTokens int
-	CostUSDCents int64
-	Model        string
+	Text              string
+	InputTokens       int
+	OutputTokens      int
+	CacheReadTokens   int // tokens served from the prompt cache (a hit)
+	CacheCreateTokens int // tokens written into the prompt cache (cold miss)
+	CostUSDCents      int64
+	Model             string
 }
 
 // LLMClient is the seam between the orchestrator and any model. Real
@@ -70,12 +80,17 @@ type BudgetRecorder interface {
 }
 
 type CallRecord struct {
-	Workload     string
-	Model        string
-	InputTokens  int
-	OutputTokens int
-	CostUSDCents int64
-	Suspicious   bool
+	Workload       string
+	Purpose        string // "apply-fix" | "narrative" | "classify" | …
+	Model          string
+	InputTokens    int
+	OutputTokens   int
+	CacheHitTokens int // matches llm_calls.cache_hit_tokens
+	CostUSDCents   int64
+	DurationMS     int
+	InputHash      [32]byte
+	OutputHash     [32]byte
+	Suspicious     bool
 }
 
 // Composer is safe for concurrent use as long as its dependencies are.
@@ -110,23 +125,27 @@ func (c *Composer) GenerateFix(ctx context.Context, t tenancy.Context, req FixRe
 		return FixResponse{}, fmt.Errorf("agent: sanitize: %w", err)
 	}
 
+	cached := buildCachedSystem(req)
 	system := buildSystem(req)
 	user := buildUser(req, san.Output)
 
 	// Worst-case projection — never pay for a call we've already
-	// decided is too expensive.
+	// decided is too expensive. Assumes a cold cache (no read discount)
+	// so a partial cache hit never tips us over the cap unexpectedly.
 	if c.Budget.PerCallCents > 0 {
-		projected := projectedCostCents(req.Model, len(system)+len(user), req.maxTokens())
+		projected := projectedCostCents(req.Model, len(cached)+len(system)+len(user), req.maxTokens())
 		if projected > c.Budget.PerCallCents {
 			return FixResponse{}, fmt.Errorf("%w: projected %d cents > cap %d", ErrBudgetExceeded, projected, c.Budget.PerCallCents)
 		}
 	}
 
+	start := time.Now()
 	resp, err := c.LLM.Generate(ctx, LLMRequest{
-		System:    system,
-		User:      user,
-		Model:     req.Model,
-		MaxTokens: req.maxTokens(),
+		CachedSystem: cached,
+		System:       system,
+		User:         user,
+		Model:        req.Model,
+		MaxTokens:    req.maxTokens(),
 	})
 	if err != nil {
 		return FixResponse{}, fmt.Errorf("agent: llm: %w", err)
@@ -142,12 +161,17 @@ func (c *Composer) GenerateFix(ctx context.Context, t tenancy.Context, req FixRe
 
 	if c.Recorder != nil {
 		_ = c.Recorder.Record(ctx, t, CallRecord{
-			Workload:     req.Workload,
-			Model:        resp.Model,
-			InputTokens:  resp.InputTokens,
-			OutputTokens: resp.OutputTokens,
-			CostUSDCents: resp.CostUSDCents,
-			Suspicious:   san.Suspicious,
+			Workload:       req.Workload,
+			Purpose:        "apply-fix",
+			Model:          resp.Model,
+			InputTokens:    resp.InputTokens,
+			OutputTokens:   resp.OutputTokens,
+			CacheHitTokens: resp.CacheReadTokens,
+			CostUSDCents:   resp.CostUSDCents,
+			DurationMS:     int(time.Since(start) / time.Millisecond),
+			InputHash:      sha256.Sum256([]byte(cached + system + user)),
+			OutputHash:     sha256.Sum256([]byte(resp.Text)),
+			Suspicious:     san.Suspicious,
 		})
 	}
 	return out, nil
@@ -158,18 +182,24 @@ func (r FixRequest) maxTokens() int {
 	return 4096
 }
 
-// buildSystem is the cached prefix every Anthropic call shares. Keep
-// it byte-stable: Anthropic prompt caching keys on equality.
-func buildSystem(req FixRequest) string {
+// buildCachedSystem is the stable prefix every Anthropic call shares.
+// Must be byte-identical across calls — Anthropic prompt caching keys
+// on equality. Adding a per-call value here defeats caching; that goes
+// to buildSystem instead.
+func buildCachedSystem(_ FixRequest) string {
 	var b strings.Builder
 	b.WriteString("You are Optiqor, a deterministic Kubernetes cost-and-security review assistant. ")
 	b.WriteString("Output two sections labelled `EXPLANATION:` and `DIFF:`. ")
 	b.WriteString("The diff must be a valid unified diff against the supplied chart values.yaml; nothing else. ")
-	b.WriteString("Never invent fields that do not appear in the input. ")
-	if req.SystemHint != "" {
-		b.WriteString(req.SystemHint)
-	}
+	b.WriteString("Never invent fields that do not appear in the input.")
 	return b.String()
+}
+
+// buildSystem is the per-call addendum (workflow-supplied hint).
+// Empty for most calls; populated only when the caller has a stable
+// hint that genuinely varies per request.
+func buildSystem(req FixRequest) string {
+	return req.SystemHint
 }
 
 func buildUser(req FixRequest, chart string) string {

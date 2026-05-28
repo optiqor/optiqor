@@ -2,11 +2,13 @@ package prwriter
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 	"github.com/optiqor/optiqor/internal/agent"
 	"github.com/optiqor/optiqor/internal/platform/config"
+	"github.com/optiqor/optiqor/internal/platform/httperr"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
@@ -37,16 +39,16 @@ type Handler struct {
 
 func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		httperr.MethodNotAllowed(w, r, "POST")
 		return
 	}
 	if h.Composer == nil {
-		http.Error(w, "composer not configured", http.StatusInternalServerError)
+		httperr.Internal(w, r, "Apply Fix is not configured on this api node")
 		return
 	}
 	tCtx, err := tenancy.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, "missing tenant context", http.StatusUnauthorized)
+		httperr.Unauthorized(w, r, "tenant context required to preview an Apply Fix")
 		return
 	}
 	body := http.MaxBytesReader(w, r.Body, config.PRApplyFixMaxBytes)
@@ -55,11 +57,19 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 	dec.DisallowUnknownFields()
 	var req PreviewRequest
 	if err := dec.Decode(&req); err != nil {
-		http.Error(w, "json: "+err.Error(), http.StatusBadRequest)
+		if httperr.IsBodyTooLarge(err) {
+			httperr.BodyTooLarge(w, r, config.PRApplyFixMaxBytes)
+			return
+		}
+		httperr.InvalidJSON(w, r, err)
 		return
 	}
-	if req.Chart == "" || req.ChartYAML == "" {
-		http.Error(w, "chart and chart_yaml required", http.StatusBadRequest)
+	if req.Chart == "" {
+		httperr.MissingField(w, r, "chart")
+		return
+	}
+	if req.ChartYAML == "" {
+		httperr.MissingField(w, r, "chart_yaml")
 		return
 	}
 
@@ -70,7 +80,13 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 		Model:     req.Model,
 	})
 	if err != nil {
-		http.Error(w, "compose: "+err.Error(), http.StatusBadGateway)
+		if errors.Is(err, agent.ErrBudgetExceeded) {
+			httperr.WriteWithDetails(w, r, http.StatusPaymentRequired, "BUDGET_EXCEEDED",
+				"Apply Fix would exceed the per-call cost cap",
+				map[string]any{"per_call_cents": 40})
+			return
+		}
+		httperr.Upstream(w, r, "LLM did not return a usable fix")
 		return
 	}
 	md, err := Render(Comment{
@@ -81,10 +97,12 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 		MonthlySavingsUSDCents: req.Finding.MonthlyUSDCents,
 		AnnualSavingsUSDCents:  req.Finding.MonthlyUSDCents * 12,
 		Mode:                   ModeAgent,
+		UnifiedDiff:            fix.UnifiedDiff,
+		Narrative:              fix.Explanation,
 		SecurityVisible:        req.Finding.Category == rules.CategorySecurity,
 	})
 	if err != nil {
-		http.Error(w, "render: "+err.Error(), http.StatusInternalServerError)
+		httperr.Internal(w, r, "could not render PR comment")
 		return
 	}
 	out := PreviewResponse{

@@ -12,7 +12,27 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     return (
       <main className="pt-20">
         <Container size="md">
-          <p>Sign in required.</p>
+          <div className="rounded-[var(--radius-lg)] border hairline p-8">
+            <h1 className="text-lg font-medium">Sign in required</h1>
+            <p className="mt-2 text-sm text-[color:var(--color-ink-7)]">
+              The dashboard is gated by your Optiqor session. Sign in to
+              see analyses, Apply Fixes, and signed Receipts.
+            </p>
+            <div className="mt-5 flex items-center gap-3">
+              <Link
+                href="/signin?from=/app"
+                className="rounded-[var(--radius-sm)] bg-[color:var(--color-ink-3)] px-3.5 py-1.5 text-xs font-medium text-[color:var(--color-bg)] hover:opacity-90"
+              >
+                Sign in →
+              </Link>
+              <Link
+                href="/sandbox"
+                className="text-xs text-[color:var(--color-ink-7)] underline-offset-4 hover:underline"
+              >
+                Try the sandbox (no login)
+              </Link>
+            </div>
+          </div>
         </Container>
       </main>
     );

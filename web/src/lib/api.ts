@@ -58,20 +58,61 @@ export async function analyze(values: string): Promise<AnalyzeResponse> {
     body: values,
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    // Surface the backend's error body verbatim when present — the
-    // sandbox panel renders it inline.
-    throw new ApiError(res.status, text.trim() || res.statusText);
+    throw await readApiError(res);
   }
   return (await res.json()) as AnalyzeResponse;
 }
 
+// Structured envelope rendered by internal/platform/httperr. The
+// reader is tolerant: a server that hasn't been migrated yet still
+// produces a usable ApiError via the plain-text fallback.
+type ErrorEnvelope = {
+  error?: {
+    code?: string;
+    message?: string;
+    status_code?: number;
+    request_id?: string;
+    details?: Record<string, unknown>;
+  };
+};
+
+async function readApiError(res: Response): Promise<ApiError> {
+  const text = await res.text().catch(() => "");
+  let code: string | undefined;
+  let message = "";
+  let requestId: string | undefined;
+  let details: Record<string, unknown> | undefined;
+  try {
+    const env = JSON.parse(text) as ErrorEnvelope;
+    if (env.error) {
+      code = env.error.code;
+      message = env.error.message ?? "";
+      requestId = env.error.request_id;
+      details = env.error.details;
+    }
+  } catch {
+    message = text.trim();
+  }
+  if (!message) message = res.statusText || "request failed";
+  return new ApiError(res.status, message, { code, requestId, details });
+}
+
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code?: string;
+  requestId?: string;
+  details?: Record<string, unknown>;
+  constructor(
+    status: number,
+    message: string,
+    extras: { code?: string; requestId?: string; details?: Record<string, unknown> } = {},
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = extras.code;
+    this.requestId = extras.requestId;
+    this.details = extras.details;
   }
 }
 
@@ -130,9 +171,16 @@ export const stageLabels: Record<OnboardingStage, string> = {
   first_receipt_issued: "First Receipt issued",
 };
 
-export async function fetchOnboardingState(headers?: HeadersInit): Promise<OnboardingState> {
-  const res = await fetch(`${apiBase}/v1/onboarding/state`, { headers, credentials: "include" });
-  if (!res.ok) throw new ApiError(res.status, res.statusText);
+export async function fetchOnboardingState(
+  headers?: HeadersInit,
+  signal?: AbortSignal,
+): Promise<OnboardingState> {
+  const res = await fetch(`${apiBase}/v1/onboarding/state`, {
+    headers,
+    credentials: "include",
+    signal,
+  });
+  if (!res.ok) throw await readApiError(res);
   return (await res.json()) as OnboardingState;
 }
 
@@ -146,10 +194,7 @@ export async function transitionOnboarding(
     headers: { "Content-Type": "application/json", ...(headers ?? {}) },
     body: JSON.stringify({ to }),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new ApiError(res.status, text.trim() || res.statusText);
-  }
+  if (!res.ok) throw await readApiError(res);
   return (await res.json()) as OnboardingState;
 }
 

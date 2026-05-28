@@ -9,7 +9,13 @@ import (
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
-var ErrNotFound = errors.New("sandbox: share not found")
+var (
+	ErrNotFound = errors.New("sandbox: share not found")
+	// ErrExpired distinguishes a row that lived but is past TTL from
+	// one that never existed. Handlers translate it to 410 Gone so
+	// caching layers know not to retry.
+	ErrExpired = errors.New("sandbox: share expired")
+)
 
 // SharedAnalysis is what /r/<hash> serves. The structured fields let
 // the share handler render JSON or HTML without re-parsing Body.
@@ -55,8 +61,9 @@ func (s *InMemoryStore) Put(_ context.Context, sa SharedAnalysis) error {
 	return nil
 }
 
-// Get returns ErrNotFound for both missing and expired entries so
-// callers can lazily prune.
+// Get returns ErrNotFound when the hash was never stored and
+// ErrExpired when it lived but is past TTL — the share handler maps
+// these to 404 vs 410 respectively.
 func (s *InMemoryStore) Get(_ context.Context, hash string) (SharedAnalysis, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -65,7 +72,7 @@ func (s *InMemoryStore) Get(_ context.Context, hash string) (SharedAnalysis, err
 		return SharedAnalysis{}, ErrNotFound
 	}
 	if !sa.ExpiresAt.IsZero() && s.now().After(sa.ExpiresAt) {
-		return SharedAnalysis{}, ErrNotFound
+		return SharedAnalysis{}, ErrExpired
 	}
 	return sa, nil
 }

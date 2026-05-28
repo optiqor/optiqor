@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/optiqor/optiqor/internal/platform/config"
+	"github.com/optiqor/optiqor/internal/platform/httperr"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
@@ -39,15 +40,12 @@ type Handler struct {
 
 func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		httperr.MethodNotAllowed(w, r, "POST")
 		return
 	}
-	// Tenant context must come from the request middleware (header in
-	// Phase 1, mTLS SPIFFE id in Phase 5). Reject early so the parser
-	// + sinks never run under a body-claimed tenant.
 	t, err := tenancy.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, "tenant context required", http.StatusBadRequest)
+		httperr.Unauthorized(w, r, "tenant context required — agents authenticate via mTLS SPIFFE id")
 		return
 	}
 
@@ -58,20 +56,24 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	dec.DisallowUnknownFields()
 	var req IngestRequest
 	if err := dec.Decode(&req); err != nil {
-		http.Error(w, "json: "+err.Error(), http.StatusBadRequest)
+		if httperr.IsBodyTooLarge(err) {
+			httperr.BodyTooLarge(w, r, config.IngestMaxBytes)
+			return
+		}
+		httperr.InvalidJSON(w, r, err)
 		return
 	}
-	// Body must agree with the context so a misconfigured agent fails
-	// loudly instead of silently writing under another tenant.
 	if req.Tenant != "" && req.Tenant != t.TenantID {
-		http.Error(w, "tenant in body does not match request context", http.StatusBadRequest)
+		httperr.WriteWithDetails(w, r, http.StatusBadRequest, "TENANT_MISMATCH",
+			"tenant in body does not match the authenticated tenant context",
+			map[string]any{"body_tenant": req.Tenant, "context_tenant": t.TenantID})
 		return
 	}
 	if req.ClusterID != "" {
 		t.ClusterID = req.ClusterID
 	}
 	if len(req.PrometheusJSON) == 0 && len(req.CURRowsCSV) == 0 {
-		http.Error(w, ErrEmptyIngest.Error(), http.StatusBadRequest)
+		httperr.BadRequest(w, r, ErrEmptyIngest.Error())
 		return
 	}
 
@@ -80,12 +82,14 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	if len(req.PrometheusJSON) > 0 {
 		series, err := ParsePrometheusMatrix(bytesReader(req.PrometheusJSON))
 		if err != nil {
-			http.Error(w, "prometheus: "+err.Error(), http.StatusBadRequest)
+			httperr.WriteWithDetails(w, r, http.StatusBadRequest, "PROMETHEUS_PARSE_ERROR",
+				"could not parse prometheus_json: "+err.Error(),
+				map[string]any{"hint": "expect a Prometheus query_range matrix response body"})
 			return
 		}
 		if h.PromSink != nil {
 			if err := h.PromSink(t, series); err != nil {
-				http.Error(w, "prom sink: "+err.Error(), http.StatusInternalServerError)
+				httperr.Internal(w, r, "could not persist Prometheus series")
 				return
 			}
 		}
@@ -94,12 +98,14 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	if len(req.CURRowsCSV) > 0 {
 		rows, err := ParseCURRows(bytesReader(req.CURRowsCSV))
 		if err != nil {
-			http.Error(w, "cur: "+err.Error(), http.StatusBadRequest)
+			httperr.WriteWithDetails(w, r, http.StatusBadRequest, "CUR_PARSE_ERROR",
+				"could not parse cur_rows_csv: "+err.Error(),
+				map[string]any{"hint": "expect AWS CUR rows in canonical CSV order"})
 			return
 		}
 		if h.CURSink != nil {
 			if err := h.CURSink(t, rows); err != nil {
-				http.Error(w, "cur sink: "+err.Error(), http.StatusInternalServerError)
+				httperr.Internal(w, r, "could not persist CUR rows")
 				return
 			}
 		}

@@ -41,6 +41,12 @@ type Comment struct {
 	GeneratedAt            time.Time
 	OptiqorAnalysisURL     string
 	ApplyFixURL            string
+	// UnifiedDiff renders inside a collapsed <details> block when set.
+	// Render does not truncate — cap upstream if the diff is large.
+	UnifiedDiff string
+	// Narrative is the 1-2 sentence plain-English summary above the
+	// cost table; empty falls back to the deterministic savings line.
+	Narrative string
 	// SecurityVisible defaults off; customers opt in after they've
 	// cleaned up cost.
 	SecurityVisible bool
@@ -53,15 +59,19 @@ func Render(c Comment) (string, error) {
 		return "", ErrNoChart
 	}
 	cost, security := split(c.Findings)
+	sortedCost := sortCostForDisplay(cost)
 	view := view{
 		Chart:              c.Chart,
 		Workloads:          c.Workloads,
-		CostFindings:       sortCostForDisplay(cost),
+		CostFindings:       sortedCost,
+		CostCount:          len(sortedCost),
 		SecurityFindings:   security,
+		SecurityCount:      len(security),
 		ShowSecurity:       c.SecurityVisible && len(security) > 0,
 		MonthlyUSD:         fmtUSD(c.MonthlySavingsUSDCents),
 		AnnualUSD:          fmtUSD(c.AnnualSavingsUSDCents),
 		ShowSavings:        c.MonthlySavingsUSDCents > 0,
+		Narrative:          c.Narrative,
 		AccuracyDisclosure: AccuracyDisclosureSandbox,
 		OptiqorAnalysisURL: c.OptiqorAnalysisURL,
 		ApplyFixURL:        c.ApplyFixURL,
@@ -69,6 +79,11 @@ func Render(c Comment) (string, error) {
 	}
 	if c.Mode == ModeAgent {
 		view.AccuracyDisclosure = AccuracyDisclosureAgent
+	}
+	if d := strings.TrimSpace(c.UnifiedDiff); d != "" {
+		view.UnifiedDiff = d
+		view.DiffFence = diffFence(d)
+		view.DiffLines = countLines(d)
 	}
 
 	var buf bytes.Buffer
@@ -82,15 +97,50 @@ type view struct {
 	Chart              string
 	Workloads          int
 	CostFindings       []rules.Finding
+	CostCount          int
 	SecurityFindings   []rules.Finding
+	SecurityCount      int
 	ShowSecurity       bool
 	MonthlyUSD         string
 	AnnualUSD          string
 	ShowSavings        bool
+	Narrative          string
+	UnifiedDiff        string
+	DiffFence          string
+	DiffLines          int
 	AccuracyDisclosure string
 	OptiqorAnalysisURL string
 	ApplyFixURL        string
 	GeneratedAtISO     string
+}
+
+// diffFence returns a backtick fence one character longer than any
+// run of backticks inside the diff body. Keeps a values.yaml fragment
+// that uses ``` from breaking the surrounding code block.
+func diffFence(s string) string {
+	longest, cur := 0, 0
+	for _, r := range s {
+		if r == '`' {
+			cur++
+			if cur > longest {
+				longest = cur
+			}
+		} else {
+			cur = 0
+		}
+	}
+	return strings.Repeat("`", longest+3)
+}
+
+func countLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	n := strings.Count(s, "\n")
+	if !strings.HasSuffix(s, "\n") {
+		n++
+	}
+	return n
 }
 
 // generatedAt truncates to the minute so renders stay diff-stable
@@ -154,19 +204,38 @@ const tmplBody = `## Optiqor analysis — {{.Chart}}
 **No cost optimisations detected** — this chart is already clean.
 {{- end }}
 
+{{ if .Narrative -}}
+{{.Narrative}}
+
+{{ end -}}
 _Workloads analysed: {{.Workloads}}._
 
 {{ if .CostFindings -}}
-### Cost optimisations
+<details open>
+<summary><b>Cost optimisations</b> · {{.CostCount}} finding{{ if ne .CostCount 1 }}s{{ end }}{{ if .ShowSavings }} · save {{.MonthlyUSD}}/mo{{ end }}</summary>
+
 | Severity | Workload | Title | Save / mo |
 | --- | --- | --- | --- |
 {{ range .CostFindings -}}
 | {{.Severity}} | {{.Workload}} | {{.Title}} | {{ if gt .MonthlyUSDCents 0 }}save ~${{ printf "%d.%02d" (divCents .MonthlyUSDCents 100) (modCents .MonthlyUSDCents 100) }}{{ else }}—{{ end }} |
 {{ end }}
+</details>
+{{- end }}
+
+{{ if .UnifiedDiff -}}
+<details open>
+<summary><b>Apply Fix preview</b> · {{.DiffLines}}-line <code>values.yaml</code> diff</summary>
+
+{{.DiffFence}}diff
+{{.UnifiedDiff}}
+{{.DiffFence}}
+</details>
 {{- end }}
 
 {{ if .ShowSecurity -}}
-### Security findings (bonus)
+<details>
+<summary><b>Security findings</b> (bonus) · {{.SecurityCount}}</summary>
+
 _Spotted while parsing your chart. Cost is the headline; this is a side-effect._
 
 | Severity | Workload | Title |
@@ -174,6 +243,7 @@ _Spotted while parsing your chart. Cost is the headline; this is a side-effect._
 {{ range .SecurityFindings -}}
 | {{.Severity}} | {{.Workload}} | {{.Title}} |
 {{ end }}
+</details>
 {{- end }}
 
 ---

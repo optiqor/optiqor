@@ -237,12 +237,23 @@ func TestPgStore_Get(t *testing.T) {
 			exec: &fakeExec{
 				rowResult: fakeRow{values: []any{
 					"cli", "application/json", []byte(`{}`),
-					0, []byte(`[]`), createdAt, createdAt.Add(time.Hour),
+					0, []byte(`[]`), createdAt, expiresAt,
 				}},
 				execErr:    errors.New("update failed"),
 				execErrFor: "view_count",
 			},
 			hash: "h",
+		},
+		{
+			name: "expired row returns ErrExpired not ErrNotFound",
+			exec: &fakeExec{
+				rowResult: fakeRow{values: []any{
+					"cli", "application/json", []byte(`{}`),
+					0, []byte(`[]`), createdAt, createdAt.Add(time.Hour),
+				}},
+			},
+			hash:    "stale",
+			wantErr: ErrExpired,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

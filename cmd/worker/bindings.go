@@ -7,7 +7,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/agent/llm/anthropic"
+	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/receipts"
 	"github.com/optiqor/optiqor/internal/tenancy"
 	"github.com/optiqor/optiqor/internal/worker/workflows"
@@ -23,6 +27,25 @@ func (noopLLM) Generate(_ context.Context, _ agent.LLMRequest) (agent.LLMRespons
 		Text:  "EXPLANATION:\nLLM not configured in this environment.\nDIFF:\n",
 		Model: "noop",
 	}, nil
+}
+
+func pickLLM(cfg config.Config, log *slog.Logger) agent.LLMClient {
+	if cfg.AnthropicAPIKey == "" {
+		return noopLLM{}
+	}
+	client, err := anthropic.New(anthropic.Config{APIKey: cfg.AnthropicAPIKey})
+	if err != nil {
+		log.Error("anthropic init failed; using noop LLM", "err", err)
+		return noopLLM{}
+	}
+	return client
+}
+
+func pickRecorder(pool *pgxpool.Pool) agent.BudgetRecorder {
+	if pool == nil {
+		return nil
+	}
+	return agent.NewPgRecorder(pool)
 }
 
 // loggingPRPublisher / loggingRollbackInitiator / loggingSpikeNotifier

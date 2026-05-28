@@ -116,12 +116,12 @@ func TestTransition(t *testing.T) {
 				h.Transition(httptest.NewRecorder(), adv)
 			},
 			body:       `{"to":"signed_up"}`,
-			wantStatus: http.StatusBadRequest,
+			wantStatus: http.StatusConflict,
 		},
 		{
 			name:       "rejects unknown stage",
 			body:       `{"to":"warp-drive"}`,
-			wantStatus: http.StatusBadRequest,
+			wantStatus: http.StatusConflict,
 		},
 		{
 			name:       "rejects unknown field",
