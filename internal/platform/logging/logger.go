@@ -43,6 +43,15 @@ func WithWorkflowID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, workflowIDKey, id)
 }
 
+// RequestIDFromContext returns the value set by WithRequestID, or empty
+// when no middleware seeded the ctx (cron jobs, tests).
+func RequestIDFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(requestIDKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
 // New returns a JSON slog.Logger with the context auto-injection
 // handler. lvl is debug|info|warn|error (case-insensitive).
 func New(w io.Writer, lvl string) *slog.Logger {

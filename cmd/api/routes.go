@@ -10,21 +10,28 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/optiqor/optiqor/internal/agent"
+	"github.com/optiqor/optiqor/internal/agent/llm/anthropic"
+	"github.com/optiqor/optiqor/internal/applyfix/attribution"
 	"github.com/optiqor/optiqor/internal/auth"
 	"github.com/optiqor/optiqor/internal/billing"
 	"github.com/optiqor/optiqor/internal/cost"
 	"github.com/optiqor/optiqor/internal/ingestion"
 	"github.com/optiqor/optiqor/internal/onboarding"
+	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/platform/ratelimit"
 	"github.com/optiqor/optiqor/internal/prwriter"
 	"github.com/optiqor/optiqor/internal/receipts"
 	"github.com/optiqor/optiqor/internal/sandbox"
 	"github.com/optiqor/optiqor/internal/tenancy"
+	"github.com/optiqor/optiqor/internal/vcs"
 	"github.com/optiqor/optiqor/internal/worker/workflows"
 )
 
@@ -40,18 +47,19 @@ const (
 // through to main(). One owner per surface; cmd/api/main.go reaches
 // into this struct rather than building handlers itself.
 type domainDeps struct {
-	Sandbox    *sandbox.Handler
-	Receipts   *receipts.Handler
-	PRWriter   *prwriter.Handler
-	Ingest     *ingestion.Handler
-	Spike      *billing.SpikeHandler
-	Auth       *auth.Handler
-	Onboarding *onboarding.Handler
+	Sandbox     *sandbox.Handler
+	Receipts    *receipts.Handler
+	PRWriter    *prwriter.Handler
+	Ingest      *ingestion.Handler
+	Spike       *billing.SpikeHandler
+	Auth        *auth.Handler
+	Onboarding  *onboarding.Handler
+	Attribution *attribution.Handler // nil until Postgres is wired
 }
 
-// noopLLM is a Phase-1 default LLMClient. It returns an empty diff
-// and a fixed explanation. cmd/api wires the real Anthropic client
-// behind the same interface when the API key is configured.
+// noopLLM is the dev-mode LLMClient — returns a deterministic stub so
+// the dashboard renders without an Anthropic API key. Production
+// swaps via pickLLM when OPTIQOR_ANTHROPIC_API_KEY is set.
 type noopLLM struct{}
 
 func (noopLLM) Generate(_ context.Context, _ agent.LLMRequest) (agent.LLMResponse, error) {
@@ -59,6 +67,32 @@ func (noopLLM) Generate(_ context.Context, _ agent.LLMRequest) (agent.LLMRespons
 		Text:  "EXPLANATION:\nLLM not configured in this environment.\nDIFF:\n",
 		Model: "noop",
 	}, nil
+}
+
+// pickLLM selects the production Anthropic adapter when an API key is
+// configured. An init failure logs and falls back to noopLLM so a bad
+// key never takes the api binary down — Apply Fix returns an empty
+// diff until the operator corrects the key.
+func pickLLM(cfg config.Config, log *slog.Logger) agent.LLMClient {
+	if cfg.AnthropicAPIKey == "" {
+		return noopLLM{}
+	}
+	client, err := anthropic.New(anthropic.Config{APIKey: cfg.AnthropicAPIKey})
+	if err != nil {
+		log.Error("anthropic init failed; using noop LLM", "err", err)
+		return noopLLM{}
+	}
+	return client
+}
+
+// pickRecorder returns the production PgRecorder when Postgres is
+// connected; otherwise nil so the Composer skips attribution writes.
+// llm_calls is RLS-bound so a nil-pool boot cannot accidentally leak.
+func pickRecorder(pool *pgxpool.Pool) agent.BudgetRecorder {
+	if pool == nil {
+		return nil
+	}
+	return agent.NewPgRecorder(pool)
 }
 
 // noopSpikeDispatcher logs the spike at debug level and acks. The
@@ -74,7 +108,7 @@ func (noopSpikeDispatcher) DispatchSpike(_ tenancy.Context, _ billing.SpikeEnvel
 // of every domain handler. Production cmd/api swaps these for the
 // real adapters (real LLMClient, real Stores, real Temporal-backed
 // SpikeDispatcher); the wiring shape stays the same.
-func buildDomainDeps() *domainDeps {
+func buildDomainDeps(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) *domainDeps {
 	pricer := cost.NewStaticPricer()
 	region := "us-east-1"
 
@@ -91,9 +125,9 @@ func buildDomainDeps() *domainDeps {
 	receiptsH := &receipts.Handler{Store: receiptsStore, Registry: receiptsReg}
 
 	composer := &agent.Composer{
-		LLM:      noopLLM{},
+		LLM:      pickLLM(cfg, log),
 		Budget:   agent.Budget{PerCallCents: 40}, // $0.40 cap per backend CLAUDE.md
-		Recorder: nil,                            // wired to llm_calls in Phase 1.5
+		Recorder: pickRecorder(pool),
 	}
 	prH := &prwriter.Handler{Composer: composer}
 
@@ -105,13 +139,28 @@ func buildDomainDeps() *domainDeps {
 	onboardingH := &onboarding.Handler{Service: onboarding.NewService(onboarding.NewInMemoryStore())}
 
 	return &domainDeps{
-		Sandbox:    sandboxH,
-		Receipts:   receiptsH,
-		PRWriter:   prH,
-		Ingest:     ingestH,
-		Spike:      spikeH,
-		Auth:       authH,
-		Onboarding: onboardingH,
+		Sandbox:     sandboxH,
+		Receipts:    receiptsH,
+		PRWriter:    prH,
+		Ingest:      ingestH,
+		Spike:       spikeH,
+		Auth:        authH,
+		Onboarding:  onboardingH,
+		Attribution: buildAttributionHandler(pool),
+	}
+}
+
+// buildAttributionHandler returns the merged-PR cost-attribution
+// orchestrator when Postgres is wired. Dev mode (nil pool) returns
+// nil; cmd/api/main.go's webhook router treats that as "skip dispatch".
+func buildAttributionHandler(pool *pgxpool.Pool) *attribution.Handler {
+	if pool == nil {
+		return nil
+	}
+	return &attribution.Handler{
+		Resolver: attribution.NewPgResolver(pool),
+		Store:    attribution.NewPgStore(pool),
+		Poster:   attribution.NewVCSPoster(vcs.NewGitHub()),
 	}
 }
 

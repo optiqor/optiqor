@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/optiqor/optiqor/internal/platform/config"
+	"github.com/optiqor/optiqor/internal/platform/httperr"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
@@ -51,12 +52,12 @@ type SLOTable struct {
 func (h *Handler) GetState(w http.ResponseWriter, r *http.Request) {
 	t, err := tenancy.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, "tenant required", http.StatusUnauthorized)
+		httperr.Unauthorized(w, r, "tenant required — set X-Optiqor-Tenant or a valid session JWT")
 		return
 	}
 	st, err := h.Service.Get(r.Context(), t.TenantID)
 	if err != nil {
-		http.Error(w, "onboarding: "+err.Error(), http.StatusInternalServerError)
+		httperr.Internal(w, r, "could not load onboarding state")
 		return
 	}
 	writeJSON(w, http.StatusOK, buildStateResponse(st))
@@ -69,7 +70,7 @@ type TransitionRequest struct {
 func (h *Handler) Transition(w http.ResponseWriter, r *http.Request) {
 	t, err := tenancy.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, "tenant required", http.StatusUnauthorized)
+		httperr.Unauthorized(w, r, "tenant required — set X-Optiqor-Tenant or a valid session JWT")
 		return
 	}
 	body := http.MaxBytesReader(w, r.Body, config.OnboardingTransitionMaxBytes)
@@ -78,20 +79,26 @@ func (h *Handler) Transition(w http.ResponseWriter, r *http.Request) {
 	dec.DisallowUnknownFields()
 	var req TransitionRequest
 	if err := dec.Decode(&req); err != nil {
-		http.Error(w, "decode: "+err.Error(), http.StatusBadRequest)
+		if httperr.IsBodyTooLarge(err) {
+			httperr.BodyTooLarge(w, r, config.OnboardingTransitionMaxBytes)
+			return
+		}
+		httperr.InvalidJSON(w, r, err)
 		return
 	}
 	if req.To == "" {
-		http.Error(w, `field "to" required`, http.StatusBadRequest)
+		httperr.MissingField(w, r, "to")
 		return
 	}
 	st, err := h.Service.Transition(r.Context(), t.TenantID, req.To)
 	if errors.Is(err, ErrIllegalTransition) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httperr.WriteWithDetails(w, r, http.StatusConflict, "ILLEGAL_TRANSITION",
+			err.Error(),
+			map[string]any{"current": st.Current, "requested": req.To})
 		return
 	}
 	if err != nil {
-		http.Error(w, "transition: "+err.Error(), http.StatusInternalServerError)
+		httperr.Internal(w, r, "could not record transition")
 		return
 	}
 	writeJSON(w, http.StatusOK, buildStateResponse(st))

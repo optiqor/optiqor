@@ -3,20 +3,25 @@ package main
 import (
 	"log/slog"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/optiqor/optiqor/internal/agent"
 	"github.com/optiqor/optiqor/internal/applyfix/gate"
+	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/receipts"
 	"github.com/optiqor/optiqor/internal/worker"
 	"github.com/optiqor/optiqor/internal/worker/workflows"
 )
 
-// registerWorkflows binds every Year-1 workflow with Phase-1 dev
-// deps. A registration failure aborts the whole binding so we never
-// boot with a partial surface.
-func registerWorkflows(d *worker.InMemory, log *slog.Logger) error {
+// registerWorkflows binds every Year-1 workflow. A registration failure
+// aborts the whole binding so we never boot with a partial surface.
+// pool may be nil in dev (in-memory recorder skip); cfg.AnthropicAPIKey
+// flips the LLM from noop to the real adapter.
+func registerWorkflows(d *worker.InMemory, log *slog.Logger, cfg config.Config, pool *pgxpool.Pool) error {
 	composer := &agent.Composer{
-		LLM:    noopLLM{},
-		Budget: agent.Budget{PerCallCents: 40},
+		LLM:      pickLLM(cfg, log),
+		Budget:   agent.Budget{PerCallCents: 40},
+		Recorder: pickRecorder(pool),
 	}
 
 	// Ephemeral Ed25519 signer; restart rotates the key. Production

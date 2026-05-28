@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"github.com/optiqor/optiqor/internal/cost"
 	"github.com/optiqor/optiqor/internal/parser"
 	"github.com/optiqor/optiqor/internal/platform/config"
+	"github.com/optiqor/optiqor/internal/platform/httperr"
 )
 
 // AccuracyDisclosure must stay byte-identical to the CLI string so
@@ -66,17 +68,16 @@ type AnalyzeResponse struct {
 // 500 on pricer/store failure.
 func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		httperr.MethodNotAllowed(w, r, "POST")
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.SandboxAnalyzeMaxBytes))
 	if err != nil {
-		// MaxBytesReader's error Error() starts with "http: request body too large".
-		if strings.Contains(err.Error(), "request body too large") {
-			http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
+		if httperr.IsBodyTooLarge(err) || strings.Contains(err.Error(), "request body too large") {
+			httperr.BodyTooLarge(w, r, config.SandboxAnalyzeMaxBytes)
 			return
 		}
-		http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+		httperr.BadRequest(w, r, "could not read request body: "+err.Error())
 		return
 	}
 	defer func() { _ = r.Body.Close() }()
@@ -84,10 +85,12 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 	ws, err := parser.ParseValues(strings.NewReader(string(body)))
 	if err != nil {
 		if errors.Is(err, parser.ErrParse) {
-			http.Error(w, "parser: "+err.Error(), http.StatusBadRequest)
+			httperr.WriteWithDetails(w, r, http.StatusBadRequest, "PARSE_ERROR",
+				"could not parse values.yaml: "+err.Error(),
+				map[string]any{"hint": "make sure the body is a single Helm values.yaml document"})
 			return
 		}
-		http.Error(w, "parser: "+err.Error(), http.StatusInternalServerError)
+		httperr.LogAndInternal(w, r, h.logger(), err, "parser")
 		return
 	}
 
@@ -104,7 +107,7 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 		for _, wl := range ws {
 			e, err := est.Estimate(wl)
 			if err != nil {
-				http.Error(w, "cost: "+err.Error(), http.StatusInternalServerError)
+				httperr.LogAndInternal(w, r, h.logger(), err, "cost.estimate")
 				return
 			}
 			costEsts = append(costEsts, e)
@@ -133,7 +136,7 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 
 	out, err := json.Marshal(resp)
 	if err != nil {
-		http.Error(w, "encode: "+err.Error(), http.StatusInternalServerError)
+		httperr.LogAndInternal(w, r, h.logger(), err, "json.marshal")
 		return
 	}
 
@@ -168,25 +171,37 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 // missing and expired hashes.
 func (h *Handler) Share(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		httperr.MethodNotAllowed(w, r, "GET")
 		return
 	}
 	hash := r.PathValue("hash")
 	if hash == "" {
-		http.Error(w, "missing hash", http.StatusBadRequest)
+		httperr.MissingField(w, r, "hash")
 		return
 	}
 	if h.Store == nil {
-		http.Error(w, "store not configured", http.StatusInternalServerError)
+		httperr.LogAndInternal(w, r, h.logger(), errors.New("nil store"), "sandbox.Share")
 		return
 	}
 	sa, err := h.Store.Get(r.Context(), hash)
-	if errors.Is(err, ErrNotFound) {
-		http.Error(w, "not found", http.StatusNotFound)
+	switch {
+	case errors.Is(err, ErrExpired):
+		if wantsJSON(r) {
+			httperr.Gone(w, r, "shared analysis")
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		renderExpiredHTML(w, hash)
 		return
-	}
-	if err != nil {
-		http.Error(w, "store: "+err.Error(), http.StatusInternalServerError)
+	case errors.Is(err, ErrNotFound):
+		if wantsJSON(r) {
+			httperr.NotFound(w, r, "shared analysis")
+			return
+		}
+		renderNotFoundHTML(w, hash)
+		return
+	case err != nil:
+		httperr.LogAndInternal(w, r, h.logger(), err, "sandbox.Share")
 		return
 	}
 
@@ -275,6 +290,50 @@ func (h *Handler) logger() *slog.Logger {
 
 func (h *Handler) String() string {
 	return fmt.Sprintf("sandbox.Handler(region=%s)", h.Region)
+}
+
+// renderNotFoundHTML answers /r/{hash} for an unknown hash with a tiny
+// branded page rather than a bare "not found" string — browser users
+// hit this when a share URL was mistyped or never existed.
+func renderNotFoundHTML(w http.ResponseWriter, hash string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	//nolint:gosec // G705: hash is HTML-escaped inside sharePage via html.EscapeString
+	_, _ = w.Write(sharePage("Share not found",
+		"We could not find an analysis at this URL. The hash may be mistyped, or the share never existed.",
+		hash))
+}
+
+// renderExpiredHTML answers /r/{hash} for a past-TTL hash with 410 Gone
+// + a friendly message + a CTA to re-run the analysis. 410 (not 404)
+// tells caches and crawlers not to retry.
+func renderExpiredHTML(w http.ResponseWriter, hash string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusGone)
+	//nolint:gosec // G705: hash is HTML-escaped inside sharePage via html.EscapeString
+	_, _ = w.Write(sharePage("Share expired",
+		"This analysis was shared more than 30 days ago and has aged out. Re-run the analyzer to mint a fresh URL.",
+		hash))
+}
+
+const sharePageStyle = `<style>
+body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:42rem;margin:4rem auto;padding:0 1.25rem;color:#1f2933;line-height:1.55}
+h1{margin:0 0 0.5rem;font-size:1.5rem}
+.muted{color:#52606d;font-size:0.95rem}
+.cta{display:inline-block;margin-top:1.5rem;padding:0.55rem 1rem;background:#111;color:#fff;text-decoration:none;border-radius:6px;font-weight:600}
+.hash{font-family:ui-monospace,monospace;font-size:0.85rem;color:#7b8794;margin-top:1.5rem}
+</style>`
+
+func sharePage(title, body, hash string) []byte {
+	// hash is user-supplied URL input — escape before embedding.
+	safeHash := html.EscapeString(hash)
+	return []byte("<!doctype html><html><head><meta charset=\"utf-8\"><title>" + title +
+		" — Optiqor</title>" + sharePageStyle + "</head><body>" +
+		"<h1>" + title + "</h1>" +
+		"<p class=\"muted\">" + body + "</p>" +
+		"<a class=\"cta\" href=\"/sandbox\">Open the sandbox →</a>" +
+		"<div class=\"hash\">share: <code>" + safeHash + "</code></div>" +
+		"</body></html>")
 }
 
 // publicURL honours PublicBaseURL when set; otherwise derives scheme

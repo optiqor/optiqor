@@ -87,3 +87,19 @@ func (m *Memory) Len() int {
 	defer m.mu.Unlock()
 	return len(m.buckets)
 }
+
+// Quota satisfies Quotaer so the middleware can emit X-RateLimit-*
+// headers. Keys we have not seen yet return the full quota.
+func (m *Memory) Quota(_ context.Context, key string) (limit, remaining int, resetAt time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b, ok := m.buckets[key]
+	if !ok || m.now().After(b.expiresAt) {
+		return m.limit, m.limit, m.now().Add(m.window)
+	}
+	rem := m.limit - b.count
+	if rem < 0 {
+		rem = 0
+	}
+	return m.limit, rem, b.expiresAt
+}

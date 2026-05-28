@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/optiqor/optiqor/internal/platform/config"
+	"github.com/optiqor/optiqor/internal/platform/httperr"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
@@ -60,7 +61,7 @@ func (h *Handler) Whoami(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	http.Error(w, "no session", http.StatusUnauthorized)
+	httperr.Unauthorized(w, r, "no session — sign in to issue one via POST /v1/session/issue")
 }
 
 // IssueRequest is the dashboard-built handshake body. Subject is the
@@ -87,11 +88,19 @@ func (h *Handler) Issue(w http.ResponseWriter, r *http.Request) {
 	dec.DisallowUnknownFields()
 	var req IssueRequest
 	if err := dec.Decode(&req); err != nil {
-		http.Error(w, "decode: "+err.Error(), http.StatusBadRequest)
+		if httperr.IsBodyTooLarge(err) {
+			httperr.BodyTooLarge(w, r, config.SessionIssueMaxBytes)
+			return
+		}
+		httperr.InvalidJSON(w, r, err)
 		return
 	}
-	if req.Subject == "" || req.TenantID == "" {
-		http.Error(w, "subject and tenant_id required", http.StatusBadRequest)
+	if req.Subject == "" {
+		httperr.MissingField(w, r, "subject")
+		return
+	}
+	if req.TenantID == "" {
+		httperr.MissingField(w, r, "tenant_id")
 		return
 	}
 
@@ -106,7 +115,7 @@ func (h *Handler) Issue(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := h.Signer.Issue(s)
 	if err != nil {
-		http.Error(w, "issue: "+err.Error(), http.StatusInternalServerError)
+		httperr.Internal(w, r, "could not issue session")
 		return
 	}
 

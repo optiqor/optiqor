@@ -12,14 +12,20 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"runtime/debug"
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/optiqor/optiqor/internal/applyfix/attribution"
 	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/platform/healthz"
+	"github.com/optiqor/optiqor/internal/platform/httperr"
 	"github.com/optiqor/optiqor/internal/platform/logging"
 	"github.com/optiqor/optiqor/internal/platform/telemetry"
 	"github.com/optiqor/optiqor/internal/tenancy"
@@ -64,8 +70,18 @@ func run() int {
 		nil,
 		[]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5})
 
-	mux := buildMux(checks, logger, []byte(cfg.GitHubAppWebhookSecret), metrics)
-	mountDomainRoutes(mux, buildDomainDeps())
+	pool, err := openPool(cfg, logger)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "pool:", err)
+		return 2
+	}
+	if pool != nil {
+		defer pool.Close()
+	}
+
+	deps := buildDomainDeps(cfg, pool, logger)
+	mux := buildMux(checks, logger, []byte(cfg.GitHubAppWebhookSecret), metrics, deps)
+	mountDomainRoutes(mux, deps)
 	mux.HandleFunc("GET /v1/meta", metaHandler)
 	handler := http.Handler(mux)
 	handler = withAccessLog(logger, httpRequests, httpLatency, handler)
@@ -111,11 +127,101 @@ func run() int {
 	return 0
 }
 
+// oauthStateRE constrains the state token to the Auth.js / RFC 6749
+// alphabet so a tainted state cannot smuggle path or query bytes into
+// the redirect destination. Anything outside the set is dropped, not
+// rejected — the dashboard can still complete login without state.
+var oauthStateRE = regexp.MustCompile(`^[A-Za-z0-9._~+/=-]{1,256}$`)
+
+// oauthRedirectTarget resolves where to send the browser after a
+// GitHub OAuth callback. The base origin comes ONLY from
+// OPTIQOR_DASHBOARD_URL (or the hardcoded localhost dev default) —
+// r.Host is never trusted, since Host can be spoofed and would let an
+// attacker craft a callback that bounces the browser to their domain
+// (gosec G710 open redirect).
+func oauthRedirectTarget(state string) string {
+	base := os.Getenv("OPTIQOR_DASHBOARD_URL")
+	if base == "" {
+		base = "http://localhost:3000"
+	}
+	u, err := url.Parse(base)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		// Misconfigured env value — fall back to the dev default rather
+		// than echo the broken URL back to the browser.
+		u, _ = url.Parse("http://localhost:3000")
+	}
+	u.Path = "/app"
+	q := url.Values{"oauth": []string{"github"}}
+	if oauthStateRE.MatchString(state) {
+		q.Set("state", state)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// dispatchGitHubEvent routes a verified webhook to its domain handler.
+// Failure modes are logged but never propagated to the caller — the
+// 202 ack must fire so GitHub does not retry on transient downstream
+// errors. Production scheduling (the retry queue) lives in the worker.
+func dispatchGitHubEvent(ctx context.Context, log *slog.Logger, deps *domainDeps, event, delivery string, body []byte) {
+	if event != "pull_request" {
+		return
+	}
+	if deps == nil || deps.Attribution == nil {
+		log.WarnContext(ctx, "attribution not configured; skipping",
+			"event", event, "delivery", delivery)
+		return
+	}
+	ev, err := attribution.ParseGitHub(body)
+	if err != nil {
+		if errors.Is(err, attribution.ErrNotMerged) {
+			return
+		}
+		log.WarnContext(ctx, "github webhook parse failed",
+			"event", event, "delivery", delivery, "err", err)
+		return
+	}
+	if err := deps.Attribution.OnMerged(ctx, ev); err != nil {
+		// ErrUnknownInstallation / ErrNoMatchingApplyFix are expected
+		// non-customer PRs — log at info to avoid alert noise.
+		level := slog.LevelError
+		if errors.Is(err, attribution.ErrUnknownInstallation) || errors.Is(err, attribution.ErrNoMatchingApplyFix) {
+			level = slog.LevelInfo
+		}
+		log.Log(ctx, level, "attribution.OnMerged",
+			"delivery", delivery, "repo", ev.RepoOwner+"/"+ev.RepoName,
+			"pr", ev.PRNumber, "err", err)
+	}
+}
+
+// openPool returns a pgxpool when cfg.PostgresDSN is set. Dev mode
+// without a DSN returns (nil, nil) so the in-memory paths still boot;
+// config.Validate guarantees prod has a DSN. The pool runs as
+// optiqor_app — every RLS-bound writer binds app.tenant_id per call.
+func openPool(cfg config.Config, log *slog.Logger) (*pgxpool.Pool, error) {
+	if cfg.PostgresDSN == "" {
+		log.Warn("no OPTIQOR_POSTGRES_DSN — RLS-bound stores will be disabled")
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool, err := pgxpool.New(ctx, cfg.PostgresDSN)
+	if err != nil {
+		return nil, fmt.Errorf("pgx pool: %w", err)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("pgx ping: %w", err)
+	}
+	log.Info("postgres connected", "max_conns", pool.Config().MaxConns)
+	return pool, nil
+}
+
 // buildMux returns the HTTP routes the api serves. Exposed so tests can
 // hit handlers without spinning a real socket. Empty webhookSecret =
 // dev mode (config.Validate enforces it in prod); nil metrics skips the
-// /metrics endpoint.
-func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byte, metrics *telemetry.Registry) *http.ServeMux {
+// /metrics endpoint. deps may be nil for the minimal /healthz tests.
+func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byte, metrics *telemetry.Registry, deps *domainDeps) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -143,13 +249,13 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 	}
 
 	// Phase 5 wires the code-exchange + session-issuance flow; Phase 1
-	// returns a deterministic ack so the redirect URI is reachable
-	// during onboarding.
+	// redirects to the dashboard so the user lands somewhere useful
+	// instead of staring at a JSON blob in their browser.
 	mux.HandleFunc("GET /oauth/github/callback", func(w http.ResponseWriter, r *http.Request) {
 		state := r.URL.Query().Get("state")
 		code := r.URL.Query().Get("code")
 		if code == "" {
-			http.Error(w, "missing ?code", http.StatusBadRequest)
+			httperr.MissingField(w, r, "code")
 			return
 		}
 		// Never log the raw code; only that one was received and the
@@ -158,13 +264,9 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 			"state_len", len(state),
 			"code_len", len(code),
 		)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"status": "ok",
-			"phase":  "1",
-			"note":   "session issuance lands in Phase 5",
-		})
+		dest := oauthRedirectTarget(state)
+		w.Header().Set("Cache-Control", "no-store")
+		http.Redirect(w, r, dest, http.StatusSeeOther) //nolint:gosec // G710: dest origin is OPTIQOR_DASHBOARD_URL or localhost, state passes oauthStateRE; r.Host is never trusted.
 	})
 
 	// pprof gated on OPTIQOR_ADMIN_TOKEN header. Empty token disables
@@ -177,29 +279,36 @@ func buildMux(checks *healthz.Registry, logger *slog.Logger, webhookSecret []byt
 	mux.HandleFunc("POST /webhooks/github", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, config.GitHubWebhookMaxBytes))
 		if err != nil {
-			http.Error(w, "read failed", http.StatusBadRequest)
+			if httperr.IsBodyTooLarge(err) {
+				httperr.BodyTooLarge(w, r, config.GitHubWebhookMaxBytes)
+				return
+			}
+			httperr.BadRequest(w, r, "could not read webhook body")
 			return
 		}
 		signature := r.Header.Get("X-Hub-Signature-256")
 		if len(webhookSecret) == 0 {
-			// Dev mode skips verification but logs loudly so a
-			// misconfigured prod can't quietly accept unsigned events.
 			logger.WarnContext(r.Context(), "github webhook signature not verified (dev mode)")
 		} else if err := gh.VerifyWebhook(webhookSecret, signature, body); err != nil {
 			logger.WarnContext(r.Context(), "github webhook rejected", "err", err)
-			http.Error(w, "invalid signature", http.StatusUnauthorized)
+			httperr.Unauthorized(w, r, "invalid webhook signature")
 			return
 		}
 		event := r.Header.Get("X-GitHub-Event")
 		delivery := r.Header.Get("X-GitHub-Delivery")
 		logger.InfoContext(r.Context(), "github webhook accepted",
 			"event", event, "delivery", delivery, "bytes", len(body))
-		// TODO(phase-4): start a Temporal workflow keyed off (event, delivery).
+
+		dispatchGitHubEvent(r.Context(), logger, deps, event, delivery, body)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", "5")
 		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"status":   "accepted",
-			"event":    event,
-			"delivery": delivery,
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":              "accepted",
+			"event":               event,
+			"delivery":            delivery,
+			"retry_after_seconds": 5,
 		})
 	})
 
@@ -231,11 +340,13 @@ func requireTenant(extract TenantExtractor, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t, err := extract(r)
 		if err != nil {
-			http.Error(w, "tenant required", http.StatusUnauthorized)
+			httperr.Unauthorized(w, r, "tenant required — set X-Optiqor-Tenant header or attach a session JWT")
 			return
 		}
 		if err := t.Validate(); err != nil {
-			http.Error(w, "invalid tenant", http.StatusUnauthorized)
+			httperr.WriteWithDetails(w, r, http.StatusUnauthorized, httperr.CodeUnauthorized,
+				"invalid tenant context: "+err.Error(),
+				map[string]any{"hint": "tenant id must be a non-empty UUID"})
 			return
 		}
 		ctx := tenancy.WithContext(r.Context(), t)

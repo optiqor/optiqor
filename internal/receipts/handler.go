@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/optiqor/optiqor/internal/platform/httperr"
 	"github.com/optiqor/optiqor/internal/tenancy"
 )
 
@@ -74,21 +75,21 @@ type VerifyResponse struct {
 // may have since rotated).
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		httperr.MethodNotAllowed(w, r, "GET")
 		return
 	}
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "missing id", http.StatusBadRequest)
+		httperr.MissingField(w, r, "id")
 		return
 	}
 	signed, parsed, err := h.Store.Get(r.Context(), id)
 	if errors.Is(err, ErrReceiptNotFound) {
-		http.Error(w, "not found", http.StatusNotFound)
+		httperr.NotFound(w, r, "receipt")
 		return
 	}
 	if err != nil {
-		http.Error(w, "store: "+err.Error(), http.StatusInternalServerError)
+		httperr.Internal(w, r, "could not load receipt")
 		return
 	}
 	resp := VerifyResponse{
@@ -111,21 +112,24 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // trust this server-side verification alone.
 func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		httperr.MethodNotAllowed(w, r, "GET")
 		return
 	}
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "missing id", http.StatusBadRequest)
+		httperr.MissingField(w, r, "id")
 		return
 	}
 	signed, parsed, err := h.Store.Get(r.Context(), id)
 	if errors.Is(err, ErrReceiptNotFound) {
-		http.Error(w, "not found", http.StatusNotFound)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		//nolint:gosec // G705: id is HTML-escaped inside notFoundPage via template.HTMLEscapeString
+		_, _ = w.Write([]byte(notFoundPage(id)))
 		return
 	}
 	if err != nil {
-		http.Error(w, "store: "+err.Error(), http.StatusInternalServerError)
+		httperr.Internal(w, r, "could not load receipt")
 		return
 	}
 
@@ -209,6 +213,23 @@ func withCommas(n int64) string {
 		}
 	}
 	return b.String()
+}
+
+// notFoundPage is the friendly miss for /v/{id} — same visual language
+// as the verifier so a mistyped link doesn't drop the user into a bare
+// "not found" string.
+func notFoundPage(id string) string {
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex">` +
+		`<title>Receipt not found · Optiqor</title>` +
+		`<style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:40rem;margin:5rem auto;padding:0 1.25rem;color:#1f2933;line-height:1.55}` +
+		`h1{margin:0 0 .5rem;font-size:1.5rem}.muted{color:#52606d;font-size:.95rem}` +
+		`.cta{display:inline-block;margin-top:1.5rem;padding:.55rem 1rem;background:#111;color:#fff;text-decoration:none;border-radius:6px;font-weight:600}` +
+		`.id{font-family:ui-monospace,monospace;font-size:.85rem;color:#7b8794;margin-top:1.5rem}</style></head><body>` +
+		`<h1>Receipt not found</h1>` +
+		`<p class="muted">No Receipt matches this id. Check the link, or browse public Receipts at optiqor.dev.</p>` +
+		`<a class="cta" href="https://optiqor.dev">optiqor.dev</a>` +
+		`<div class="id">id: <code>` + template.HTMLEscapeString(id) + `</code></div>` +
+		`</body></html>`
 }
 
 // verifyTmpl is the verifier page. Self-contained HTML + inline CSS;

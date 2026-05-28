@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/worker"
 )
 
@@ -12,7 +13,7 @@ func TestRegisterWorkflows_BindsAllFive(t *testing.T) {
 	d := worker.NewInMemory()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	if err := registerWorkflows(d, log); err != nil {
+	if err := registerWorkflows(d, log, config.Config{}, nil); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	want := []string{"apply_fix", "cost_spike", "echo", "receipt_issue", "rollback_watchdog"}

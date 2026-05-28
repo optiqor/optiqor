@@ -8,14 +8,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/platform/healthz"
 )
 
 // fullMux mirrors the production assembly: platform routes + every
 // domain handler. Lets the wiring tests skip the real socket.
 func fullMux() *http.ServeMux {
-	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil)
-	mountDomainRoutes(mux, buildDomainDeps())
+	mux := buildMux(healthz.NewRegistry(), silentLogger(), nil, nil, nil)
+	mountDomainRoutes(mux, buildDomainDeps(config.Config{}, nil, silentLogger()))
 	mux.HandleFunc("GET /v1/meta", metaHandler)
 	return mux
 }

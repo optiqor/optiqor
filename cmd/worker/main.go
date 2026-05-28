@@ -11,6 +11,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/platform/logging"
@@ -43,8 +46,17 @@ func run() int {
 	logger := logging.New(os.Stdout, cfg.LogLevel)
 	slog.SetDefault(logger)
 
+	pool, err := openPool(cfg, logger)
+	if err != nil {
+		logger.Error("pool init failed", "err", err)
+		return 1
+	}
+	if pool != nil {
+		defer pool.Close()
+	}
+
 	dispatcher := worker.NewInMemory()
-	if err := registerWorkflows(dispatcher, logger); err != nil {
+	if err := registerWorkflows(dispatcher, logger, cfg, pool); err != nil {
 		logger.Error("workflow registration failed", "err", err)
 		return 1
 	}
@@ -70,4 +82,26 @@ func run() int {
 	}
 	logger.Info("worker stopped")
 	return 0
+}
+
+// openPool returns a pgxpool when cfg.PostgresDSN is set. Dev mode
+// without a DSN returns (nil, nil); workflows fall back to in-memory
+// stores and the LLM recorder skips writes.
+func openPool(cfg config.Config, log *slog.Logger) (*pgxpool.Pool, error) {
+	if cfg.PostgresDSN == "" {
+		log.Warn("no OPTIQOR_POSTGRES_DSN — RLS-bound writes disabled")
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool, err := pgxpool.New(ctx, cfg.PostgresDSN)
+	if err != nil {
+		return nil, fmt.Errorf("pgx pool: %w", err)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("pgx ping: %w", err)
+	}
+	log.Info("postgres connected", "max_conns", pool.Config().MaxConns)
+	return pool, nil
 }

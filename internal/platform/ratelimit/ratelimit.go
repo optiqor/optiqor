@@ -2,11 +2,15 @@ package ratelimit
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/optiqor/optiqor/internal/platform/httperr"
+	"github.com/optiqor/optiqor/internal/platform/logging"
 )
 
 // Limiter implementations must be concurrent-safe. An over-limit
@@ -14,6 +18,14 @@ import (
 // failures so the middleware can fail-open against a flapping backend.
 type Limiter interface {
 	Allow(ctx context.Context, key string) (allowed bool, retryAfter time.Duration, err error)
+}
+
+// Quotaer exposes the remaining-quota state for a key. Optional —
+// implementations not satisfying it lose the X-RateLimit-Remaining
+// header but every other rate-limit signal still works. Memory
+// implements it.
+type Quotaer interface {
+	Quota(ctx context.Context, key string) (limit, remaining int, resetAt time.Time)
 }
 
 type KeyFn func(r *http.Request) string
@@ -48,7 +60,9 @@ type Options struct {
 	HeaderName string
 }
 
-// Middleware writes Retry-After in seconds (minimum 1) on a 429.
+// Middleware writes the conventional X-RateLimit-* trio + Retry-After
+// on every response so clients can pace themselves, and emits a
+// structured JSON 429 envelope on rejection.
 func Middleware(opts Options) func(http.Handler) http.Handler {
 	if opts.Limiter == nil {
 		panic("ratelimit: Limiter is required")
@@ -59,6 +73,7 @@ func Middleware(opts Options) func(http.Handler) http.Handler {
 	if opts.HeaderName == "" {
 		opts.HeaderName = "Retry-After"
 	}
+	quotaer, _ := opts.Limiter.(Quotaer)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := opts.KeyFn(r)
@@ -72,8 +87,11 @@ func Middleware(opts Options) func(http.Handler) http.Handler {
 					next.ServeHTTP(w, r)
 					return
 				}
-				http.Error(w, "rate limiter unavailable", http.StatusServiceUnavailable)
+				httperr.ServiceUnavailable(w, r, "rate limiter unavailable")
 				return
+			}
+			if quotaer != nil {
+				writeQuotaHeaders(w, quotaer, r.Context(), key)
 			}
 			if !allowed {
 				secs := int64(retry.Seconds())
@@ -81,10 +99,38 @@ func Middleware(opts Options) func(http.Handler) http.Handler {
 					secs = 1
 				}
 				w.Header().Set(opts.HeaderName, strconv.FormatInt(secs, 10))
-				http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				if reqID := logging.RequestIDFromContext(r.Context()); reqID != "" {
+					w.Header().Set("X-Request-ID", reqID)
+				}
+				w.WriteHeader(http.StatusTooManyRequests)
+				_ = json.NewEncoder(w).Encode(httperr.Envelope{Error: httperr.Error{
+					Code:       httperr.CodeRateLimited,
+					Message:    "rate limit exceeded; retry after " + strconv.FormatInt(secs, 10) + " seconds",
+					StatusCode: http.StatusTooManyRequests,
+					RequestID:  logging.RequestIDFromContext(r.Context()),
+					Details: map[string]any{
+						"retry_after_seconds": secs,
+					},
+				}})
 				return
 			}
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+func writeQuotaHeaders(w http.ResponseWriter, q Quotaer, ctx context.Context, key string) {
+	limit, remaining, resetAt := q.Quota(ctx, key)
+	if limit <= 0 {
+		return
+	}
+	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limit))
+	if remaining < 0 {
+		remaining = 0
+	}
+	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+	if !resetAt.IsZero() {
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetAt.Unix(), 10))
 	}
 }

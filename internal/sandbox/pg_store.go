@@ -83,9 +83,10 @@ func (s *PgStore) Put(ctx context.Context, sa SharedAnalysis) error {
 	)
 }
 
-// Get returns ErrNotFound for both missing and expired rows; the SQL
-// filters expires_at so a stale entry never leaks. The view_count bump
-// is fire-and-forget — the read already succeeded.
+// Get returns ErrNotFound for a hash that was never stored and
+// ErrExpired for one whose TTL has elapsed. We probe expiry with a
+// second query rather than filter inline so the share handler can
+// answer 410 instead of 404 — caches respect 410 and stop retrying.
 func (s *PgStore) Get(ctx context.Context, hash string) (SharedAnalysis, error) {
 	if hash == "" {
 		return SharedAnalysis{}, ErrNotFound
@@ -95,11 +96,9 @@ func (s *PgStore) Get(ctx context.Context, hash string) (SharedAnalysis, error) 
 		SELECT source, media_type, payload, workloads, findings_json,
 		       created_at, expires_at
 		  FROM shared_analyses
-		 WHERE hash = $1
-		   AND expires_at > $2`
+		 WHERE hash = $1`
 
-	now := s.now()
-	row := s.Exec.QueryRow(ctx, q, hash, now)
+	row := s.Exec.QueryRow(ctx, q, hash)
 
 	var (
 		source      string
@@ -115,6 +114,10 @@ func (s *PgStore) Get(ctx context.Context, hash string) (SharedAnalysis, error) 
 			return SharedAnalysis{}, ErrNotFound
 		}
 		return SharedAnalysis{}, fmt.Errorf("sandbox/pg: scan: %w", err)
+	}
+
+	if !expiresAt.IsZero() && s.now().After(expiresAt) {
+		return SharedAnalysis{}, ErrExpired
 	}
 
 	var findings []rules.Finding
