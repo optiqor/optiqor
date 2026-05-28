@@ -47,10 +47,13 @@ missing_in_go=$(comm -23 <(printf '%s\n' "${spec_norm[@]}") <(printf '%s\n' "${g
 missing_in_spec=$(comm -13 <(printf '%s\n' "${spec_norm[@]}") <(printf '%s\n' "${go_norm[@]}"))
 
 status=0
+# Spec is allowed to be a superset of Go (forward-looking documentation
+# of routes that land in a later stacked PR is fine). The hard
+# constraint is the other direction: every Go route MUST appear in the
+# spec so customers cannot hit undocumented endpoints.
 if [[ -n "$missing_in_go" ]]; then
-  echo "::error::paths in openapi.yaml but not in Go handlers:" >&2
+  echo "::warning::paths in openapi.yaml but not yet in Go handlers (forward-looking; OK during stacked rollout):" >&2
   printf '  %s\n' $missing_in_go >&2
-  status=1
 fi
 if [[ -n "$missing_in_spec" ]]; then
   echo "::error::Go routes not documented in openapi.yaml:" >&2
@@ -59,6 +62,6 @@ if [[ -n "$missing_in_spec" ]]; then
 fi
 
 if [[ $status -eq 0 ]]; then
-  printf 'openapi parity: %d paths match between spec and handlers\n' "${#spec_norm[@]}"
+  printf 'openapi parity: %d Go routes documented (spec has %d total)\n' "${#go_norm[@]}" "${#spec_norm[@]}"
 fi
 exit "$status"

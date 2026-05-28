@@ -8,6 +8,16 @@ image:
 # prefix and the per-tenant Temporal queue routing key.
 tenantID: ""
 
+# clusterID is the stable identifier the workload-identity hash uses
+# (ADR-0004). Pin per cluster; never rotate (a fresh clusterID
+# orphans every recommendation history).
+clusterID: ""
+
+# Health probe port — kubelet hits /healthz here, separate from the
+# Prometheus metrics port so RBAC for Prometheus stays narrow.
+health:
+  port: 8088
+
 # Backend ingest endpoint. mTLS material lives in the secret named
 # below; Phase 5 fills the certs.
 ingest:
