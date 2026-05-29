@@ -7,16 +7,18 @@ import (
 )
 
 type fakeProbe struct {
-	version           string
-	versionErr        error
-	promReachable     bool
-	promReachableErr  error
-	hasKarpenter      bool
-	hasAutoscaler     bool
-	hasRBAC           bool
-	hasRBACErr        error
-	namespaceCount    int
-	namespaceCountErr error
+	version              string
+	versionErr           error
+	promReachable        bool
+	promReachableErr     error
+	hasKarpenter         bool
+	hasAutoscaler        bool
+	hasRBAC              bool
+	hasRBACErr           error
+	namespaceCount       int
+	namespaceCountErr    error
+	unsupportedDetected  []string
+	unsupportedDetectErr error
 }
 
 func (p *fakeProbe) K8sServerVersion(_ context.Context) (string, error) {
@@ -35,6 +37,9 @@ func (p *fakeProbe) HasRBAC(_ context.Context, _, _ []string) (bool, error) {
 func (p *fakeProbe) NamespaceCount(_ context.Context) (int, error) {
 	return p.namespaceCount, p.namespaceCountErr
 }
+func (p *fakeProbe) DetectUnsupportedProvisioners(_ context.Context) ([]string, error) {
+	return p.unsupportedDetected, p.unsupportedDetectErr
+}
 
 func TestRun_HappyPath(t *testing.T) {
 	r := &Runner{
@@ -51,8 +56,8 @@ func TestRun_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if len(checks) != 6 {
-		t.Fatalf("want 6 checks, got %d", len(checks))
+	if len(checks) != 7 {
+		t.Fatalf("want 7 checks, got %d", len(checks))
 	}
 	for _, c := range checks {
 		// Karpenter pass + autoscaler warn is the most common kube-prom-stack
@@ -85,6 +90,62 @@ func TestRun_RBACFailureSurfaces(t *testing.T) {
 	if checks[2].Status != StatusFail {
 		t.Errorf("rbac err should fail, got %s", checks[2].Status)
 	}
+}
+
+func TestRun_UnsupportedProvisionerFailsClosed(t *testing.T) {
+	r := &Runner{Probe: &fakeProbe{
+		version:             "v1.31.0",
+		promReachable:       true,
+		hasRBAC:             true,
+		unsupportedDetected: []string{"gke-node-auto-provisioning", "openshift-machine-api"},
+	}}
+	checks, _ := r.Run(context.Background(), Config{PrometheusURL: "http://prom:9090"})
+	gate := findCheck(t, checks, "Unsupported provisioner gate")
+	if gate.Status != StatusFail {
+		t.Errorf("unsupported provisioners must fail closed; got %s", gate.Status)
+	}
+	if gate.RemediationLink == "" {
+		t.Error("fail status must carry remediation link to issue tracker")
+	}
+}
+
+func TestRun_UnsupportedProvisionerCleanPasses(t *testing.T) {
+	r := &Runner{Probe: &fakeProbe{
+		version:             "v1.31.0",
+		promReachable:       true,
+		hasRBAC:             true,
+		unsupportedDetected: nil,
+	}}
+	checks, _ := r.Run(context.Background(), Config{PrometheusURL: "http://prom:9090"})
+	gate := findCheck(t, checks, "Unsupported provisioner gate")
+	if gate.Status != StatusPass {
+		t.Errorf("empty detection must pass, got %s (%s)", gate.Status, gate.Detail)
+	}
+}
+
+func TestRun_UnsupportedProvisionerProbeErrorWarns(t *testing.T) {
+	r := &Runner{Probe: &fakeProbe{
+		version:              "v1.31.0",
+		promReachable:        true,
+		hasRBAC:              true,
+		unsupportedDetectErr: errors.New("CRD list timed out"),
+	}}
+	checks, _ := r.Run(context.Background(), Config{PrometheusURL: "http://prom:9090"})
+	gate := findCheck(t, checks, "Unsupported provisioner gate")
+	if gate.Status != StatusWarn {
+		t.Errorf("probe error must warn (not silently pass / fail-close); got %s", gate.Status)
+	}
+}
+
+func findCheck(t *testing.T, checks []Check, name string) Check {
+	t.Helper()
+	for _, c := range checks {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("no check named %q in %v", name, checks)
+	return Check{}
 }
 
 func TestRun_NilProbe(t *testing.T) {

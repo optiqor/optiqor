@@ -312,7 +312,7 @@ The Receipt-signing path is the single most credibility-load-bearing feature in 
   - Cost spike timeline (~2 days)
   - Billing / usage panel (depends on Stripe; lands with `0008_stripe_mirror.sql`)
 - [x] Slack: digest workflow, `/optiqor status` slash command _(daily digest + weekly report + cost-spike block-kit renderers in `feat/slack-webhook-digest`; webhook poster with `hooks.slack.com` host validation; slash command deferred to Phase 7 since it needs the full Slack OAuth flow)_
-- [ ] On-call docs + runbooks in `docs/runbooks/`
+- [x] On-call docs + runbooks in `docs/runbooks/` _(README + agent-install + agent-rbac + prometheus + k8s-version + p0-tenant-outage shipped in `feat/phase-5-backbone`)_
 
 ### Schema additions for auth + agent watch (Phase 5)
 - [ ] **`migrations/0005_auth.sql`** — `users` (id DEFAULT `uuid_generate_v7()`, email CITEXT UNIQUE, name, auth_provider, auth_provider_id, created_at, last_login_at) — **global, no RLS** (a human can belong to many tenants; auth subsystem is sole reader/writer) · `memberships` (user_id, tenant_id, role CHECK ('owner','admin','member','viewer'), joined_at) — RLS-scoped · `api_tokens` (tenant_id, name, `token_hash BYTEA`, `scopes TEXT[]`, last_used_at, expires_at, revoked_at) — RLS-scoped. Token validation runs on the `optiqor_migrator BYPASSRLS` connection until tenant is resolved; then `set_config('app.tenant_id', ...)` flips to the regular pool. Gates the Phase-2 Auth.js shell going live with real sign-up
@@ -331,7 +331,7 @@ The Receipt-signing path is the single most credibility-load-bearing feature in 
   - `nodeprov/managed/aks` — Phase 7 (AKS node pools)
   - `nodeprov/managed/hetzner` — Phase 8 (Hetzner Cloud node pools)
   - `nodeprov/managed/gke` — **Year 2** (GKE Node Auto-Provisioning + Standard node pools). Schema enum `managed-gke` already exists in `migrations/0001_baseline.sql:93` as a placeholder; until the adapter ships, the pre-flight checker (below) **fails closed** rather than routing GKE customers to `static`. ~2 wk based on the AKS adapter's expected scope; needs separate auth path (GCP service account + workload identity), separate API client (`google.golang.org/api/container/v1`), separate billing connector. Lands when GCP customers become a deliberate go-to-market — not before
-- [ ] `internal/onboarding/preflight` — **fail-closed routing for unsupported provisioners** (2 days). When pre-flight detects GKE NAP or any other provisioner without a Year-1 adapter (e.g. OpenShift Machine API, DigitalOcean K8s), the installer rejects the agent install with an explicit error: *"Optiqor doesn't support <provisioner> yet — track at github.com/optiqor/optiqor/issues/<N>. Year-1 supported: Karpenter, EKS MNG, EKS+CAS+ASG, standalone ASG, on-prem/static."* No silent fallback to `static` (that mis-classifies the customer's bill basis and corrupts Receipt accuracy). The `managed-gke` schema enum value stays as a placeholder; the route is the gate.
+- [x] `internal/onboarding/preflight` — **fail-closed routing for unsupported provisioners** (2 days). When pre-flight detects GKE NAP or any other provisioner without a Year-1 adapter (e.g. OpenShift Machine API, DigitalOcean K8s), the installer rejects the agent install with an explicit error: *"Optiqor doesn't support <provisioner> yet — track at github.com/optiqor/optiqor/issues/<N>. Year-1 supported: Karpenter, EKS MNG, EKS+CAS+ASG, standalone ASG, on-prem/static."* No silent fallback to `static` (that mis-classifies the customer's bill basis and corrupts Receipt accuracy). The `managed-gke` schema enum value stays as a placeholder; the route is the gate. _(`Probe.DetectUnsupportedProvisioners` + `unsupportedProvisionerCheck` + remediation link to the issue tracker shipped in `feat/phase-5-backbone`)_
 - [ ] `internal/cost/strategy` — node-provisioner-class is an input; sizing strategies vary by tier (Karpenter can recommend rapid scale; static node groups cannot)
 
 ### Decision/orchestration layer — gaps surfaced by the ADR audit (Phase 5)
@@ -340,17 +340,17 @@ The Receipt-signing path is the single most credibility-load-bearing feature in 
 - [ ] **Spec: trust-spectrum × env-aware composition** (`docs/specs/trust-modes-composition.md`). ADR-0009 introduces Suggest / Propose / Auto-merge as the per-tenant trust spectrum; `internal/safety/environment/` defines env-aware aggressiveness (prod conservative, staging moderate, dev aggressive). These compose orthogonally — and how is currently undocumented. Spec must answer: does "Auto-merge mode" mean Auto for prod, or only for staging/dev? Does "Suggest mode" override env aggressiveness, or layer on top? Resolution lands in this spec before Phase 5 closes — without it, the first Auto-merge customer hits an undefined edge case (3 days)
 
 ### Differentiator additions (folded into Phase 5)
-- [ ] `internal/notify/slack/diff` — render Apply Fix diff inline in Slack thread for mobile-first review (3 days)
+- [x] `internal/notify/slack/diff` — render Apply Fix diff inline in Slack thread for mobile-first review (3 days) _(`RenderApplyFixDiff` + `truncateDiff` shipped in `feat/phase-5-backbone`; mobile-friendly snippet capped at 20 lines × 80 chars, payload stays under Slack's 40 KiB envelope)_
 - [ ] `internal/integrations/argocd-notifications` — accept ArgoCD Notifications webhook back into our pipeline; close the Apply Fix → merge → sync → measure → Receipt loop (3 days)
 
 ### Operational backbone — onboarding + optiqor-on-optiqor (Phase 5)
 - [ ] `internal/onboarding/` — state machine (`signed_up → vcs_connected → repo_selected → first_pr_analyzed → agent_installed → first_apply_fix → first_receipt_issued`); each transition timestamped in `tenants.onboarding_state` JSONB column
 - [ ] `internal/onboarding/preflight` — pre-flight checker reads cluster K8s version, Prometheus presence, RBAC, Karpenter, PDB/RQ counts; renders preview page before `helm install`
-- [ ] `internal/onboarding/nudges` — Temporal cron workflows: 24h no-VCS email · 72h no-agent in-app prompt · 7-day no-Apply-Fix CSM/Slack alert
+- [x] `internal/onboarding/nudges` — Temporal cron workflows: 24h no-VCS email · 72h no-agent in-app prompt · 7-day no-Apply-Fix CSM/Slack alert _(`workflows.OnboardingNudge` + `shouldFire` (pure-function gate) + `NudgeNotifier` interface shipped in `feat/phase-5-backbone`; worker registers it with a logging notifier; production wires per-channel adapters)_
 - [ ] `internal/onboarding/demo` — synthetic-but-clearly-labeled demo data path for clusters with <30 days of Prometheus history
-- [ ] `cmd/api` route `/onboarding/health` — per-tenant funnel position + blockers; shareable with the customer
+- [x] `cmd/api` route `/onboarding/health` — per-tenant funnel position + blockers; shareable with the customer _(`GET /v1/onboarding/health` shipped in `feat/phase-5-backbone`; response carries current stage, next stage, time-in-stage, TTFR, blocker list with action + remediation link per stage)_
 - [ ] **Optiqor-on-Optiqor install** against our own EKS — production GitHub App, in-cluster agent on `prod` cluster, every PR to `backend/` gets a Optiqor comment (zero engineering effort beyond using the product)
-- [ ] `internal/metrics/activation` — Activation Rate (≥60% target) + Time to First Receipt (≤35 days p50) computed daily
+- [x] `internal/metrics/activation` — Activation Rate (≥60% target) + Time to First Receipt (≤35 days p50) computed daily _(pure-function `ActivationRate` + `TimeToFirstReceipt` + bundled `Compute` shipped in `feat/phase-5-backbone`; production cron pushes the report to Prometheus + the founder dashboard)_
 
 ### Hard SLOs to enforce in Phase 5
 - [ ] Sandbox p95 < 3s (already in Phase 2, re-verify)

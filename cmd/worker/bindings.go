@@ -11,6 +11,7 @@ import (
 
 	"github.com/optiqor/optiqor/internal/agent"
 	"github.com/optiqor/optiqor/internal/agent/llm/anthropic"
+	"github.com/optiqor/optiqor/internal/onboarding"
 	"github.com/optiqor/optiqor/internal/platform/config"
 	"github.com/optiqor/optiqor/internal/receipts"
 	"github.com/optiqor/optiqor/internal/tenancy"
@@ -76,6 +77,34 @@ func (n *loggingSpikeNotifier) NotifySpike(_ context.Context, t tenancy.Context,
 		"tenant", t.TenantID, "workload", e.WorkloadID,
 		"delta_usd", e.ObservedDeltaUSD, "likely_pr", e.LikelyPRURL)
 	return nil
+}
+
+type loggingNudgeNotifier struct{ log *slog.Logger }
+
+func (n *loggingNudgeNotifier) Notify(_ context.Context, ev workflows.NudgeEvent) error {
+	n.log.Warn("onboarding nudge fired",
+		"tenant", ev.Tenant.TenantID,
+		"reason", ev.Reason,
+		"channel", ev.Channel,
+		"stage", ev.Stage,
+		"stuck_since", ev.StuckSince.Format("2006-01-02T15:04:05Z"))
+	return nil
+}
+
+// inMemoryOnboardingSource wraps onboarding.Service so the nudge
+// workflow has a Get reader without dragging the full Service into the
+// workflows package. Production wires the same Pg-backed Service the
+// API binary uses; the worker reads through the same RLS connection.
+type inMemoryOnboardingSource struct {
+	svc *onboarding.Service
+}
+
+func newInMemoryOnboardingSource() *inMemoryOnboardingSource {
+	return &inMemoryOnboardingSource{svc: onboarding.NewService(onboarding.NewInMemoryStore())}
+}
+
+func (s *inMemoryOnboardingSource) Get(ctx context.Context, tenantID string) (onboarding.State, error) {
+	return s.svc.Get(ctx, tenantID)
 }
 
 // inMemoryReceiptStore lets Phase-1 exercise the issuance path

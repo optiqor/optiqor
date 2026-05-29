@@ -270,6 +270,7 @@ func mountDomainRoutes(mux *http.ServeMux, deps *domainDeps, env config.Env) {
 	mux.Handle("POST /v1/apply-fixes", tenantMW(http.HandlerFunc(deps.PRWriter.Preview)))
 	mux.Handle("GET /v1/onboarding/state", tenantMW(http.HandlerFunc(deps.Onboarding.GetState)))
 	mux.Handle("POST /v1/onboarding/transition", tenantMW(http.HandlerFunc(deps.Onboarding.Transition)))
+	mux.Handle("GET /v1/onboarding/health", tenantMW(http.HandlerFunc(deps.Onboarding.GetHealth)))
 	if deps.Preflight != nil {
 		mux.Handle("POST /v1/onboarding/preflight", tenantMW(http.HandlerFunc(deps.Preflight.Run)))
 	}
@@ -306,6 +307,7 @@ func metaHandler(w http.ResponseWriter, _ *http.Request) {
 			{Method: "POST", Path: "/v1/session/issue", Notes: "Auth.js bridge: mint a backend JWT"},
 			{Method: "GET", Path: "/v1/onboarding/state", Notes: "dashboard: tenant onboarding progress"},
 			{Method: "POST", Path: "/v1/onboarding/transition", Notes: "dashboard: advance onboarding stage"},
+			{Method: "GET", Path: "/v1/onboarding/health", Notes: "dashboard: funnel position + blockers"},
 			{Method: "POST", Path: "/v1/onboarding/preflight", Notes: "install wizard: cluster pre-flight checks"},
 			{Method: "GET", Path: "/v1/savings/summary", Notes: "dashboard: lifetime / MTD / YTD savings"},
 			{Method: "GET", Path: "/v1/apply-fixes", Notes: "dashboard: list apply fixes filtered by state"},
