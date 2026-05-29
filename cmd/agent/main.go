@@ -24,6 +24,7 @@ import (
 	"github.com/optiqor/optiqor/internal/agent/cluster"
 	"github.com/optiqor/optiqor/internal/agent/egress"
 	"github.com/optiqor/optiqor/internal/agent/prom"
+	"github.com/optiqor/optiqor/internal/platform/telemetry"
 )
 
 var version = "dev"
@@ -39,11 +40,20 @@ func run() int {
 	kubeconfig := flag.String("kubeconfig", "", "absolute path to a kubeconfig (out-of-cluster dev only; empty uses in-cluster config)")
 	tenantID := flag.String("tenant-id", os.Getenv("OPTIQOR_TENANT_ID"), "owning tenant id; required for egress")
 	clusterID := flag.String("cluster-id", os.Getenv("OPTIQOR_CLUSTER_ID"), "stable cluster identifier; required")
-	healthAddr := flag.String("health-addr", envOr("OPTIQOR_HEALTH_ADDR", ":8088"), "address for /healthz")
+	healthAddr := flag.String("health-addr", envOr("OPTIQOR_HEALTH_ADDR", ":8088"), "address for /healthz (kubelet probes)")
+	metricsAddr := flag.String("metrics-addr", envOr("OPTIQOR_METRICS_ADDR", ":9090"), "address for /metrics (customer Prometheus scrapes the agent itself)")
 	resyncStr := flag.String("resync", envOr("OPTIQOR_INFORMER_RESYNC", "10m"), "informer cache resync period")
 	snapshotIntervalStr := flag.String("snapshot-interval", envOr("OPTIQOR_SNAPSHOT_INTERVAL", "60s"), "how often to POST a snapshot to the backend")
 	ingestURL := flag.String("ingest-url", envOr("OPTIQOR_INGEST_URL", ""), "https URL the snapshots POST to; empty disables egress")
 	promURL := flag.String("prometheus-url", envOr("OPTIQOR_PROMETHEUS_URL", ""), "Prometheus /api/v1/query base URL; empty disables scraping")
+	promAuthMode := flag.String("prometheus-auth", envOr("OPTIQOR_PROMETHEUS_AUTH", "none"), "none | bearer | basic | sa_token | mtls")
+	promBearerFile := flag.String("prometheus-bearer-file", envOr("OPTIQOR_PROMETHEUS_BEARER_FILE", ""), "path to a bearer token file (auto-refreshed)")
+	promUser := flag.String("prometheus-user", envOr("OPTIQOR_PROMETHEUS_USER", ""), "basic-auth username")
+	promCertFile := flag.String("prometheus-cert-file", envOr("OPTIQOR_PROMETHEUS_CERT_FILE", ""), "mTLS client cert (PEM)")
+	promKeyFile := flag.String("prometheus-key-file", envOr("OPTIQOR_PROMETHEUS_KEY_FILE", ""), "mTLS client key (PEM)")
+	promCAFile := flag.String("prometheus-ca-file", envOr("OPTIQOR_PROMETHEUS_CA_FILE", ""), "optional CA bundle for mTLS / private CA")
+	promInstantTTLStr := flag.String("prometheus-instant-ttl", envOr("OPTIQOR_PROMETHEUS_INSTANT_TTL", "60s"), "TTL cache for instant queries")
+	promRangeTTLStr := flag.String("prometheus-range-ttl", envOr("OPTIQOR_PROMETHEUS_RANGE_TTL", "24h"), "TTL cache for range queries; 30d roll-ups run once daily")
 	eventsCutoffStr := flag.String("events-cutoff", envOr("OPTIQOR_EVENTS_CUTOFF", "10m"), "drop events older than this from the snapshot")
 	flag.Parse()
 
@@ -112,7 +122,9 @@ func run() int {
 	}
 	readers.AttachDynamic(vpa, karpenter)
 
+	metricsReg := telemetry.NewRegistry()
 	healthSrv := startHealthServer(*healthAddr, logger, readers)
+	metricsSrv := startMetricsServer(*metricsAddr, logger, metricsReg)
 
 	snapshotInterval, err := time.ParseDuration(*snapshotIntervalStr)
 	if err != nil {
@@ -148,12 +160,44 @@ func run() int {
 		}
 		var scraper *prom.Scraper
 		if *promURL != "" {
-			pc, perr := prom.NewHTTPClient(*promURL)
+			authCfg := prom.AuthConfig{
+				Mode:           prom.AuthMode(*promAuthMode),
+				BearerToken:    os.Getenv("OPTIQOR_PROMETHEUS_BEARER_TOKEN"),
+				BearerFile:     *promBearerFile,
+				Username:       *promUser,
+				Password:       os.Getenv("OPTIQOR_PROMETHEUS_PASSWORD"),
+				ClientCertFile: *promCertFile,
+				ClientKeyFile:  *promKeyFile,
+				CABundleFile:   *promCAFile,
+			}
+			obs := prom.NewTelemetryObserver(metricsReg)
+			var pc *prom.HTTPClient
+			if authCfg.Mode == prom.AuthMTLS {
+				pc, perr = prom.NewHTTPClientWithMTLS(*promURL, authCfg, prom.WithObserver(obs))
+			} else {
+				auth, aerr := prom.NewAuthenticator(authCfg)
+				if aerr != nil {
+					logger.Error("prom auth init failed", "mode", authCfg.Mode, "err", aerr)
+					return 2
+				}
+				pc, perr = prom.NewHTTPClient(*promURL, prom.WithAuth(auth), prom.WithObserver(obs))
+			}
 			if perr != nil {
 				logger.Error("prom client init failed", "url", *promURL, "err", perr)
 				return 1
 			}
-			scraper = prom.NewScraper(pc, nil) // pod owners refreshed each tick
+			instantTTL, terr := time.ParseDuration(*promInstantTTLStr)
+			if terr != nil {
+				logger.Error("bad --prometheus-instant-ttl", "value", *promInstantTTLStr, "err", terr)
+				return 2
+			}
+			rangeTTL, terr := time.ParseDuration(*promRangeTTLStr)
+			if terr != nil {
+				logger.Error("bad --prometheus-range-ttl", "value", *promRangeTTLStr, "err", terr)
+				return 2
+			}
+			cached := prom.NewCachingClient(pc, instantTTL, rangeTTL)
+			scraper = prom.NewScraper(cached, nil)
 		} else {
 			logger.Info("prometheus-url empty; scrape loop disabled (verify.sh GAP remains)")
 		}
@@ -185,6 +229,9 @@ func run() int {
 	if err := healthSrv.Shutdown(shutdownCtx); err != nil {
 		logger.Warn("health server shutdown", "err", err)
 	}
+	if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("metrics server shutdown", "err", err)
+	}
 	logger.Info("agent stopped")
 	return 0
 }
@@ -206,8 +253,8 @@ func loadK8sConfig(kubeconfig string) (*rest.Config, error) {
 }
 
 // startHealthServer returns 200 on /healthz once readers are non-nil.
-// Kubelet probes hit this; mtls egress + SaaS reachability live on
-// the egress client (see internal/agent/egress for the tls.Config).
+// Kubelet probes hit this; the address stays distinct from /metrics so
+// RBAC + NetworkPolicy can scope the two independently (per ADR-0021).
 func startHealthServer(addr string, log *slog.Logger, readers *cluster.Readers) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -226,6 +273,27 @@ func startHealthServer(addr string, log *slog.Logger, readers *cluster.Readers) 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("health server", "err", err)
+		}
+	}()
+	return srv
+}
+
+// startMetricsServer serves /metrics on a dedicated port. Customer
+// Prometheus scrapes this to watch the agent itself; the agent does
+// NOT scrape customer workloads through this endpoint (ADR-0021).
+func startMetricsServer(addr string, log *slog.Logger, reg *telemetry.Registry) *http.Server {
+	mux := http.NewServeMux()
+	if reg != nil {
+		mux.Handle("GET /metrics", reg.Handler())
+	}
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("metrics server", "err", err)
 		}
 	}()
 	return srv
