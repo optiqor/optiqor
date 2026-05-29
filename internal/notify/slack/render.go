@@ -88,6 +88,104 @@ func RenderWeekly(d WeeklyData) Payload {
 	}
 }
 
+// ApplyFixDiff carries the per-PR data the Slack thread renders.
+// Designed for mobile review: 3-line preview + savings + tap-through
+// link to the PR. Reviewer doesn't need to open GitHub to triage.
+type ApplyFixDiff struct {
+	Workload         string
+	RepoSlug         string // "owner/repo"
+	PRNumber         int
+	PRURL            string
+	ChartPath        string
+	UnifiedDiff      string
+	MonthlyUSDCents  int64
+	AnnualUSDCents   int64
+	Confidence       string // "high" | "medium" | "low"
+	BlastRadius      int    // 1..5; 0 unset
+	GeneratedAt      time.Time
+	DiffPreviewLines int // 0 falls through to defaultDiffPreviewLines
+	DashboardURL     string
+}
+
+// defaultDiffPreviewLines bounds the inline snippet so a 2k-line YAML
+// rewrite doesn't break Slack's 40 KiB envelope. Mobile reviewers see
+// the change shape; the PRURL is the source of truth.
+const defaultDiffPreviewLines = 20
+
+// RenderApplyFixDiff turns one ApplyFixDiff into a thread-ready post.
+// Layout: header + savings strip + diff snippet in a fenced code block
+// + tap-through. Optimised for the iPhone Slack client's column width
+// (~38 monospace chars); long diff lines are right-trimmed not wrapped
+// because Slack wraps inside fenced blocks unpredictably.
+func RenderApplyFixDiff(d ApplyFixDiff) Payload {
+	lines := d.DiffPreviewLines
+	if lines <= 0 {
+		lines = defaultDiffPreviewLines
+	}
+	preview := truncateDiff(d.UnifiedDiff, lines)
+	confidence := d.Confidence
+	if confidence == "" {
+		confidence = "unset"
+	}
+	blast := "—"
+	if d.BlastRadius > 0 {
+		blast = fmt.Sprintf("%d/5", d.BlastRadius)
+	}
+
+	header := fmt.Sprintf("Apply Fix · %s · save %s/mo", d.Workload, fmtUSD(d.MonthlyUSDCents))
+	body := fmt.Sprintf(
+		"*Repo:* `%s`#%d\n*Chart:* `%s`\n*Monthly:* %s   ·   *Annual:* %s\n*Confidence:* %s   ·   *Blast radius:* %s",
+		d.RepoSlug, d.PRNumber, d.ChartPath,
+		fmtUSD(d.MonthlyUSDCents), fmtUSD(d.AnnualUSDCents),
+		confidence, blast,
+	)
+	cta := fmt.Sprintf("<%s|Open PR →>", d.PRURL)
+	if d.DashboardURL != "" {
+		cta += fmt.Sprintf("   ·   <%s|Dashboard>", d.DashboardURL)
+	}
+
+	return Payload{
+		Text: header,
+		Blocks: []Block{
+			{Type: "header", Text: &Text{Type: "plain_text", Text: header}},
+			{Type: "section", Text: &Text{Type: "mrkdwn", Text: body}},
+			{Type: "section", Text: &Text{Type: "mrkdwn", Text: "```\n" + preview + "\n```"}},
+			{Type: "section", Text: &Text{Type: "mrkdwn", Text: cta}},
+		},
+	}
+}
+
+// truncateDiff caps the snippet at maxLines, appending a "(+N lines)"
+// trailer so the reviewer knows there is more out of frame. Lines past
+// 80 chars get a single right-trim marker so wide YAML diffs don't blow
+// out the mobile column.
+func truncateDiff(diff string, maxLines int) string {
+	if diff == "" {
+		return "(empty diff)"
+	}
+	const maxWidth = 80
+	lines := strings.Split(diff, "\n")
+	var b strings.Builder
+	limit := maxLines
+	if len(lines) < limit {
+		limit = len(lines)
+	}
+	for i := 0; i < limit; i++ {
+		line := lines[i]
+		if len(line) > maxWidth {
+			line = line[:maxWidth-1] + "…"
+		}
+		b.WriteString(line)
+		if i < limit-1 {
+			b.WriteString("\n")
+		}
+	}
+	if extra := len(lines) - limit; extra > 0 {
+		fmt.Fprintf(&b, "\n(+%d more lines — open PR for the full diff)", extra)
+	}
+	return b.String()
+}
+
 // RenderSpike formats the cost-spike alert. Severity is implicit —
 // any spike that hits this path already passed the workflow's
 // detection threshold.

@@ -85,6 +85,10 @@ func registerWorkflows(d *worker.InMemory, log *slog.Logger, cfg config.Config, 
 		workflows.CostSpike{
 			Notifier: &loggingSpikeNotifier{log: log},
 		},
+		workflows.OnboardingNudge{
+			Source:   newInMemoryOnboardingSource(),
+			Notifier: &loggingNudgeNotifier{log: log},
+		},
 	}
 	for _, w := range bound {
 		if err := d.Register(w); err != nil {

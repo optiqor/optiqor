@@ -134,7 +134,7 @@ func TestRoutes_Meta_ListsKnownEndpoints(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"/v1/analyze", "/r/{hash}", "/v1/receipts/{id}", "/v1/apply-fixes", "/v1/ingest", "/v1/cost-spikes"} {
+	for _, want := range []string{"/v1/analyze", "/r/{hash}", "/v1/receipts/{id}", "/v1/apply-fixes", "/v1/ingest", "/v1/cost-spikes", "/v1/onboarding/health"} {
 		found := false
 		for _, e := range got.Endpoints {
 			if e.Path == want {

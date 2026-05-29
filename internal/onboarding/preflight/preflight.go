@@ -45,6 +45,14 @@ type Probe interface {
 	HasClusterAutoscaler(ctx context.Context) (bool, error)
 	HasRBAC(ctx context.Context, verbs []string, resources []string) (bool, error)
 	NamespaceCount(ctx context.Context) (int, error)
+	// DetectUnsupportedProvisioners returns the names of provisioners
+	// present in the cluster that Optiqor does not yet have a Year-1
+	// adapter for (GKE NAP, OpenShift Machine API, DigitalOcean, etc.).
+	// Empty slice means the cluster is on a supported provisioner; the
+	// installer fails closed when this returns anything non-empty. See
+	// todo.md L334 — silent fallback to `static` mis-classifies the
+	// cluster's bill basis and corrupts Receipt accuracy.
+	DetectUnsupportedProvisioners(ctx context.Context) ([]string, error)
 }
 
 // Config carries the customer-supplied bits the Runner can't probe
@@ -82,6 +90,7 @@ func (r *Runner) Run(ctx context.Context, cfg Config) ([]Check, error) {
 		r.rbacCheck(rCtx),
 		r.karpenterCheck(rCtx),
 		r.autoscalerCheck(rCtx),
+		r.unsupportedProvisionerCheck(rCtx),
 		r.namespaceCountCheck(rCtx),
 	}
 	return out, nil
@@ -167,6 +176,36 @@ func (r *Runner) autoscalerCheck(ctx context.Context) Check {
 		return Check{Name: "cluster-autoscaler detected", Status: StatusPass, Detail: "T2 provisioner-class will register"}
 	}
 	return Check{Name: "cluster-autoscaler detected", Status: StatusWarn, Detail: "no Deployment named cluster-autoscaler in kube-system"}
+}
+
+// unsupportedProvisionerCheck fails closed when the cluster runs a
+// Year-1 unsupported provisioner (GKE NAP, OpenShift Machine API,
+// DigitalOcean, etc.). Routing the customer through `static` would
+// mis-classify their bill basis and corrupt Receipt accuracy — better
+// to reject the install with a tracked issue link than to ship bad
+// numbers downstream.
+func (r *Runner) unsupportedProvisionerCheck(ctx context.Context) Check {
+	names, err := r.Probe.DetectUnsupportedProvisioners(ctx)
+	if err != nil {
+		return Check{
+			Name:   "Unsupported provisioner gate",
+			Status: StatusWarn,
+			Detail: "could not probe for unsupported provisioners: " + err.Error(),
+		}
+	}
+	if len(names) == 0 {
+		return Check{
+			Name:   "Unsupported provisioner gate",
+			Status: StatusPass,
+			Detail: "no unsupported provisioner CRDs detected",
+		}
+	}
+	return Check{
+		Name:            "Unsupported provisioner gate",
+		Status:          StatusFail,
+		Detail:          "detected " + strings.Join(names, ", ") + " — Optiqor has no Year-1 adapter for these provisioners. Year-1 supported: Karpenter, EKS MNG, EKS+CAS+ASG, standalone ASG, static node groups.",
+		RemediationLink: "https://github.com/optiqor/optiqor/issues/new?labels=provisioner-adapter&template=unsupported-provisioner.md",
+	}
 }
 
 func (r *Runner) namespaceCountCheck(ctx context.Context) Check {
