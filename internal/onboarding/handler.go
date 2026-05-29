@@ -216,7 +216,7 @@ func blockersFor(s Stage) []Blocker {
 		}}
 	case StageFirstApplyFix:
 		return []Blocker{{
-			Stage: StageFirstApplyFix, Reason: "first Receipt pending — waiting for 7-day bill window",
+			Stage: StageFirstApplyFix, Reason: "first Receipt pending, waiting for 7-day bill window",
 			Action: "Watch for the Receipt in the dashboard; nothing to do",
 			Link:   "https://optiqor.dev/app/receipts",
 		}}

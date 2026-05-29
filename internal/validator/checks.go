@@ -109,7 +109,7 @@ func (HPABoundsCheck) Check(_ context.Context, _ tenancy.Context, c Candidate) (
 		return &Verdict{Severity: SeverityHard, Reason: "proposed replicas above HPA maxReplicas"}, nil
 	}
 	// In-bounds change: warn that the HPA will dominate.
-	return &Verdict{Severity: SeverityWarn, Reason: "workload has HPA — replica change will be overridden"}, nil
+	return &Verdict{Severity: SeverityWarn, Reason: "workload has HPA; replica change will be overridden"}, nil
 }
 
 // DependencyCheck rejects a fix on a workload that other workloads
@@ -150,7 +150,7 @@ func (OOMRecentCheck) Check(_ context.Context, _ tenancy.Context, c Candidate) (
 	}
 	return &Verdict{
 		Severity: SeverityHard,
-		Reason:   "recent OOMKill — memory cut rejected",
+		Reason:   "recent OOMKill, memory cut rejected",
 	}, nil
 }
 

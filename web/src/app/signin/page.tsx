@@ -6,6 +6,20 @@ import { redirect } from "next/navigation";
 // hasGitHubAuth picks the button vs the dev Credentials form. The dev
 // path can't load in prod (see @/auth), so this branch is unreachable
 // from a real deploy.
+//
+// sanitizeCallbackUrl rejects anything that isn't a same-origin path so
+// /signin?callbackUrl=https://attacker.example/phish can't bounce a
+// freshly-authenticated user off our origin. Same-origin = starts with
+// "/" and not "//" (protocol-relative) and not "/\\" (some browsers
+// decode backslashes as path separators after redirect).
+function sanitizeCallbackUrl(raw: string | undefined): string {
+  if (!raw) return "/app";
+  if (!raw.startsWith("/")) return "/app";
+  if (raw.startsWith("//")) return "/app";
+  if (raw.startsWith("/\\")) return "/app";
+  return raw;
+}
+
 export default async function SignInPage({
   searchParams,
 }: {
@@ -13,7 +27,7 @@ export default async function SignInPage({
 }) {
   const session = await auth();
   const sp = await searchParams;
-  const callbackUrl = sp.callbackUrl ?? "/app";
+  const callbackUrl = sanitizeCallbackUrl(sp.callbackUrl);
   if (session) redirect(callbackUrl);
 
   return (

@@ -23,8 +23,13 @@ health:
 ingest:
   url: "https://ingest.optiqor.dev"
   secretName: optiqor-agent-mtls
+  # requireSecret defaults to true so a missing or misnamed Secret
+  # fails the pod into CrashLoopBackOff instead of silently shipping
+  # snapshots without client certs. Set false only for local dev
+  # against an unauthenticated ingest endpoint.
+  requireSecret: true
   # snapshotInterval controls how often the agent POSTs a full snapshot.
-  # 60s is the floor — informers serve reads from memory, so a shorter
+  # 60s is the floor; informers serve reads from memory, so a shorter
   # interval doesn't lower latency, only egress cost.
   snapshotInterval: 60s
   # eventsCutoff drops events older than this from each snapshot to

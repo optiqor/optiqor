@@ -121,7 +121,7 @@ func (r *Runner) prometheusCheck(ctx context.Context, url string) Check {
 		return Check{
 			Name:            "Prometheus URL",
 			Status:          StatusWarn,
-			Detail:          "no Prometheus URL supplied — agent will ship K8s state but no per-workload metrics",
+			Detail:          "no Prometheus URL supplied; agent will ship K8s state but no per-workload metrics",
 			RemediationLink: "https://optiqor.dev/runbooks/prometheus",
 		}
 	}
@@ -133,7 +133,7 @@ func (r *Runner) prometheusCheck(ctx context.Context, url string) Check {
 		return Check{
 			Name:            "Prometheus reachable",
 			Status:          StatusFail,
-			Detail:          "could not reach " + url + " from the cluster — check Service name + namespace",
+			Detail:          "could not reach " + url + " from the cluster; check Service name + namespace",
 			RemediationLink: "https://optiqor.dev/runbooks/prometheus",
 		}
 	}
@@ -166,7 +166,7 @@ func (r *Runner) karpenterCheck(ctx context.Context) Check {
 	return Check{
 		Name:   "Karpenter detected",
 		Status: StatusWarn,
-		Detail: "no Karpenter NodePool CRD — agent will fall through to cluster-autoscaler / static detection",
+		Detail: "no Karpenter NodePool CRD; agent will fall through to cluster-autoscaler / static detection",
 	}
 }
 
@@ -203,7 +203,7 @@ func (r *Runner) unsupportedProvisionerCheck(ctx context.Context) Check {
 	return Check{
 		Name:            "Unsupported provisioner gate",
 		Status:          StatusFail,
-		Detail:          "detected " + strings.Join(names, ", ") + " — Optiqor has no Year-1 adapter for these provisioners. Year-1 supported: Karpenter, EKS MNG, EKS+CAS+ASG, standalone ASG, static node groups.",
+		Detail:          "detected " + strings.Join(names, ", ") + ": Optiqor has no Year-1 adapter for these provisioners. Year-1 supported: Karpenter, EKS MNG, EKS+CAS+ASG, standalone ASG, static node groups.",
 		RemediationLink: "https://github.com/optiqor/optiqor/issues/new?labels=provisioner-adapter&template=unsupported-provisioner.md",
 	}
 }
