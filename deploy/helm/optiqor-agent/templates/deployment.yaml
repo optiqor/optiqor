@@ -122,8 +122,15 @@ spec:
       volumes:
         - name: mtls
           secret:
-            secretName: {{ .Values.ingest.secretName }}
-            optional: true
+            {{- /*
+              Required, not optional. A missing Secret would silently
+              boot the agent without client certs and ship snapshots
+              over plain TLS; refusing to start is the safer default.
+              Override with `--set ingest.requireSecret=false` for
+              local dev against an unauthenticated ingest endpoint.
+            */}}
+            secretName: {{ required ".Values.ingest.secretName is required (mTLS material for backend ingest)" .Values.ingest.secretName }}
+            optional: {{ not (default true .Values.ingest.requireSecret) }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -231,7 +231,7 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 			return fmt.Errorf("apply_fix: validator: %w", err)
 		}
 		if res.Rejected != nil {
-			return fmt.Errorf("apply_fix: validator rejected: %s — %s", res.Rejected.Validator, res.Rejected.Reason)
+			return fmt.Errorf("apply_fix: validator %s rejected: %s", res.Rejected.Validator, res.Rejected.Reason)
 		}
 		if effectiveSkeptic {
 			for _, v := range res.Verdicts {
@@ -267,7 +267,7 @@ func (w ApplyFix) Execute(ctx context.Context, t tenancy.Context, raw []byte) er
 		RepoName:    p.RepoName,
 		HeadBranch:  fmt.Sprintf("optiqor/apply-fix/%s", p.ApplyFixID),
 		BaseBranch:  p.BaseBranch,
-		Title:       fmt.Sprintf("optiqor: %s — %s", p.Finding.Workload, p.Finding.Title),
+		Title:       fmt.Sprintf("optiqor(%s): %s", p.Finding.Workload, p.Finding.Title),
 		Body:        body,
 		UnifiedDiff: resp.UnifiedDiff,
 		ApplyFixID:  p.ApplyFixID,

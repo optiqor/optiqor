@@ -58,7 +58,7 @@ module "rds" {
   name                     = "optiqor-dev"
   vpc_id                   = module.vpc.vpc_id
   subnet_ids               = module.vpc.db_subnet_ids
-  allow_security_group_ids = []
+  allow_security_group_ids = [module.eks.cluster_security_group_id]
   kms_key_arn              = module.kms.data_key_arn
   instance_class           = "db.t4g.medium"
   allocated_storage_gb     = 50
@@ -71,7 +71,7 @@ module "redis" {
   name                     = "optiqor-dev"
   vpc_id                   = module.vpc.vpc_id
   subnet_ids               = module.vpc.private_subnet_ids
-  allow_security_group_ids = []
+  allow_security_group_ids = [module.eks.cluster_security_group_id]
   kms_key_arn              = module.kms.data_key_arn
   num_cache_clusters       = 1
 }

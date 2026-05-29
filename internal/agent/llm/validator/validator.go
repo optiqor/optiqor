@@ -99,14 +99,14 @@ func scanAddedLines(diff string, maxRatio float64) []Issue {
 			if v == "0" {
 				issues = append(issues, Issue{
 					Code: "replicas-zero", Severity: SeverityHard,
-					Detail: "diff sets replicas to 0 — use HPA min, not a hard zero",
+					Detail: "diff sets replicas to 0; use HPA min, not a hard zero",
 				})
 			}
 		case "cpu", "memory":
 			if v == "\"0\"" || v == "0" {
 				issues = append(issues, Issue{
 					Code: "resource-zero", Severity: SeverityHard,
-					Detail: "diff sets " + k + " to 0 — unbounded scheduling",
+					Detail: "diff sets " + k + " to 0, leaving the workload unbounded",
 				})
 			}
 		}

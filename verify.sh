@@ -358,7 +358,9 @@ check "Dockerfile.worker runs as non-root user" \
 check "Dockerfile.agent runs as non-root user" \
   bash -c "grep -qE 'USER [^r]|USER 1[0-9]+' Dockerfile.agent"
 check "Dockerfiles use distroless or scratch base" \
-  bash -c "grep -qE 'FROM (gcr\\.io/distroless|scratch)' Dockerfile.api Dockerfile.worker Dockerfile.agent"
+  bash -c "grep -qE '(FROM (gcr\\.io/distroless|scratch)|DISTROLESS_RUNTIME_IMAGE=gcr\\.io/distroless)' Dockerfile.api Dockerfile.worker Dockerfile.agent"
+check "Dockerfile runtime base pinned by sha256 digest" \
+  bash -c "grep -qE 'DISTROLESS_RUNTIME_IMAGE=gcr\\.io/distroless/[a-z0-9./:-]+@sha256:[0-9a-f]{64}' Dockerfile.api Dockerfile.worker Dockerfile.agent"
 
 # --- Config / secrets hygiene ---
 check ".env not committed; .env.example provided instead" \
