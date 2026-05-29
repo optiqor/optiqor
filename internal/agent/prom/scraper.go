@@ -35,11 +35,14 @@ type QueryProfile struct {
 // kube-state-metrics + cAdvisor. Each query groups by (namespace,
 // pod, workload kind+name) so the scraper can map series → workload
 // identity without a second query.
+// DefaultProfile reads the canonical query set. Centralising the
+// PromQL in canonical.go keeps the cAdvisor / kube-state-metrics
+// query strings out of sync with the doc impossible.
 var DefaultProfile = QueryProfile{
-	CPURate:           `sum by (namespace,pod) (rate(container_cpu_usage_seconds_total{container!="POD",container!=""}[5m]))`,
-	MemoryWorking:     `sum by (namespace,pod) (container_memory_working_set_bytes{container!="POD",container!=""})`,
-	OOMKilledIncrease: `sum by (namespace,pod) (increase(kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}[7d]))`,
-	OOMWindow:         7 * 24 * time.Hour,
+	CPURate:           Canonical.CPURate,
+	MemoryWorking:     Canonical.MemoryWorkingSet,
+	OOMKilledIncrease: Canonical.OOMKilledIncrease,
+	OOMWindow:         Canonical.OOMWindow,
 }
 
 // Scraper aggregates the canonical query set into a slice of

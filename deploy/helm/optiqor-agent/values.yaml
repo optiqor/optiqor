@@ -34,8 +34,31 @@ ingest:
 # Prometheus query endpoint. Empty disables agent-side scraping (the
 # K8s informer signals still ship). Defaults to the kube-prometheus-stack
 # in-cluster Service so a stock install lights up without overrides.
+# Authentication is none by default; production customers should set
+# `auth: bearer | basic | sa_token | mtls` and the matching fields below.
+# Per ADR-0021 the agent only talks to this endpoint — it never scrapes
+# customer application pods directly.
 prometheus:
   url: "http://prometheus-operated.monitoring:9090"
+  auth: "none"
+  # bearerTokenFile is a path inside the pod; mount a Secret as a file
+  # via extraVolumeMounts when you set this. File is re-read every
+  # OPTIQOR_PROMETHEUS_TOKEN_REFRESH so kubelet token rotation works.
+  bearerTokenFile: ""
+  username: ""
+  # passwordSecret pulls the basic-auth password from an existing K8s
+  # Secret. Set both name + key when auth: basic.
+  passwordSecret: {}
+  # mtls files are mounted via extraVolumeMounts; the chart does not
+  # generate certs. cert-manager + a Certificate resource is the
+  # recommended provisioning path (see docs/runbooks/agent-install.md).
+  mtls: {}
+  # instantTTL caches per-snapshot queries; 60s keeps repeated ticks
+  # from spamming Prometheus. rangeTTL caches 30-day percentile
+  # roll-ups; 24h aligns with the doc-recommended "run them once daily
+  # during quiet hours".
+  instantTTL: "60s"
+  rangeTTL: "24h"
 
 # Read-only RBAC scope per ADR-0008. Adding a verb here changes the
 # agent's security posture; needs an ADR amendment.
@@ -65,10 +88,21 @@ resources:
 networkPolicy:
   enabled: true
 
-# Prometheus scrape; the agent surfaces its own /metrics on :9090.
+# Agent self-observability. The customer's Prometheus scrapes this so
+# operators can see when the agent's PromQL is slow / failing without
+# logging into the agent pod. Distinct from `prometheus.url` above —
+# that's where the agent reads workload data FROM.
 metrics:
   enabled: true
   port: 9090
+  # serviceMonitor.enabled adds a Prometheus Operator CRD that points at
+  # this Service. Set false when the customer runs Prometheus without
+  # the operator (no CRDs) — they wire their own scrape config.
+  serviceMonitor:
+    enabled: true
+    interval: "30s"
+    scrapeTimeout: "10s"
+    additionalLabels: {}
 
 nodeSelector: {}
 tolerations: []
