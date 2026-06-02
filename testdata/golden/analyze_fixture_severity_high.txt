@@ -3,7 +3,7 @@
   Helm chart cost optimization · security as a bonus
 ────────────────────────────────────────────────────────────────────────────────
 
-  Source      <REPO>/testdata/fixtures/basic-chart/values.yaml
+  Source      <REPO>\testdata\fixtures\basic-chart\values.yaml
   Workloads   15 workloads analyzed
   Cost        ✓ no cost waste detected
   Security    12 findings — bonus, surfaced while parsing

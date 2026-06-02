@@ -2,7 +2,7 @@
   ◐  optiqor score   Helm chart efficiency grade
 ────────────────────────────────────────────────────────────────────────────────
 
-  Source      <REPO>/testdata/fixtures/basic-chart/values.yaml
+  Source      <REPO>\testdata\fixtures\basic-chart\values.yaml
   Workloads   15 analyzed
 
   Grade        F    better than 0% of 100 benchmark charts

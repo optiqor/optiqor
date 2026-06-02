@@ -470,7 +470,14 @@
       "Severity": "LOW",
       "Confidence": "high",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "memory",
+        "have": 0,
+        "want": 1,
+        "have_display": "unset",
+        "want_display": "missing",
+        "note": "asymmetric request"
+      }
     },
     {
       "DetectorID": "tiny-cpu-request",
@@ -481,7 +488,14 @@
       "Severity": "LOW",
       "Confidence": "high",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "CPU",
+        "have": 5,
+        "want": 10,
+        "have_display": "5m",
+        "want_display": "10m",
+        "note": "below placeholder floor"
+      }
     },
     {
       "DetectorID": "allow-privilege-escalation",
@@ -565,7 +579,14 @@
       "Severity": "MED",
       "Confidence": "medium",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "replicas",
+        "have": 20,
+        "want": 25,
+        "have_display": "20",
+        "want_display": "25",
+        "note": "1x HA threshold"
+      }
     },
     {
       "DetectorID": "oversized-cpu-limit",
@@ -576,7 +597,14 @@
       "Severity": "MED",
       "Confidence": "medium",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "CPU",
+        "have": 4000,
+        "want": 8000,
+        "have_display": "4",
+        "want_display": "8",
+        "note": "exceeds large-node threshold"
+      }
     },
     {
       "DetectorID": "oversized-memory-limit",
@@ -587,7 +615,14 @@
       "Severity": "MED",
       "Confidence": "medium",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "memory",
+        "have": 17179869184,
+        "want": 34359738368,
+        "have_display": "16Gi",
+        "want_display": "32Gi",
+        "note": "exceeds large-node threshold"
+      }
     },
     {
       "DetectorID": "replicas-too-high",
@@ -638,7 +673,14 @@
       "Severity": "LOW",
       "Confidence": "high",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "CPU",
+        "have": 0,
+        "want": 1,
+        "have_display": "unset",
+        "want_display": "missing",
+        "note": "asymmetric request"
+      }
     },
     {
       "DetectorID": "tiny-memory-request",
@@ -649,7 +691,14 @@
       "Severity": "LOW",
       "Confidence": "high",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "memory",
+        "have": 16777216,
+        "want": 33554432,
+        "have_display": "16Mi",
+        "want_display": "32Mi",
+        "note": "below placeholder floor"
+      }
     },
     {
       "DetectorID": "dangerous-capability-added",
@@ -1174,7 +1223,14 @@
       "Severity": "LOW",
       "Confidence": "high",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "memory",
+        "have": 0,
+        "want": 1,
+        "have_display": "unset",
+        "want_display": "missing",
+        "note": "asymmetric request"
+      }
     },
     {
       "DetectorID": "tiny-cpu-request",
@@ -1185,7 +1241,14 @@
       "Severity": "LOW",
       "Confidence": "high",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "CPU",
+        "have": 5,
+        "want": 10,
+        "have_display": "5m",
+        "want_display": "10m",
+        "note": "below placeholder floor"
+      }
     },
     {
       "DetectorID": "cpu-limit-far-above-request",
@@ -1214,7 +1277,14 @@
       "Severity": "MED",
       "Confidence": "medium",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "replicas",
+        "have": 20,
+        "want": 25,
+        "have_display": "20",
+        "want_display": "25",
+        "note": "1x HA threshold"
+      }
     },
     {
       "DetectorID": "oversized-cpu-limit",
@@ -1225,7 +1295,14 @@
       "Severity": "MED",
       "Confidence": "medium",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "CPU",
+        "have": 4000,
+        "want": 8000,
+        "have_display": "4",
+        "want_display": "8",
+        "note": "exceeds large-node threshold"
+      }
     },
     {
       "DetectorID": "oversized-memory-limit",
@@ -1236,7 +1313,14 @@
       "Severity": "MED",
       "Confidence": "medium",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "memory",
+        "have": 17179869184,
+        "want": 34359738368,
+        "have_display": "16Gi",
+        "want_display": "32Gi",
+        "note": "exceeds large-node threshold"
+      }
     },
     {
       "DetectorID": "replicas-too-high",
@@ -1265,7 +1349,14 @@
       "Severity": "LOW",
       "Confidence": "high",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "CPU",
+        "have": 0,
+        "want": 1,
+        "have_display": "unset",
+        "want_display": "missing",
+        "note": "asymmetric request"
+      }
     },
     {
       "DetectorID": "tiny-memory-request",
@@ -1276,7 +1367,14 @@
       "Severity": "LOW",
       "Confidence": "high",
       "Category": "cost",
-      "Signal": null
+      "Signal": {
+        "label": "memory",
+        "have": 16777216,
+        "want": 33554432,
+        "have_display": "16Mi",
+        "want_display": "32Mi",
+        "note": "below placeholder floor"
+      }
     },
     {
       "DetectorID": "cpu-limit-far-above-request",

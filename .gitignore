@@ -6,6 +6,7 @@
 
 # Go
 /vendor/
+/go/
 go.work
 go.work.sum
 coverage.out
