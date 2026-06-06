@@ -19,6 +19,7 @@ import (
 	"github.com/optiqor/optiqor-cli/internal/render/style"
 	roastpkg "github.com/optiqor/optiqor-cli/internal/roast"
 	"github.com/optiqor/optiqor-cli/internal/share"
+	"github.com/optiqor/optiqor-cli/internal/watch"
 	"github.com/optiqor/optiqor-cli/pkg/htmlrender"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
@@ -553,13 +554,43 @@ func newAuditCmd() *cobra.Command {
 }
 
 func newWatchCmd() *cobra.Command {
-	return &cobra.Command{
+	var jsonOut bool
+	cmd := &cobra.Command{
 		Use:   "watch [chart]",
 		Short: "Watch a chart and re-analyze on change",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return notYetImplemented(cmd)
+		Long: `Watches a Helm chart directory or values file and re-runs analysis
+whenever a YAML file changes. Clears the screen between runs when
+connected to a TTY. Press Ctrl-C to exit cleanly (exit code 0).`,
+		Example: `  optiqor watch ./my-chart
+  optiqor watch ./values.yaml --json`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := "."
+			if len(args) == 1 {
+				path = args[0]
+			}
+
+			// Resolve color and TTY from the same helpers the rest of
+			// the CLI uses so --no-color and NO_COLOR are honoured.
+			useColor := colorPolicyFrom(cmd.Context())
+			out := cmd.OutOrStdout()
+
+			isTTY := false
+			if f, ok := out.(*os.File); ok {
+				isTTY = style.IsTTY(f)
+			}
+
+			return watch.Run(path, watch.Options{
+				JSON:  jsonOut,
+				Color: useColor,
+				Width: terminalWidth(),
+				Out:   out,
+				IsTTY: isTTY,
+			})
 		},
 	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "stream newline-delimited JSON events instead of reprinting the full report")
+	return cmd
 }
 
 func newCompareCmd() *cobra.Command {
@@ -582,8 +613,4 @@ func newCompareCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit machine-readable JSON")
 	return cmd
-}
-
-func notYetImplemented(cmd *cobra.Command) error {
-	return fmt.Errorf("`optiqor %s` is not yet implemented (see https://optiqor.dev/roadmap)", cmd.Name())
 }

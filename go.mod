@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/mattn/go-isatty v0.0.21
 	github.com/muesli/termenv v0.16.0
 	github.com/spf13/cobra v1.8.1
