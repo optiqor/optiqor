@@ -185,6 +185,7 @@ The pipeline is deterministic. The same input always produces the same output. T
 | `compare <a> <b>` | Currently an alias for `diff` (richer output ships in Phase 7) | Beta |
 | `watch [chart]` | Re-analyze on file change | Coming soon |
 | `--version` | Print version and exit | Stable |
+| `--version --verbose` | Print full version and exit | Stable |
 | `--help` | Help for any command | Stable |
 
 ### Filter and exit-code flags
@@ -439,6 +440,8 @@ flowchart TD
 
 | Flag | Default | Description |
 | --- | --- | --- |
+| `--version` | true | Print version and exit |
+| `--version --verbose` | true | Print full version and exit |
 | `--json` | false | Emit machine-readable JSON |
 | `--offline` | true | Do not perform any network calls |
 | `--share` | false | Upload sanitized analysis to optiqor.dev (opt-in) |

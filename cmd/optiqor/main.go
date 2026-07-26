@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/cobra"
 
@@ -34,13 +35,38 @@ const (
 // errFindings is a sentinel returned from RunE so main can map it to exitFindings.
 var errFindings = errors.New("optiqor: findings exceed threshold")
 
-var version = "dev"
+var (
+	version   = "dev"
+	commit    = "none"
+	buildDate = "unknown"
+)
 
 // accuracyDisclosure is the mandatory line every command's help and
 // output must contain (hard rule per CLAUDE.md).
 const accuracyDisclosure = "Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get)."
 
 func main() {
+	var showVersion bool
+	var verbose bool
+
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "--version", "-v":
+			showVersion = true
+		case "--verbose":
+			verbose = true
+		}
+	}
+
+	if showVersion {
+		if verbose {
+			fmt.Println(versionTemplate())
+		} else {
+			fmt.Printf("optiqor %s\n", version)
+		}
+		os.Exit(0)
+	}
+
 	err := newRootCmd().Execute()
 	switch {
 	case err == nil:
@@ -59,6 +85,7 @@ func newRootCmd() *cobra.Command {
 		noColor    bool
 		configPath string
 	)
+	var verboseVersion bool
 
 	root := &cobra.Command{
 		Use:   "optiqor",
@@ -90,7 +117,7 @@ namespaces, etc.). Cost is the headline; security is a side-effect.
 
 	root.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output (also: NO_COLOR env)")
 	root.PersistentFlags().StringVar(&configPath, "config", "", "path to .optiqor.yaml (default: ./.optiqor.yaml or $OPTIQOR_CONFIG)")
-
+	root.PersistentFlags().BoolVar(&verboseVersion, "verbose", false, "show detailed version information")
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		cfg, err := config.Load(configPath)
 		if err != nil {
@@ -104,8 +131,6 @@ namespaces, etc.). Cost is the headline; security is a side-effect.
 		cmd.SetContext(ctx)
 		return nil
 	}
-
-	root.SetVersionTemplate(versionTemplate())
 
 	root.AddCommand(
 		newAnalyzeCmd(),
@@ -121,7 +146,15 @@ namespaces, etc.). Cost is the headline; security is a side-effect.
 }
 
 func versionTemplate() string {
-	return fmt.Sprintf("optiqor %s — %s\n", version, "Helm chart cost analysis (security bonus)")
+	return fmt.Sprintf(
+		"optiqor %s\ncommit:     %s\nbuilt:      %s\ngo version: %s\nos/arch:    %s/%s",
+		version,
+		commit,
+		buildDate,
+		runtime.Version(),
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
 }
 
 func newAnalyzeCmd() *cobra.Command {
