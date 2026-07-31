@@ -76,6 +76,8 @@ optiqor analyze ./chart
 go install github.com/optiqor/optiqor-cli/cmd/optiqor@latest
 ```
 
+> **Note:** If the `optiqor` command is not recognized after installation, ensure your Go binary directory (typically `$(go env GOPATH)/bin` or `$HOME/go/bin`) is included in your system `PATH`.
+
 ### Option 4: Download a release binary
 
 Pre-built binaries for Linux (amd64, arm64) and macOS (amd64, arm64) are published on every tagged release.
