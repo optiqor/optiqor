@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 const zlib = require('zlib');
 const { pipeline } = require('stream');
 const { promisify } = require('util');
@@ -41,6 +42,8 @@ if (!target) {
 }
 
 const url = `https://github.com/optiqor/optiqor-cli/releases/download/v${VERSION}/optiqor_${VERSION}_${target}.tar.gz`;
+const checksumsUrl = `https://github.com/optiqor/optiqor-cli/releases/download/v${VERSION}/checksums.txt`;
+const archiveName = `optiqor_${VERSION}_${target}.tar.gz`;
 const vendorDir = path.join(__dirname, '..', 'vendor');
 fs.mkdirSync(vendorDir, { recursive: true });
 
@@ -63,11 +66,54 @@ const get = (u) =>
 
 const pipelineP = promisify(pipeline);
 
+// Returns the hex digest for archiveName from GoReleaser checksums.txt.
+const expectedDigest = (checksumsText) => {
+  for (const line of checksumsText.split(/\r?\n/)) {
+    const [digest, name] = line.trim().split(/\s+/);
+    if (name !== archiveName) continue;
+    return /^[0-9a-f]{64}$/i.test(digest) ? digest.toLowerCase() : null;
+  }
+  return null;
+};
+
+const sha256Of = (file) =>
+  crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
+const fetchText = async (u) => {
+  const res = await get(u);
+  let body = '';
+  res.setEncoding('utf8');
+  for await (const chunk of res) body += chunk;
+  return body;
+};
+
 (async () => {
   try {
     console.log(`optiqor: downloading binary for ${key}...`);
     const res = await get(url);
     await pipelineP(res, fs.createWriteStream(tarballPath));
+
+    // Verify the SHA-256 digest against the release's checksums.txt
+    // before extracting, so a MITM'd or hijacked release asset never
+    // executes on the user's machine.
+    const checksumsText = await fetchText(checksumsUrl);
+    const digest = expectedDigest(checksumsText);
+    if (!digest) {
+      fs.unlinkSync(tarballPath);
+      console.error(`optiqor: ${archiveName} missing from ${checksumsUrl}`);
+      console.error('optiqor: refusing to install an unverified binary.');
+      process.exit(1);
+    }
+    const actual = sha256Of(tarballPath);
+    if (actual !== digest) {
+      fs.unlinkSync(tarballPath);
+      console.error(`optiqor: checksum mismatch for ${archiveName}`);
+      console.error(`optiqor:   expected ${digest}`);
+      console.error(`optiqor:   actual   ${actual}`);
+      console.error('optiqor: refusing to install a tampered binary.');
+      process.exit(1);
+    }
+
     // tar -xzf using system tar (avoids adding tar npm dep).
     execFileSync('tar', ['-xzf', tarballPath, '-C', vendorDir], { stdio: 'inherit' });
     fs.unlinkSync(tarballPath);
