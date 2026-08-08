@@ -26,6 +26,7 @@
   },
   "scripts": {
     "postinstall": "node ./npm/postinstall.js",
+    "test:postinstall": "node ./npm/postinstall.test.js",
     "test": "node -e \"require('./npm/index.js')\""
   },
   "files": [

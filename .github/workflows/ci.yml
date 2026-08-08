@@ -52,4 +52,5 @@ jobs:
         with:
           node-version: "20"
       - run: OPTIQOR_SKIP_POSTINSTALL=1 npm install --ignore-scripts
+      - run: npm run test:postinstall
       - run: npm pack

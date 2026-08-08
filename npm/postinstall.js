@@ -74,9 +74,8 @@ const pipelineP = promisify(pipeline);
     console.log('optiqor: ready. Run `optiqor --version` to verify.');
   } catch (err) {
     console.error('optiqor: failed to install binary:', err.message);
-    console.error('optiqor: this is non-fatal — build from source if needed:');
+    console.error('optiqor: build from source if needed:');
     console.error('  go install github.com/optiqor/optiqor-cli/cmd/optiqor@latest');
-    // Exit 0 so npm install does not abort entirely.
-    process.exit(0);
+    process.exit(1);
   }
 })();
