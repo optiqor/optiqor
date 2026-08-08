@@ -36,5 +36,13 @@ func (excessiveReplicaCount) Run(w parser.Workload) []Finding {
 		Detail:     fmt.Sprintf("Replicas set to %d. Past ~20 replicas the cost grows linearly while the marginal availability gain approaches zero — most cloud zones can't fit that many across enough fault domains. Cap the HPA's maxReplicas or split the workload across multiple deployments.", w.Replicas),
 		Severity:   SeverityMed,
 		Confidence: ConfidenceMed,
+		Signal: &Signal{
+			Label:       "replicas",
+			Have:        float64(excessiveReplicaThreshold),
+			Want:        float64(w.Replicas),
+			HaveDisplay: fmt.Sprintf("%d", excessiveReplicaThreshold),
+			WantDisplay: fmt.Sprintf("%d", w.Replicas),
+			Note:        fmt.Sprintf("%d replicas", w.Replicas),
+		},
 	}}
 }

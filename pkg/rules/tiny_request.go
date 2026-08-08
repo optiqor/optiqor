@@ -38,6 +38,14 @@ func (tinyCPURequest) Run(w parser.Workload) []Finding {
 		Detail:     fmt.Sprintf("requests.cpu is %s — below the 10m threshold most charts use as a sentinel. Probably a placeholder from a Helm scaffold. Set it to your observed P95 (or remove the limit-without-request asymmetry the scheduler is currently dealing with).", w.Requests.CPU),
 		Severity:   SeverityLow,
 		Confidence: ConfidenceHigh,
+		Signal: &Signal{
+			Label:       "CPU",
+			Have:        float64(w.Requests.CPU.Value),
+			Want:        float64(tinyCPUMillicores),
+			HaveDisplay: w.Requests.CPU.String(),
+			WantDisplay: "10m",
+			Note:        "below 10m sentinel",
+		},
 	}}
 }
 
@@ -62,5 +70,13 @@ func (tinyMemoryRequest) Run(w parser.Workload) []Finding {
 		Detail:     fmt.Sprintf("requests.memory is %s — below 32 MiB. A workload that genuinely needs less memory is a rarity; most charts setting tiny memory requests are using a placeholder. Set it to your observed P95.", w.Requests.Memory),
 		Severity:   SeverityLow,
 		Confidence: ConfidenceHigh,
+		Signal: &Signal{
+			Label:       "memory",
+			Have:        float64(w.Requests.Memory.Value),
+			Want:        float64(tinyMemoryBytes),
+			HaveDisplay: w.Requests.Memory.String(),
+			WantDisplay: "32Mi",
+			Note:        "below 32Mi sentinel",
+		},
 	}}
 }

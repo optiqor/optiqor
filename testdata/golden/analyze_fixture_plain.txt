@@ -156,6 +156,8 @@
   │                                                                              │
   │ Replica count past the HA inflection point                                   │
   │                                                                              │
+  │ replicas 20     ███████████████████░░░░░ 25   25 replicas                    │
+  │                                                                              │
   │ Replicas set to 25. Past ~20 replicas the cost grows linearly while the      │
   │ marginal availability gain approaches zero — most cloud zones can't fit      │
   │ that many across enough fault domains. Cap the HPA's maxReplicas or split    │
@@ -168,6 +170,8 @@
   │                                                                              │
   │ CPU limit forces large-node scheduling                                       │
   │                                                                              │
+  │ CPU      2      ██████░░░░░░░░░░░░░░░░░░ 8   limit > 4 vCPU                  │
+  │                                                                              │
   │ CPU limit is 8. Above 4 vCPU, the pod can only land on large nodes;          │
   │ smaller / Spot instance types are excluded from bin-packing. Either split    │
   │ the workload or confirm the high limit is justified by P99.                  │
@@ -178,6 +182,8 @@
   ┌─ MED · megabox ──────────────────────────────────────────────────────────────┐
   │                                                                              │
   │ Memory limit forces large-node scheduling                                    │
+  │                                                                              │
+  │ memory   8Gi    ██████░░░░░░░░░░░░░░░░░░ 32Gi   limit > 16 GiB               │
   │                                                                              │
   │ Memory limit is 32Gi. Above 16 GiB, the pod can only land on memory-class    │
   │ nodes; balanced / Spot bin-packing is excluded. Confirm the workload         │
@@ -286,6 +292,8 @@
   │                                                                              │
   │ CPU request set without memory request                                       │
   │                                                                              │
+  │ memory   unset  ░░░░░░░░░░░░░░░░░░░░░░░░ required   memory request missing   │
+  │                                                                              │
   │ requests.cpu is set but requests.memory is not. The scheduler can't          │
   │ reserve memory accurately, so the pod is BestEffort for memory — first       │
   │ to evict under pressure. Add a memory request matching observed P95.         │
@@ -296,6 +304,8 @@
   ┌─ LOW · incomplete ───────────────────────────────────────────────────────────┐
   │                                                                              │
   │ CPU request below the placeholder threshold                                  │
+  │                                                                              │
+  │ CPU      5m     ████████████░░░░░░░░░░░░ 10m   below 10m sentinel            │
   │                                                                              │
   │ requests.cpu is 5m — below the 10m threshold most charts use as a            │
   │ sentinel. Probably a placeholder from a Helm scaffold. Set it to your        │
@@ -309,6 +319,8 @@
   │                                                                              │
   │ Memory request set without CPU request                                       │
   │                                                                              │
+  │ CPU      unset  ░░░░░░░░░░░░░░░░░░░░░░░░ required   CPU request missing      │
+  │                                                                              │
   │ requests.memory is set but requests.cpu is not. The scheduler can't          │
   │ reserve CPU, so bin-packing assumes zero — pods can stack onto a single      │
   │ node and starve each other. Add a CPU request matching observed P95.         │
@@ -319,6 +331,8 @@
   ┌─ LOW · memhog ───────────────────────────────────────────────────────────────┐
   │                                                                              │
   │ Memory request below the placeholder threshold                               │
+  │                                                                              │
+  │ memory   16Mi   ████████████░░░░░░░░░░░░ 32Mi   below 32Mi sentinel          │
   │                                                                              │
   │ requests.memory is 16Mi — below 32 MiB. A workload that genuinely needs      │
   │ less memory is a rarity; most charts setting tiny memory requests are        │

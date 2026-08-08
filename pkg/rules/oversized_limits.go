@@ -38,6 +38,14 @@ func (oversizedCPULimit) Run(w parser.Workload) []Finding {
 		Detail:     fmt.Sprintf("CPU limit is %s. Above 4 vCPU, the pod can only land on large nodes; smaller / Spot instance types are excluded from bin-packing. Either split the workload or confirm the high limit is justified by P99.", w.Limits.CPU),
 		Severity:   SeverityMed,
 		Confidence: ConfidenceMed,
+		Signal: &Signal{
+			Label:       "CPU",
+			Have:        float64(w.Requests.CPU.Value),
+			Want:        float64(w.Limits.CPU.Value),
+			HaveDisplay: w.Requests.CPU.String(),
+			WantDisplay: w.Limits.CPU.String(),
+			Note:        "limit > 4 vCPU",
+		},
 	}}
 }
 
@@ -59,5 +67,13 @@ func (oversizedMemoryLimit) Run(w parser.Workload) []Finding {
 		Detail:     fmt.Sprintf("Memory limit is %s. Above 16 GiB, the pod can only land on memory-class nodes; balanced / Spot bin-packing is excluded. Confirm the workload genuinely uses this much, or split the workload.", w.Limits.Memory),
 		Severity:   SeverityMed,
 		Confidence: ConfidenceMed,
+		Signal: &Signal{
+			Label:       "memory",
+			Have:        float64(w.Requests.Memory.Value),
+			Want:        float64(w.Limits.Memory.Value),
+			HaveDisplay: w.Requests.Memory.String(),
+			WantDisplay: w.Limits.Memory.String(),
+			Note:        "limit > 16 GiB",
+		},
 	}}
 }

@@ -67,11 +67,19 @@ func TestCmd_Golden_Stable(t *testing.T) {
 // normalize strips the test's cwd and the repo root from filepath.Abs
 // output so goldens stay bit-identical across laptops and CI runners.
 func normalize(s string) string {
+	s = strings.ReplaceAll(s, `\`, `/`)
+	s = strings.ReplaceAll(s, `//`, `/`)
+	s = strings.ReplaceAll(s, `https:/`, `https://`)
+	s = strings.ReplaceAll(s, `http:/`, `http://`)
+
 	if cwd, err := os.Getwd(); err == nil {
-		s = strings.ReplaceAll(s, cwd, "<CWD>")
+		cwdNorm := strings.ReplaceAll(cwd, `\`, `/`)
+
 		if repo, err := filepath.Abs(filepath.Join(cwd, "..", "..")); err == nil {
-			s = strings.ReplaceAll(s, repo, "<REPO>")
+			repoNorm := strings.ReplaceAll(repo, `\`, `/`)
+			s = strings.ReplaceAll(s, repoNorm, "<REPO>")
 		}
+		s = strings.ReplaceAll(s, cwdNorm, "<CWD>")
 	}
 	return s
 }

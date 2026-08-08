@@ -33,6 +33,14 @@ func (cpuWithoutMemoryRequest) Run(w parser.Workload) []Finding {
 		Detail:     "requests.cpu is set but requests.memory is not. The scheduler can't reserve memory accurately, so the pod is BestEffort for memory — first to evict under pressure. Add a memory request matching observed P95.",
 		Severity:   SeverityLow,
 		Confidence: ConfidenceHigh,
+		Signal: &Signal{
+			Label:       "memory",
+			Have:        0,
+			Want:        0,
+			HaveDisplay: "unset",
+			WantDisplay: "required",
+			Note:        "memory request missing",
+		},
 	}}
 }
 
@@ -54,5 +62,13 @@ func (memoryWithoutCPURequest) Run(w parser.Workload) []Finding {
 		Detail:     "requests.memory is set but requests.cpu is not. The scheduler can't reserve CPU, so bin-packing assumes zero — pods can stack onto a single node and starve each other. Add a CPU request matching observed P95.",
 		Severity:   SeverityLow,
 		Confidence: ConfidenceHigh,
+		Signal: &Signal{
+			Label:       "CPU",
+			Have:        0,
+			Want:        0,
+			HaveDisplay: "unset",
+			WantDisplay: "required",
+			Note:        "CPU request missing",
+		},
 	}}
 }

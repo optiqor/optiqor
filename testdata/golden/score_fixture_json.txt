@@ -510,7 +510,14 @@
         "Severity": "LOW",
         "Confidence": "high",
         "Category": "cost",
-        "Signal": null
+        "Signal": {
+          "label": "memory",
+          "have": 0,
+          "want": 0,
+          "have_display": "unset",
+          "want_display": "required",
+          "note": "memory request missing"
+        }
       },
       {
         "DetectorID": "tiny-cpu-request",
@@ -521,7 +528,14 @@
         "Severity": "LOW",
         "Confidence": "high",
         "Category": "cost",
-        "Signal": null
+        "Signal": {
+          "label": "CPU",
+          "have": 5,
+          "want": 10,
+          "have_display": "5m",
+          "want_display": "10m",
+          "note": "below 10m sentinel"
+        }
       },
       {
         "DetectorID": "allow-privilege-escalation",
@@ -605,7 +619,14 @@
         "Severity": "MED",
         "Confidence": "medium",
         "Category": "cost",
-        "Signal": null
+        "Signal": {
+          "label": "replicas",
+          "have": 20,
+          "want": 25,
+          "have_display": "20",
+          "want_display": "25",
+          "note": "25 replicas"
+        }
       },
       {
         "DetectorID": "oversized-cpu-limit",
@@ -616,7 +637,14 @@
         "Severity": "MED",
         "Confidence": "medium",
         "Category": "cost",
-        "Signal": null
+        "Signal": {
+          "label": "CPU",
+          "have": 2000,
+          "want": 8000,
+          "have_display": "2",
+          "want_display": "8",
+          "note": "limit /u003e 4 vCPU"
+        }
       },
       {
         "DetectorID": "oversized-memory-limit",
@@ -627,7 +655,14 @@
         "Severity": "MED",
         "Confidence": "medium",
         "Category": "cost",
-        "Signal": null
+        "Signal": {
+          "label": "memory",
+          "have": 8589934592,
+          "want": 34359738368,
+          "have_display": "8Gi",
+          "want_display": "32Gi",
+          "note": "limit /u003e 16 GiB"
+        }
       },
       {
         "DetectorID": "replicas-too-high",
@@ -678,7 +713,14 @@
         "Severity": "LOW",
         "Confidence": "high",
         "Category": "cost",
-        "Signal": null
+        "Signal": {
+          "label": "CPU",
+          "have": 0,
+          "want": 0,
+          "have_display": "unset",
+          "want_display": "required",
+          "note": "CPU request missing"
+        }
       },
       {
         "DetectorID": "tiny-memory-request",
@@ -689,7 +731,14 @@
         "Severity": "LOW",
         "Confidence": "high",
         "Category": "cost",
-        "Signal": null
+        "Signal": {
+          "label": "memory",
+          "have": 16777216,
+          "want": 33554432,
+          "have_display": "16Mi",
+          "want_display": "32Mi",
+          "note": "below 32Mi sentinel"
+        }
       },
       {
         "DetectorID": "dangerous-capability-added",
