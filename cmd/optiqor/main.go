@@ -565,12 +565,16 @@ func newWatchCmd() *cobra.Command {
 func newCompareCmd() *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
-		Use:     "compare <a> <b>",
-		Short:   "Side-by-side comparison of two charts (currently a diff alias)",
-		Args:    cobra.ExactArgs(2),
-		Example: `  optiqor compare ./before/values.yaml ./after/values.yaml`,
+		Use:   "compare <a> <b>",
+		Short: "Side-by-side comparison of two charts or values files",
+		Long: `Runs analysis on both inputs and renders a side-by-side comparison:
+findings unique to each chart, findings shared by both, cost totals,
+and a winner declaration. Use ` + "`" + `diff` + "`" + ` for machine-friendly cost-delta output.`,
+		Example: `  optiqor compare ./values.dev.yaml ./values.prod.yaml
+  optiqor compare ./values.dev.yaml ./values.prod.yaml --json`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rep, err := analyze.DiffPaths(args[0], args[1])
+			rep, err := analyze.ComparePaths(args[0], args[1])
 			if err != nil {
 				return err
 			}
