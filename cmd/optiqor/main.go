@@ -126,15 +126,16 @@ func versionTemplate() string {
 
 func newAnalyzeCmd() *cobra.Command {
 	var (
-		jsonOut    bool
-		htmlPath   string
-		offline    bool
-		shareFlag  bool
-		roast      bool
-		minSev     string
-		detectors  []string
-		failOn     string // severity threshold that triggers exit code 1
-		outputPath string
+		jsonOut     bool
+		htmlPath    string
+		offline     bool
+		shareFlag   bool
+		privateFlag bool
+		roast       bool
+		minSev      string
+		detectors   []string
+		failOn      string // severity threshold that triggers exit code 1
+		outputPath  string
 	)
 	cmd := &cobra.Command{
 		Use:   "analyze [chart]",
@@ -148,7 +149,8 @@ side-effect of parsing — they are not the headline feature.
   optiqor analyze ./values.yaml --json
   optiqor analyze ./chart --severity=med --fail-on=high
   optiqor analyze ./chart --detector cpu-overprovisioned --detector missing-memory-limit
-  optiqor analyze ./my-chart --roast    # same findings, snarkier titles`,
+  optiqor analyze ./my-chart --roast    # same findings, snarkier titles
+  optiqor analyze ./my-chart --share --private  # login-gated share link`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
@@ -159,6 +161,11 @@ side-effect of parsing — they are not the headline feature.
 			if err != nil {
 				return err
 			}
+
+			if privateFlag && !shareFlag {
+				return fmt.Errorf("--private requires --share: pass both flags together")
+			}
+
 			rep, err := analyze.RunPath(abs)
 			if err != nil {
 				return err
@@ -196,7 +203,7 @@ side-effect of parsing — they are not the headline feature.
 				return err
 			}
 			if shareFlag {
-				emitShareURL(cmd, rep)
+				emitShareURL(cmd, rep, privateFlag)
 			}
 			_ = offline
 			return checkFailOn(rep, effFailOn)
@@ -206,6 +213,7 @@ side-effect of parsing — they are not the headline feature.
 	cmd.Flags().StringVar(&htmlPath, "html", "", "also write a self-contained HTML report to this path")
 	cmd.Flags().BoolVar(&offline, "offline", true, "do not perform any network calls (always true in Phase 1)")
 	cmd.Flags().BoolVar(&shareFlag, "share", false, "print optiqor.dev/r/<hash> for the sanitised analysis (no upload in Phase 1)")
+	cmd.Flags().BoolVar(&privateFlag, "private", false, "make the share link login-gated (requires --share; sends X-Optiqor-Private: 1)")
 	cmd.Flags().BoolVar(&roast, "roast", false, "humorous output (findings stay accurate)")
 	cmd.Flags().StringVar(&minSev, "severity", "", "drop findings below this severity (low|med|high)")
 	cmd.Flags().StringArrayVar(&detectors, "detector", nil, "only run findings from these detector IDs (repeatable)")
@@ -264,20 +272,36 @@ func openOutput(cmd *cobra.Command, path string) (io.Writer, func(), error) {
 	return f, func() { _ = f.Close() }, nil
 }
 
-// emitShareURL handles --share end-to-end. Prints to stderr so
-// stdout (JSON/text) stays clean. Never blocks the success path — on
-// upload failure we still print the URL so the user has a stable
-// identifier to re-share later. OPTIQOR_SHARE_URL overrides the
-// endpoint for self-hosted deploys.
-func emitShareURL(cmd *cobra.Command, rep any) {
+// emitShareURL handles the `--share` flag end-to-end.
+//
+// It computes the local content-addressable hash, attempts to upload
+// the sanitised payload to the sandbox endpoint, and prints the
+// resulting `optiqor.dev/r/<hash>` URL to stderr (so JSON/text output on
+// stdout stays clean).
+//
+// When private is true the upload request carries X-Optiqor-Private: 1
+// so the sandbox receiver returns a token-gated URL (Phase 2 backend
+// work). The CLI side only sets the header; the receiver handles the
+// rest.
+//
+// The function never blocks the caller's success path — if the upload
+// fails (offline, sandbox down, 5xx), we still print the URL so the
+// user has a stable identifier they can re-share later. The endpoint
+// is overridable via OPTIQOR_SHARE_URL for self-hosted deploys.
+
+func emitShareURL(cmd *cobra.Command, rep any, private bool) {
 	endpoint := os.Getenv("OPTIQOR_SHARE_URL")
-	res := share.Upload(rep, endpoint)
+	res := share.Upload(rep, endpoint, private)
 	if res.Hash == "" {
 		return
 	}
 	suffix := ""
 	if res.Posted {
-		suffix = " (uploaded)"
+		if private {
+			suffix = " (uploaded · login-gated)"
+		} else {
+			suffix = " (uploaded)"
+		}
 	} else if res.Error != "" {
 		suffix = " (offline / not uploaded — " + res.Error + ")"
 	}
