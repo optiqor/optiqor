@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-const zlib = require('zlib');
+const crypto = require('crypto');
 const { pipeline } = require('stream');
 const { promisify } = require('util');
 const { execFileSync } = require('child_process');
@@ -40,7 +40,10 @@ if (!target) {
   process.exit(1);
 }
 
-const url = `https://github.com/optiqor/optiqor-cli/releases/download/v${VERSION}/optiqor_${VERSION}_${target}.tar.gz`;
+const releaseBaseUrl = `https://github.com/optiqor/optiqor-cli/releases/download/v${VERSION}`;
+const archiveName = `optiqor_${VERSION}_${target}.tar.gz`;
+const url = `${releaseBaseUrl}/${archiveName}`;
+const checksumsUrl = `${releaseBaseUrl}/checksums.txt`;
 const vendorDir = path.join(__dirname, '..', 'vendor');
 fs.mkdirSync(vendorDir, { recursive: true });
 
@@ -63,20 +66,101 @@ const get = (u) =>
 
 const pipelineP = promisify(pipeline);
 
-(async () => {
+class FatalInstallError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'FatalInstallError';
+  }
+}
+
+const unlinkIfExists = (filePath) => {
+  try {
+    fs.unlinkSync(filePath);
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      throw err;
+    }
+  }
+};
+
+const responseText = async (res) => {
+  const chunks = [];
+  for await (const chunk of res) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+};
+
+const checksumForArchive = (checksumsText, name) => {
+  for (const rawLine of checksumsText.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+    const match = line.match(/^([a-fA-F0-9]{64})\s+\*?(.+)$/);
+    if (match && path.basename(match[2].trim()) === name) {
+      return match[1].toLowerCase();
+    }
+  }
+  return null;
+};
+
+const sha256File = (filePath) =>
+  new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    fs.createReadStream(filePath)
+      .on('data', (chunk) => hash.update(chunk))
+      .on('error', reject)
+      .on('end', () => resolve(hash.digest('hex')));
+  });
+
+const verifyArchiveChecksum = async (filePath, name, checksumsText) => {
+  const expected = checksumForArchive(checksumsText, name);
+  if (!expected) {
+    throw new FatalInstallError(`checksum entry not found for ${name}`);
+  }
+
+  const actual = await sha256File(filePath);
+  if (actual !== expected) {
+    unlinkIfExists(filePath);
+    throw new FatalInstallError(
+      `checksum mismatch for ${name}: expected ${expected}, got ${actual}`,
+    );
+  }
+};
+
+const install = async () => {
   try {
     console.log(`optiqor: downloading binary for ${key}...`);
     const res = await get(url);
     await pipelineP(res, fs.createWriteStream(tarballPath));
+    const checksums = await responseText(await get(checksumsUrl));
+    await verifyArchiveChecksum(tarballPath, archiveName, checksums);
     // tar -xzf using system tar (avoids adding tar npm dep).
     execFileSync('tar', ['-xzf', tarballPath, '-C', vendorDir], { stdio: 'inherit' });
-    fs.unlinkSync(tarballPath);
+    unlinkIfExists(tarballPath);
     console.log('optiqor: ready. Run `optiqor --version` to verify.');
   } catch (err) {
+    unlinkIfExists(tarballPath);
     console.error('optiqor: failed to install binary:', err.message);
+    if (err instanceof FatalInstallError) {
+      console.error('optiqor: refusing to use an unverified release archive.');
+      process.exit(1);
+    }
     console.error('optiqor: this is non-fatal — build from source if needed:');
     console.error('  go install github.com/optiqor/optiqor-cli/cmd/optiqor@latest');
     // Exit 0 so npm install does not abort entirely.
     process.exit(0);
   }
-})();
+};
+
+if (require.main === module) {
+  install();
+}
+
+module.exports = {
+  checksumForArchive,
+  sha256File,
+  verifyArchiveChecksum,
+  FatalInstallError,
+};
