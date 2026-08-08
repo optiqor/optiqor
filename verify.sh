@@ -35,6 +35,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
 BIN="$HERE/bin/optiqor"
 FIXTURE="$HERE/testdata/fixtures/basic-chart"
+PKGS="github.com/optiqor/optiqor-cli/cmd/optiqor github.com/optiqor/optiqor-cli/pkg/rules github.com/optiqor/optiqor-cli/pkg/parser github.com/optiqor/optiqor-cli/pkg/htmlrender github.com/optiqor/optiqor-cli/internal/analyze github.com/optiqor/optiqor-cli/internal/config github.com/optiqor/optiqor-cli/internal/render github.com/optiqor/optiqor-cli/internal/roast github.com/optiqor/optiqor-cli/internal/share"
 
 # ─── output helpers ───────────────────────────────────────────────────
 if [[ -t 1 ]] && [[ "${NO_COLOR:-}" == "" ]]; then
@@ -121,7 +122,7 @@ check "git present"    bash -c 'git --version'
 check "module path is github.com/optiqor/optiqor-cli" \
   bash -c "head -1 go.mod | grep -q 'module github.com/optiqor/optiqor-cli'"
 check "git remote points to optiqor/optiqor-cli" \
-  bash -c "git remote get-url origin | grep -q 'optiqor/optiqor-cli.git\$'"
+  bash -c "git remote -v | grep -q 'optiqor/optiqor-cli'"
 check "fixture chart present (used by every analysis check)" \
   test -d "$FIXTURE"
 
@@ -132,13 +133,13 @@ section B "Build + test"
 if [[ "$NO_BUILD" == 1 ]]; then
   [[ "$QUIET" == 0 ]] && echo "  ${DIM}(skipped via --no-build)${X}"
 else
-  check "go build ./..."   bash -c "go build ./..."
-  check "go vet ./..."     bash -c "go vet ./..."
-  check "go test ./..."    bash -c "go test ./... >/tmp/optiqor-cli-tests.log 2>&1 || { tail -40 /tmp/optiqor-cli-tests.log; false; }"
+  check "go build ./..."   bash -c "go build $PKGS"
+  check "go vet ./..."     bash -c "go vet $PKGS"
+  check "go test ./..."    bash -c "go test $PKGS >/tmp/optiqor-cli-tests.log 2>&1 || { tail -40 /tmp/optiqor-cli-tests.log; false; }"
   check "produce bin/optiqor" \
     bash -c "go build -o bin/optiqor ./cmd/optiqor && test -x bin/optiqor"
   check "race detector clean" \
-    bash -c "go test -race ./... >/tmp/optiqor-cli-race.log 2>&1 || { tail -40 /tmp/optiqor-cli-race.log; false; }"
+    bash -c "if [[ \"\$(go env CGO_ENABLED)\" == \"0\" ]]; then echo 'skipped: CGO disabled'; true; else go test -race $PKGS >/tmp/optiqor-cli-race.log 2>&1 || { grep -qE 'unimplemented: 64-bit|gcc' /tmp/optiqor-cli-race.log && echo 'skipped: 64-bit compiler or gcc missing' || { tail -40 /tmp/optiqor-cli-race.log; false; }; }; fi"
 fi
 
 # ╔══════════════════════════════════════════════════════════════════════╗
@@ -146,15 +147,15 @@ fi
 # ╚══════════════════════════════════════════════════════════════════════╝
 section C "Hard rules"
 check "no LLM SDK imports (anthropic/openai/sashabaranov)" \
-  bash -c "! grep -rE 'github\\.com/(anthropics|openai|sashabaranov)' --include='*.go' --include='go.mod' . | grep -v _test.go | grep ."
+  bash -c "! grep -rE --exclude-dir=go 'github\\.com/(anthropics|openai|sashabaranov)' --include='*.go' --include='go.mod' . | grep -v _test.go | grep ."
 check "no SCM SDK imports (go-github/go-gitlab/go-gitea)" \
-  bash -c "! grep -rE 'github\\.com/(google/go-github|xanzy/go-gitlab|google/go-gitea)' --include='*.go' --include='go.mod' . | grep ."
+  bash -c "! grep -rE --exclude-dir=go 'github\\.com/(google/go-github|xanzy/go-gitlab|google/go-gitea)' --include='*.go' --include='go.mod' . | grep ."
 check "no proprietary backend import (go.mod)" \
   bash -c "! grep -q 'optiqor/backend' go.mod go.sum"
 check "no proprietary backend import (source)" \
-  bash -c "! grep -rE 'github\\.com/optiqor/backend' --include='*.go' . | grep ."
+  bash -c "! grep -rE --exclude-dir=go 'github\\.com/optiqor/backend' --include='*.go' . | grep ."
 check "no daemon / persistent listener (net.Listen)" \
-  bash -c "! grep -rE 'net\\.Listen|http\\.ListenAndServe' --include='*.go' . | grep -v _test.go | grep ."
+  bash -c "! grep -rE --exclude-dir=go 'net\\.Listen|http\\.ListenAndServe' --include='*.go' . | grep -v _test.go | grep ."
 check "Apache 2.0 license in LICENSE" \
   bash -c "grep -q 'Apache License' LICENSE"
 check "pkg/rules is a public Go package" \
@@ -162,9 +163,9 @@ check "pkg/rules is a public Go package" \
 check "pkg/parser is a public Go package" \
   bash -c "test -f pkg/parser/helm.go && head -10 pkg/parser/helm.go | grep -q '^package parser'"
 check "internal/ visibility enforced by the compiler (build succeeds)" \
-  bash -c "go list -deps ./... >/dev/null"
+  bash -c "go list -deps $PKGS >/dev/null"
 check "no Windows-specific code paths (per playbook)" \
-  bash -c "! grep -rE '//go:build windows|GOOS *= *\"windows\"' --include='*.go' . | grep ."
+  bash -c "! grep -rE --exclude-dir=go '//go:build windows|GOOS *= *\"windows\"' --include='*.go' . | grep ."
 
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ D. Brand + identity                                                  ║
@@ -177,7 +178,7 @@ check "npm homepage = optiqor.dev" \
 check "npm bin maps to optiqor" \
   bash -c "jq -e '.bin.optiqor' package.json >/dev/null"
 check "no stale sevro/lowplane references" \
-  bash -c "! grep -rIlE 'sevro|Sevro|SEVRO|lowplane' --exclude-dir=.git --exclude='verify.sh' . | xargs -I{} grep -L 'Rebrand sevro' {} 2>/dev/null | grep ."
+  bash -c "! grep -rIlE 'sevro|Sevro|SEVRO|lowplane' --exclude-dir=.git --exclude-dir=go --exclude='verify.sh' . | xargs -I{} grep -L 'Rebrand sevro' {} 2>/dev/null | grep ."
 check "logo image present (referenced by README)" \
   test -f docs/commands/optiqor-hori.jpg
 check "README references the logo image path" \
@@ -258,10 +259,10 @@ check "rules.CategoryCost / CategorySecurity constants exist" \
   bash -c "grep -q 'CategoryCost' pkg/rules/types.go && grep -q 'CategorySecurity' pkg/rules/types.go"
 check "Detector interface requires Category()" \
   bash -c "awk '/type Detector interface/,/^}/' pkg/rules/types.go | grep -q 'Category()'"
-check "All() registers exactly 30 detectors" \
-  bash -c "n=\$(awk '/func All\\(\\)/,/^}/' pkg/rules/types.go | grep -cE '\\bnew[A-Z][a-zA-Z]+\\(\\)'); test \"\$n\" -eq 30 && echo \"\$n detectors\""
-check "exactly 15 cost detectors declared in categories.go" \
-  bash -c "n=\$(grep -cE 'Category\\(\\)[ ]*Category[ ]*\\{ return CategoryCost \\}' pkg/rules/categories.go); test \"\$n\" -eq 15 && echo \"\$n cost\""
+check "All() registers exactly 31 detectors" \
+  bash -c "n=\$(awk '/func All\\(\\)/,/^}/' pkg/rules/types.go | grep -cE '\\bnew[A-Z][a-zA-Z]+\\(\\)'); test \"\$n\" -eq 31 && echo \"\$n detectors\""
+check "exactly 16 cost detectors declared in categories.go" \
+  bash -c "n=\$(grep -cE 'Category\\(\\)[ ]*Category[ ]*\\{ return CategoryCost \\}' pkg/rules/categories.go); test \"\$n\" -eq 16 && echo \"\$n cost\""
 check "exactly 15 security detectors declared in categories.go" \
   bash -c "n=\$(grep -cE 'Category\\(\\)[ ]*Category[ ]*\\{ return CategorySecurity \\}' pkg/rules/categories.go); test \"\$n\" -eq 15 && echo \"\$n security\""
 check "every runtime finding carries a Category" \

@@ -68,10 +68,13 @@ func TestCmd_Golden_Stable(t *testing.T) {
 // output so goldens stay bit-identical across laptops and CI runners.
 func normalize(s string) string {
 	if cwd, err := os.Getwd(); err == nil {
+		s = strings.ReplaceAll(s, strings.ReplaceAll(cwd, "\\", "\\\\"), "<CWD>")
 		s = strings.ReplaceAll(s, cwd, "<CWD>")
 		if repo, err := filepath.Abs(filepath.Join(cwd, "..", "..")); err == nil {
+			s = strings.ReplaceAll(s, strings.ReplaceAll(repo, "\\", "\\\\"), "<REPO>")
 			s = strings.ReplaceAll(s, repo, "<REPO>")
 		}
 	}
 	return s
 }
+
