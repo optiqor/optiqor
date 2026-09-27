@@ -2,12 +2,12 @@
 # CI gate: every openapi.yaml path must be registered in cmd/api, and
 # every registered route must appear in the spec. Path params are
 # normalised to {X} before comparison; new routes outside that template
-# style need their own grep below. Run from the backend repo root.
+# style need their own grep below. Run from backend/.
 set -euo pipefail
 
-SPEC="../optiqor-cli/docs/api/openapi.yaml"
+SPEC="../docs/api/openapi.yaml"
 if [[ ! -f "$SPEC" ]]; then
-  echo "openapi spec not found at $SPEC (CI checks out optiqor-cli/ as sibling — same shape required locally)" >&2
+  echo "openapi spec not found at $SPEC (run from backend/)" >&2
   exit 2
 fi
 

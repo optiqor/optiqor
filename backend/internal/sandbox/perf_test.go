@@ -24,7 +24,7 @@ func TestPerf_AnalyzeP95UnderBudget(t *testing.T) {
 		iterations = 200
 	}
 
-	body, err := os.ReadFile(filepath.Join("..", "..", "..", "optiqor-cli", "cmd", "optiqor", "demo", "values.yaml"))
+	body, err := os.ReadFile(filepath.Join("..", "..", "..", "cmd", "optiqor", "demo", "values.yaml"))
 	if err != nil {
 		t.Skipf("demo chart not available (CLI repo missing?): %v", err)
 	}
