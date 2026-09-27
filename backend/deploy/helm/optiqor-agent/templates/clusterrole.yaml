@@ -1,0 +1,68 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "optiqor-agent.fullname" . }}
+  labels:
+    {{- include "optiqor-agent.labels" . | nindent 4 }}
+rules:
+  # Core workload + topology read access (ADR-0008). Adding a verb
+  # widens the agent's posture — needs an ADR amendment.
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - endpoints
+      - namespaces
+      - nodes
+      - persistentvolumeclaims
+      - configmaps
+      - events
+      - resourcequotas
+      - limitranges
+    verbs: {{ toYaml .Values.rbac.verbs | nindent 6 }}
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+    verbs: {{ toYaml .Values.rbac.verbs | nindent 6 }}
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: {{ toYaml .Values.rbac.verbs | nindent 6 }}
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: {{ toYaml .Values.rbac.verbs | nindent 6 }}
+  - apiGroups: ["policy"]
+    resources:
+      - poddisruptionbudgets
+    verbs: {{ toYaml .Values.rbac.verbs | nindent 6 }}
+  - apiGroups: ["autoscaling.k8s.io"]
+    resources:
+      - verticalpodautoscalers
+    verbs: {{ toYaml .Values.rbac.verbs | nindent 6 }}
+  - apiGroups: ["karpenter.sh", "karpenter.k8s.aws"]
+    resources:
+      - nodepools
+      - ec2nodeclasses
+    verbs: {{ toYaml .Values.rbac.verbs | nindent 6 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "optiqor-agent.fullname" . }}
+  labels:
+    {{- include "optiqor-agent.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "optiqor-agent.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "optiqor-agent.fullname" . }}
+{{- end }}

@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "optiqor-agent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "optiqor-agent.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "optiqor-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "optiqor-agent.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "optiqor-agent.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--cluster-id=$(OPTIQOR_CLUSTER_ID)"
+            - "--health-addr=:{{ .Values.health.port }}"
+            - "--metrics-addr=:{{ .Values.metrics.port }}"
+          env:
+            - name: OPTIQOR_TENANT_ID
+              value: {{ required ".Values.tenantID is required" .Values.tenantID | quote }}
+            - name: OPTIQOR_CLUSTER_ID
+              value: {{ required ".Values.clusterID is required" .Values.clusterID | quote }}
+            - name: OPTIQOR_INGEST_URL
+              value: {{ .Values.ingest.url | quote }}
+            - name: OPTIQOR_SNAPSHOT_INTERVAL
+              value: {{ default "60s" .Values.ingest.snapshotInterval | quote }}
+            - name: OPTIQOR_EVENTS_CUTOFF
+              value: {{ default "10m" .Values.ingest.eventsCutoff | quote }}
+            {{- if .Values.prometheus.url }}
+            - name: OPTIQOR_PROMETHEUS_URL
+              value: {{ .Values.prometheus.url | quote }}
+            - name: OPTIQOR_PROMETHEUS_AUTH
+              value: {{ default "none" .Values.prometheus.auth | quote }}
+            {{- if .Values.prometheus.bearerTokenFile }}
+            - name: OPTIQOR_PROMETHEUS_BEARER_FILE
+              value: {{ .Values.prometheus.bearerTokenFile | quote }}
+            {{- end }}
+            {{- if .Values.prometheus.username }}
+            - name: OPTIQOR_PROMETHEUS_USER
+              value: {{ .Values.prometheus.username | quote }}
+            {{- end }}
+            {{- if .Values.prometheus.passwordSecret }}
+            - name: OPTIQOR_PROMETHEUS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.prometheus.passwordSecret.name | quote }}
+                  key: {{ .Values.prometheus.passwordSecret.key | quote }}
+            {{- end }}
+            {{- if and (eq (default "none" .Values.prometheus.auth) "mtls") .Values.prometheus.mtls }}
+            - name: OPTIQOR_PROMETHEUS_CERT_FILE
+              value: {{ .Values.prometheus.mtls.certFile | quote }}
+            - name: OPTIQOR_PROMETHEUS_KEY_FILE
+              value: {{ .Values.prometheus.mtls.keyFile | quote }}
+            {{- if .Values.prometheus.mtls.caFile }}
+            - name: OPTIQOR_PROMETHEUS_CA_FILE
+              value: {{ .Values.prometheus.mtls.caFile | quote }}
+            {{- end }}
+            {{- end }}
+            - name: OPTIQOR_PROMETHEUS_INSTANT_TTL
+              value: {{ default "60s" .Values.prometheus.instantTTL | quote }}
+            - name: OPTIQOR_PROMETHEUS_RANGE_TTL
+              value: {{ default "24h" .Values.prometheus.rangeTTL | quote }}
+            {{- end }}
+          ports:
+            - name: health
+              containerPort: {{ .Values.health.port }}
+              protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: mtls
+              mountPath: /var/run/optiqor/mtls
+              readOnly: true
+      volumes:
+        - name: mtls
+          secret:
+            {{- /*
+              Required, not optional. A missing Secret would silently
+              boot the agent without client certs and ship snapshots
+              over plain TLS; refusing to start is the safer default.
+              Override with `--set ingest.requireSecret=false` for
+              local dev against an unauthenticated ingest endpoint.
+            */}}
+            secretName: {{ required ".Values.ingest.secretName is required (mTLS material for backend ingest)" .Values.ingest.secretName }}
+            optional: {{ not (default true .Values.ingest.requireSecret) }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

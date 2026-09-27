@@ -48,6 +48,7 @@ jobs:
             docs
             deps
             deps-dev
+            backend
           requireScope: false
           subjectPattern: "^[a-z].+[^.]$"
           subjectPatternError: |

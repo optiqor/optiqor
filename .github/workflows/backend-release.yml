@@ -1,0 +1,69 @@
+name: Backend release
+
+# Plain v* tags release the CLI (release.yml); backend images use backend/v*.
+on:
+  push:
+    tags:
+      - "backend/v*"
+
+permissions:
+  contents: read
+  id-token: write   # for OIDC to AWS
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build & push images (cosign-signed)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        binary: [api, worker, agent]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Derive image tag
+        id: ver
+        run: echo "tag=${GITHUB_REF_NAME#backend/}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ECR_PUSH_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Build & push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./backend/Dockerfile.${{ matrix.binary }}
+          push: true
+          tags: |
+            ${{ secrets.ECR_REGISTRY }}/optiqor-${{ matrix.binary }}:${{ steps.ver.outputs.tag }}
+            ${{ secrets.ECR_REGISTRY }}/optiqor-${{ matrix.binary }}:latest
+          build-args: |
+            VERSION=${{ steps.ver.outputs.tag }}
+          provenance: false
+
+      - name: Sign image with cosign
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign --yes \
+            ${{ secrets.ECR_REGISTRY }}/optiqor-${{ matrix.binary }}@${{ steps.build.outputs.digest }}
+
+      - name: Trivy scan released image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.ECR_REGISTRY }}/optiqor-${{ matrix.binary }}:${{ steps.ver.outputs.tag }}
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
