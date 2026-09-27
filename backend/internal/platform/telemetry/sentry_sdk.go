@@ -82,7 +82,7 @@ func (s *sentryReporter) Flush(timeoutMs int) bool {
 // SaaS: AWS access keys, GitHub App PEM private keys, Anthropic API
 // keys, customer secret values, LLM prompt + response bodies.
 // Matching is conservative — keep adding patterns as new leak shapes
-// surface. Comparison runs against the message + every extra value.
+// surface. Comparison runs against the message + every context value.
 func redactBeforeSend(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 	if event == nil {
 		return nil
@@ -91,9 +91,12 @@ func redactBeforeSend(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 		event.Exception[i].Value = redactString(ex.Value)
 	}
 	event.Message = redactString(event.Message)
-	for k, v := range event.Extra {
-		if s, ok := v.(string); ok {
-			event.Extra[k] = redactString(s)
+	// sentry-go 0.49 dropped Event.Extra; free-form data now lives in Contexts.
+	for _, c := range event.Contexts {
+		for k, v := range c {
+			if s, ok := v.(string); ok {
+				c[k] = redactString(s)
+			}
 		}
 	}
 	for k, v := range event.Tags {
