@@ -43,6 +43,7 @@ var titles = map[string]string{
 	"memory-request-equals-limit":    "Memory request equals limit, equals waste",
 	"tiny-cpu-request":               "CPU request smaller than a tweet",
 	"tiny-memory-request":            "Memory request: ‘ehh, should be fine’",
+	"idle-workload":                  "replicas: 0, a Deployment in witness protection",
 
 	// ---- Security (still surfaced as bonus) -----------------------
 	"missing-cpu-limit":               "No CPU limit — let it cook",

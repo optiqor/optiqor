@@ -119,3 +119,15 @@ func TestTagline_AndFooter_NotEmpty(t *testing.T) {
 		t.Error("FooterQuip empty")
 	}
 }
+
+// A detector added without a roast line silently falls back to its plain
+// title under --roast.
+func TestTitles_CoverAllDetectors(t *testing.T) {
+	for _, d := range rules.All() {
+		t.Run(d.ID(), func(t *testing.T) {
+			if _, ok := titles[d.ID()]; !ok {
+				t.Errorf("no roast title for detector %q", d.ID())
+			}
+		})
+	}
+}
