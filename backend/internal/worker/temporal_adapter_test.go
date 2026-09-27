@@ -40,7 +40,8 @@ func (f *fakeTemporalClient) ExecuteWorkflow(
 	return fakeRun{}, nil
 }
 
-type fakeRun struct{}
+// Embedded so new WorkflowRun methods in SDK bumps don't break the build.
+type fakeRun struct{ client.WorkflowRun }
 
 func (fakeRun) GetID() string                      { return "wf-1" }
 func (fakeRun) GetRunID() string                   { return "run-1" }
