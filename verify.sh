@@ -178,12 +178,12 @@ check "npm bin maps to optiqor" \
   bash -c "jq -e '.bin.optiqor' package.json >/dev/null"
 check "no stale sevro/lowplane references" \
   bash -c "! grep -rIlE 'sevro|Sevro|SEVRO|lowplane' --exclude-dir=.git --exclude-dir=backend --exclude='verify.sh' . | xargs -I{} grep -L 'Rebrand sevro' {} 2>/dev/null | grep ."
-check "logo image present (referenced by README)" \
-  test -f docs/commands/optiqor-hori.jpg
-check "README references the logo image path" \
-  bash -c "grep -q 'docs/commands/optiqor-hori' README.md"
+check "banner image present (referenced by README)" \
+  test -f docs/assets/banner.png
+check "README references the banner image path" \
+  bash -c "grep -q 'docs/assets/banner.png' README.md"
 check "README positions cost-first / security-bonus" \
-  bash -c "grep -q 'cost optimization' README.md && grep -qi 'bonus' README.md"
+  bash -c "grep -q 'Cost is the headline' README.md && grep -qi 'security findings come along for free' README.md"
 
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ E. Year-1 command surface (playbook locks this in)                   ║

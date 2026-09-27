@@ -240,8 +240,9 @@ func writeCostSection(b *strings.Builder, t style.Theme, width int, findings []r
 // flat layout below cardMinInner inner width.
 func writeCostFinding(b *strings.Builder, t style.Theme, f rules.Finding, width int) {
 	// Card body cells = innerWidth + 4 — see writeCardHeaderRule for
-	// the breakdown ("│ " on the left, " │" on the right).
-	innerWidth := width - len(contentIndent) - 2
+	// the breakdown ("│ " on the left, " │" on the right) — so with the
+	// indent the card is exactly width columns and never wraps.
+	innerWidth := width - len(contentIndent) - 4
 	if innerWidth < cardMinInner {
 		writeCostFindingFlat(b, t, f, width)
 		return
@@ -365,14 +366,15 @@ func stylizeSeverityWord(t style.Theme, sev rules.Severity, label string) string
 	case rules.SeverityLow:
 		sevStyle = t.SevLow
 	}
-	// Drop the badge background so we get just the foreground tone
-	// inside a header rule. lipgloss styles are value types so the
-	// Theme's badge is unaffected.
-	return sevStyle.Background(noBackground()).Render(sevTok) +
-		t.CardBorder.Render(rest)
+	// Inside a header rule the chip becomes plain text in the chip's
+	// colour: the badge's dark foreground is unreadable without its
+	// background, and its padding would push the rule past the card edge.
+	// lipgloss styles are value types so the Theme's badge is unaffected.
+	word := sevStyle.Foreground(sevStyle.GetBackground()).
+		Background(lipgloss.NoColor{}).
+		UnsetPadding()
+	return word.Render(sevTok) + t.CardBorder.Render(rest)
 }
-
-func noBackground() lipgloss.TerminalColor { return lipgloss.NoColor{} }
 
 // cardLine writes one card body row padded to innerWidth runes
 // between the side rules.

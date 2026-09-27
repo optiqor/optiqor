@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/optiqor/optiqor-cli/internal/render/style"
 	"github.com/optiqor/optiqor-cli/pkg/rules"
 )
 
@@ -248,5 +249,48 @@ func TestWrap(t *testing.T) {
 func TestWrap_Empty(t *testing.T) {
 	if got := wrap("", 10); got != nil {
 		t.Errorf("wrap(empty) = %v, want nil", got)
+	}
+}
+
+// The header rule once reused the padded badge style (two cells too wide,
+// dark text with no background in colour mode), and every card was two
+// cells wider than the terminal.
+func TestWriteCostFinding_HeaderMatchesCardWidth(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		color bool
+		sev   rules.Severity
+	}{
+		{"plain-med", false, rules.SeverityMed},
+		{"color-high", true, rules.SeverityHigh},
+		{"color-med", true, rules.SeverityMed},
+		{"color-low", true, rules.SeverityLow},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var b strings.Builder
+			writeCostFinding(&b, style.NewTheme(tc.color), rules.Finding{
+				DetectorID:      "cpu-overprovisioned",
+				Workload:        "api",
+				Title:           "CPU request appears overprovisioned",
+				Detail:          "Consider halving the request.",
+				Severity:        tc.sev,
+				Confidence:      rules.ConfidenceMed,
+				MonthlyUSDCents: 2920,
+			}, 80)
+			lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+			header, bottom := lines[0], lines[len(lines)-1]
+			if got, want := visibleRuneCount(header), visibleRuneCount(bottom); got != want {
+				t.Errorf("header is %d cells, card is %d:\n%s\n%s", got, want, stripANSI(header), stripANSI(bottom))
+			}
+			for _, l := range lines {
+				if n := visibleRuneCount(l); n > 80 {
+					t.Errorf("card line is %d cells, wider than the 80-column terminal: %q", n, stripANSI(l))
+					break
+				}
+			}
+			if strings.Contains(header, "38;2;15;15;15") {
+				t.Errorf("severity word drawn in the badge's dark foreground: %q", header)
+			}
+		})
 	}
 }
