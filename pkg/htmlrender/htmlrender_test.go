@@ -2,6 +2,7 @@ package htmlrender
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -231,6 +232,22 @@ func TestFmtUSD(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := fmtUSD(tc.cents); got != tc.want {
 				t.Errorf("fmtUSD(%d) = %q, want %q", tc.cents, got, tc.want)
+			}
+		})
+	}
+}
+
+// An unsized inline SVG stretches to the container width; the footer logo
+// once filled the page and squeezed the accuracy disclosure into a sliver.
+func TestDocumentTemplate_SVGRulesAreSized(t *testing.T) {
+	cssRules := regexp.MustCompile(`\.[a-z-]+ svg \{[^}]*\}`).FindAllString(documentTemplate, -1)
+	if len(cssRules) == 0 {
+		t.Fatal("no svg CSS rules found; did the template move?")
+	}
+	for _, r := range cssRules {
+		t.Run(strings.Fields(r)[0], func(t *testing.T) {
+			if !strings.Contains(r, "width:") || !strings.Contains(r, "height:") {
+				t.Errorf("svg rule without explicit width and height: %s", r)
 			}
 		})
 	}

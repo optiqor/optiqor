@@ -152,7 +152,7 @@ const documentTemplate = `<!doctype html>
       display:flex; gap:14px; align-items:flex-start;
       font-family:var(--font-mono); font-size:12px; line-height:1.6; color:var(--ink-7);
     }
-    .accuracy svg { flex-shrink:0; margin-top:2px; opacity:.6; }
+    .accuracy svg { width:16px; height:16px; flex-shrink:0; margin-top:2px; opacity:.6; }
     .accuracy strong { color:var(--ink-9); font-weight:500; }
 
     .footer-meta {
