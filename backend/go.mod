@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/getsentry/sentry-go v0.31.1
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/optiqor/optiqor-cli v0.0.0-20260510212345-4127fe767d6b
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/testcontainers/testcontainers-go v0.44.0
