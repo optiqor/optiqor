@@ -113,7 +113,7 @@ A simple cost-prediction comment (which Kubecost attempted at v0.1.1 and abandon
 
 ### 4.3 Internal posture on OpenCost (private brain map — do not surface)
 
-> This subsection is internal thinking. It documents how we *use* OpenCost behind the scenes so the team stays aligned. Nothing here ships into a customer-facing surface — not Receipts, not the methodology page, not the pitch deck, not a PR comment, not a sales email, not investor material. If you find yourself about to mention OpenCost outside this doc or [optiqor/todo.md](../optiqor/todo.md) Phase 6, stop.
+> This subsection is internal thinking. It documents how we *use* OpenCost behind the scenes so the team stays aligned. Nothing here ships into a customer-facing surface — not Receipts, not the methodology page, not the pitch deck, not a PR comment, not a sales email, not investor material. If you find yourself about to mention OpenCost outside this doc or [optiqor/todo.md](../../todo.md) Phase 6, stop.
 
 For our own clarity:
 
@@ -123,7 +123,7 @@ Why we deliberately record this here and nowhere else:
 
 1. **Speed.** Saves an estimated 6+ engineer-months vs. discovering every CUR edge case in production. Receipts ship faster, methodology is sharper, the team avoids stepping on rakes someone else already documented.
 2. **Brand.** Customer-facing artifacts stay 100% Optiqor end-to-end. OpenCost is not a "powered by," not a credit line, not a methodology citation. Engineers consult upstream privately; the product is meaningfully ours.
-3. **No runtime dependency.** `go.mod` never references `github.com/opencost/opencost`. CI grep guard enforces this once the cost engine lands — see the *Engineering hygiene — cost-engine reference reading* block in [optiqor/todo.md](../optiqor/todo.md) Phase 6 for the operational rules.
+3. **No runtime dependency.** `go.mod` never references `github.com/opencost/opencost`. CI grep guard enforces this once the cost engine lands — see the *Engineering hygiene — cost-engine reference reading* block in [optiqor/todo.md](../../todo.md) Phase 6 for the operational rules.
 4. **Hygiene caveat.** "Reference reading" and "structural copying" are different things. The rule is: take concepts, not code. Budget one engineer-day of "translate to Optiqor idioms" between reading and writing. Reviewers flag uncannily similar identifiers, function signatures, or control flow during Phase 6 cost-engine PRs.
 5. **Where this posture is recorded.** Two places only: (a) this internal brain-map subsection, (b) the private Phase-6 hygiene block in `optiqor/todo.md`. It does not appear in `business_strategy.md` (investor + GTM), `technical_implementation.md` §7 (the customer-facing methodology spec is Optiqor-only), `optiqor-cli/` (OSS, independently auditable), or any sales/marketing/methodology-page copy.
 

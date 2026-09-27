@@ -6,7 +6,8 @@
     { "pattern": "^https://optiqor\\.com" },
     { "pattern": "^https://optiqor\\.dev" },
     { "pattern": "^https://www\\.npmjs\\.com/package/@optiqor/" },
-    { "pattern": "^https://github\\.com/optiqor/optiqor-cli/discussions" }
+    { "pattern": "^https://github\\.com/optiqor/optiqor-cli/discussions" },
+    { "pattern": "^https?://[^/]*\\.internal(/|$)" }
   ],
   "timeout": "10s",
   "retryOn429": true,
