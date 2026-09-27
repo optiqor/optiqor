@@ -257,7 +257,7 @@ func TestPgStore_Get(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := &PgStore{Exec: tc.exec}
+			s := &PgStore{Exec: tc.exec, Now: func() time.Time { return createdAt.Add(2 * time.Hour) }}
 			sa, err := s.Get(context.Background(), tc.hash)
 			if tc.wantErr != nil {
 				if !errors.Is(err, tc.wantErr) {
