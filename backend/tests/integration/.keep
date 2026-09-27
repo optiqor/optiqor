@@ -1,0 +1,2 @@
+# Integration tests run against real Postgres + Redis via testcontainers.
+# Never mock the database here — see CLAUDE.md.

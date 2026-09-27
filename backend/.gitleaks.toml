@@ -1,0 +1,24 @@
+# gitleaks config — extends the default ruleset and allowlists a
+# narrow set of test fixtures that look high-entropy enough to trip
+# the generic-api-key rule but are not secrets.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Optiqor test fixtures and stable-format identifiers"
+
+# KMS key-id fixtures in receipts test code. Format is
+# "optiqor-receipt-<YYYY>-q<N>-<algo>" or
+# "optiqor-receipt-<YYYY>-<algo>" — pinned by `ADR-0017` so the
+# algorithm tag is required at boot.
+regexes = [
+    '''optiqor-receipt-\d{4}(-q\d)?-(ed25519|ecdsa-p256)''',
+]
+
+# All scoped to test files so an accidental commit of the same shape
+# in production code would still trip the scanner.
+paths = [
+    '''.*_test\.go$''',
+    '''testdata/.*''',
+]
