@@ -1,660 +1,291 @@
 <p align="center">
-  <img src="docs/commands/optiqor-hori.jpg" alt="Optiqor" width="520">
+  <img src="docs/assets/banner.png" alt="Optiqor. Detect. Fix. Prove." width="100%">
 </p>
 
-<p align="center"><b>Detect. Fix. Prove.</b></p>
-<p align="center">Kubernetes Helm cost analysis from your terminal. No login. No agent. No cluster connection required.</p>
-<p align="center"><sub>Bonus: surfaces obvious security misconfigurations it spots along the way.</sub></p>
+<h3 align="center">Find the money your Kubernetes workloads waste, straight from the Helm chart.</h3>
 
-[![npm](https://img.shields.io/npm/v/@optiqor/cli.svg?label=%40optiqor%2Fcli&color=blue)](https://www.npmjs.com/package/@optiqor/cli)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Go Reference](https://pkg.go.dev/badge/github.com/optiqor/optiqor-cli.svg)](https://pkg.go.dev/github.com/optiqor/optiqor-cli)
-[![CI](https://img.shields.io/github/actions/workflow/status/optiqor/optiqor-cli/ci.yml?branch=main&label=ci)](https://github.com/optiqor/optiqor-cli/actions/workflows/ci.yml)
-[![Downloads](https://img.shields.io/npm/dm/@optiqor/cli.svg)](https://www.npmjs.com/package/@optiqor/cli)
+<p align="center">
+  <a href="https://github.com/optiqor/optiqor/actions/workflows/ci.yml"><img src="https://github.com/optiqor/optiqor/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://pkg.go.dev/github.com/optiqor/optiqor-cli"><img src="https://pkg.go.dev/badge/github.com/optiqor/optiqor-cli.svg" alt="Go Reference"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-22D3EE.svg" alt="Apache 2.0"></a>
+  <img src="https://img.shields.io/badge/rules-31-22D3EE.svg" alt="31 rules">
+  <img src="https://img.shields.io/badge/network-offline%20by%20default-34D399.svg" alt="Offline by default">
+</p>
 
-```sh
-npx @optiqor/cli analyze ./my-helm-chart
-```
+<p align="center">
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#what-optiqor-catches">What it catches</a> ·
+  <a href="#reports">Reports</a> ·
+  <a href="#run-it-in-ci">CI</a> ·
+  <a href="#the-optiqor-platform">Platform</a> ·
+  <a href="#under-the-hood">Under the hood</a>
+</p>
 
-That is it. One command. No setup. No account. Cost findings for your Kubernetes workloads in under three seconds.
+<p align="center">
+  <img src="docs/assets/terminal-demo.png" alt="optiqor demo output in a terminal" width="820">
+</p>
 
----
+Most teams find out a service was oversized when the cloud bill arrives. Optiqor catches it at review time. Point it at a Helm chart and it reads every workload's requests, limits, replicas and security context, then tells you where the money goes, what to change and roughly what it's worth. It takes milliseconds and never touches your cluster.
 
-## Table of Contents
-
-- [Why Optiqor CLI](#why-optiqor-cli)
-- [Install](#install)
-- [Quick Start](#quick-start)
-- [How It Works](#how-it-works)
-- [Commands](#commands)
-- [Example Output](#example-output)
-- [CI/CD Integration](#cicd-integration)
-- [CLI vs Agent vs Sandbox](#cli-vs-agent-vs-sandbox)
-- [Configuration](#configuration)
-- [Privacy and Accuracy](#privacy-and-accuracy)
-- [The Full Optiqor Platform](#the-full-optiqor-platform)
-- [FAQ](#faq)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
-## Why Optiqor CLI
-
-Most Kubernetes cost tools require you to install an agent in your cluster, expose Prometheus, and wait 30 days for data. That is the right call for production teams who need exact numbers.
-
-But sometimes you just want a directional answer **right now** about a chart you are reviewing.
-
-The Optiqor CLI is a deterministic rule engine that reads your Helm chart files (or `values.yaml`) and reports cost inefficiencies in seconds. It runs fully offline. It does not phone home. It is honest about what it can and cannot tell from static files alone.
-
-> [!TIP]
-> **Bonus:** while it is parsing your chart for cost waste, it also flags the obvious Kubernetes security misconfigurations it sees (`runAsRoot`, `:latest` tags, missing `securityContext`, host namespaces, etc.). This is a side-effect of the parser — not the headline feature. If you need a real security posture tool, use one. If you happen to also catch them for free during a cost review, even better.
-
-> [!NOTE]
-> The CLI gives you **directional signal**, not exact numbers. For exact dollar savings backed by 30 days of real Prometheus data and your AWS bill, install the [Optiqor agent](https://optiqor.dev/get) in your cluster.
-
----
-
-## Install
-
-### Option 1: npx (zero-install, recommended for one-off use)
-
-```sh
-npx @optiqor/cli analyze ./chart
-```
-
-### Option 2: Global npm install
-
-```sh
-npm install -g @optiqor/cli
-optiqor analyze ./chart
-```
-
-### Option 3: Go install
+## Quickstart
 
 ```sh
 go install github.com/optiqor/optiqor-cli/cmd/optiqor@latest
+
+optiqor demo                     # try it on a bundled chart
+optiqor analyze ./charts/my-app  # then on yours
 ```
 
-### Option 4: Download a release binary
+Needs Go 1.24 or newer. Prebuilt binaries and an npm package are on the way.
 
-Pre-built binaries for Linux (amd64, arm64) and macOS (amd64, arm64) are published on every tagged release.
+## Why Optiqor
 
-```sh
-# Linux amd64
-curl -L https://github.com/optiqor/optiqor-cli/releases/latest/download/optiqor_linux_amd64.tar.gz | tar -xz
-sudo mv optiqor /usr/local/bin/
-```
+### It works before anything is deployed
 
-> [!TIP]
-> All release artifacts are signed with [Cosign](https://github.com/sigstore/cosign). Verification instructions on the [release page](https://github.com/optiqor/optiqor-cli/releases).
+Cost tools that read cluster metrics need an agent, Prometheus and weeks of history. Optiqor reads the chart in your pull request, so the waste is flagged before it reaches production.
 
-### Option 5: Build from source
+### Same chart, same answer
 
-Requirements: Go 1.23+ and `make` (the Makefile drives a `-trimpath` reproducible build with the version stamped from `git describe`).
+The engine is plain Go rules with no LLM and no randomness. Run it twice and you get byte-identical output, which is what you want from a CI gate.
 
-```sh
-git clone https://github.com/optiqor/optiqor-cli
-cd optiqor-cli
+### Honest numbers
 
-# Recommended — produces ./bin/optiqor with version baked in:
-make build
-./bin/optiqor demo
+Savings are priced at AWS on-demand rates, and every report says they are accurate to ±40%. A values file can't show real usage, and Optiqor doesn't pretend it can. When you need exact figures, the [in-cluster agent](#the-optiqor-platform) measures them.
 
-# Plain `go build` works too:
-go build -o optiqor ./cmd/optiqor
-./optiqor demo
+### Your chart stays on your machine
 
-# Install onto your $PATH:
-make install            # uses go install with the same -trimpath/ldflags
-# or:
-go install github.com/optiqor/optiqor-cli/cmd/optiqor@latest
-```
+No login, no telemetry, no update checks. The one network call in the whole CLI is `--share`, and it only happens when you pass that flag.
 
-Other useful targets: `make test` (race-enabled, no caching), `make lint` (golangci-lint), `make vet`, `make fmt`, `make release-dryrun` (GoReleaser snapshot), `make clean`.
+## What Optiqor catches
 
----
+31 rules. Cost is the headline; security findings come along for free because the parser is already reading every `securityContext`.
 
-## Quick Start
-
-```sh
-# Run the bundled demo (no input needed)
-npx @optiqor/cli demo
-
-# Analyze a chart directory
-npx @optiqor/cli analyze ./my-chart
-
-# Analyze a single values file
-npx @optiqor/cli analyze ./values.production.yaml
-
-# Compare two values files
-npx @optiqor/cli diff ./values.dev.yaml ./values.prod.yaml
-
-# Score a chart against best practices (0-100)
-npx @optiqor/cli score ./my-chart
-
-# Get JSON output for tooling
-npx @optiqor/cli analyze ./my-chart --json | jq '.findings[]'
-```
-
----
-
-## How It Works
-
-```mermaid
-flowchart LR
-    A[Helm chart<br/>or values.yaml] --> B[Parser]
-    B --> C[Normalized<br/>workload model]
-    C --> D[Detectors]
-
-    subgraph Detectors
-      direction TB
-      D1[Cost rules<br/>15+]
-      D2[Security rules<br/>bonus, 15+]
-    end
-
-    D --> D1
-    D --> D2
-    D1 --> E[Findings]
-    D2 -.bonus.-> E
-    E --> F[Confidence band<br/>Low / Med / High]
-    F --> G[Report]
-
-    G --> H1[ASCII table<br/>default]
-    G --> H2[JSON<br/>--json]
-    G --> H3[Shareable URL<br/>--share, opt-in]
-
-    style A fill:#e7f0ff,stroke:#0a5
-    style G fill:#e8fff0,stroke:#0a5
-    style H3 stroke-dasharray: 5 5
-```
-
-The pipeline is deterministic. The same input always produces the same output. There are no LLM calls in the CLI itself; the LLM-driven Apply Fix flow lives in the SaaS backend.
-
----
-
-## Commands
-
-| Command | Purpose | Status |
-| --- | --- | --- |
-| `analyze [chart]` | Run cost analysis on a chart or values file (security findings included as a bonus) | Stable |
-| `demo` | Run analysis on a bundled demo chart | Stable |
-| `diff <a> <b>` | Show cost delta between two values files | Stable |
-| `score [chart]` | Assign a 0–100 efficiency score with confidence band | Stable |
-| `audit [chart]` | Bonus: security findings only (no cost detectors) | Stable |
-| `compare <a> <b>` | Currently an alias for `diff` (richer output ships in Phase 7) | Beta |
-| `watch [chart]` | Re-analyze on file change | Coming soon |
-| `--version` | Print version and exit | Stable |
-| `--help` | Help for any command | Stable |
-
-### Filter and exit-code flags
-
-| Flag | Effect |
+| Cost rule | Flags |
 | --- | --- |
-| `--json` | Emit machine-readable JSON (every command) |
-| `--no-color` / `NO_COLOR=1` | Disable ANSI output; auto-detected when piped |
-| `--severity low\|med\|high` | Drop findings below the threshold (analyze) |
-| `--detector <id>` | Repeatable allow-list, e.g. `--detector cpu-overprovisioned --detector image-pinned-latest` |
-| `--fail-on low\|med\|high` | Exit code 1 if any finding meets/exceeds the severity (analyze, audit) |
-| `--config <path>` | Load `.optiqor.yaml` from a custom path (default `./.optiqor.yaml` or `$OPTIQOR_CONFIG`) |
+| `cpu-overprovisioned` | CPU request close to its limit, higher than typical use justifies |
+| `memory-overprovisioned` | Memory request close to its limit, higher than typical use justifies |
+| `cpu-limit-far-above-request` | CPU limit many times the request, a burst the scheduler never reserved |
+| `memory-limit-far-above-request` | Memory limit many times the request, an OOM kill waiting to happen |
+| `oversized-cpu-limit` | CPU limit above 4 vCPU, which rules out smaller and Spot nodes |
+| `oversized-memory-limit` | Memory limit above 16 GiB, which forces memory-class nodes |
+| `replicas-too-high` | High static replica count with no autoscaler |
+| `excessive-replica-count` | More than ~20 replicas, where cost keeps climbing and availability stops improving |
+| `idle-workload` | `replicas: 0` with no autoscaler: a deployment that exists but never runs |
+| `cpu-request-equals-limit` | CPU in Guaranteed QoS with no room to burst |
+| `memory-request-equals-limit` | Memory request equal to the limit, right for SLO-bound pods and wasteful elsewhere |
+| `cpu-without-memory-request` | CPU request set but no memory request, so memory is best-effort |
+| `memory-without-cpu-request` | Memory request set but no CPU request, so pods can pile onto one node |
+| `tiny-cpu-request` | CPU request under 10m, usually a scaffold placeholder |
+| `tiny-memory-request` | Memory request under 32 MiB, usually a scaffold placeholder |
+| `unbounded-image-tag` | Floating tag like `main`, so one release can ship different code on each rollout |
 
-### Exit codes
+<details>
+<summary><b>15 security rules</b></summary>
 
-| Code | Meaning |
+<br>
+
+| Security rule | Flags |
 | --- | --- |
-| `0` | No findings at or above the threshold (or threshold unset) |
-| `1` | Findings reported and `--fail-on` threshold met |
-| `2` | Invocation error (bad path, malformed YAML, invalid flag) |
-| `3` | Unexpected runtime error |
+| `run-as-root` | Container runs as root |
+| `runs-as-uid-zero` | `runAsUser` is 0 |
+| `privileged-container` | `privileged: true` |
+| `allow-privilege-escalation` | Privilege escalation allowed |
+| `capabilities-not-dropped-all` | `capabilities.drop` doesn't include `ALL` |
+| `dangerous-capability-added` | Dangerous Linux capability added |
+| `host-network` | `hostNetwork` enabled |
+| `host-pid` | `hostPID` enabled |
+| `host-ipc` | `hostIPC` enabled |
+| `host-path-volume` | `hostPath` volume mounted |
+| `read-only-root-fs-missing` | Root filesystem not read-only |
+| `service-account-token-automount` | ServiceAccount token auto-mount not disabled |
+| `image-pinned-latest` | Image pinned to `:latest` |
+| `missing-cpu-limit` | No CPU limit |
+| `missing-memory-limit` | No memory limit |
 
-### Persistent config
+</details>
 
-A `.optiqor.yaml` in the working directory (or pointed at via `--config` / `OPTIQOR_CONFIG`) lets you persist defaults:
+Every finding comes with a severity, a confidence level and, for cost rules, an estimated monthly saving.
+
+## Reports
+
+### Terminal
+
+The default. Findings are ordered by savings, with a request-to-limit bar so the waste is visible at a glance. It respects `NO_COLOR` and drops colour when piped.
+
+### HTML
+
+`--html report.html` writes one HTML file you can attach to a pull request or send to whoever owns the budget.
+
+<p align="center">
+  <img src="docs/assets/html-report.png" alt="Optiqor HTML report" width="820">
+</p>
+
+### Score
+
+`optiqor score` grades a chart from A+ to F and ranks it against a benchmark set of 100 charts.
+
+<p align="center">
+  <img src="docs/assets/terminal-score.png" alt="optiqor score output" width="700">
+</p>
+
+### JSON
+
+`--json` for scripts and dashboards. Reports go to stdout and everything else to stderr, so pipes stay clean.
+
+```sh
+optiqor analyze ./charts/my-app --json \
+  | jq -r '.findings[] | select(.Severity == "HIGH") | "\(.Workload)  \(.DetectorID)"'
+```
+
+And for code review with a sense of humour, `--roast` rewrites the titles. The findings, numbers and severities stay exactly the same.
+
+## Run it in CI
+
+Fail the build when a chart change introduces a high-severity finding:
 
 ```yaml
-# .optiqor.yaml
-min_severity: med
-fail_on: high
-detectors:
-  - cpu-overprovisioned
-  - missing-memory-limit
-  - image-pinned-latest
-no_color: false
-```
-
-Flags always override config values when supplied.
-
----
-
-## Example Output
-
-`npx @optiqor/cli demo` produces a branded report with an executive summary, a boxed cost-finding card per optimization (with an inline `request ████░░░░ limit` ratio bar), and a compact "bonus" block for security misconfigurations spotted while parsing.
-
-```
-────────────────────────────────────────────────────────────────────────────────
-  ◐  optiqor
-  Helm chart cost optimization · security as a bonus
-────────────────────────────────────────────────────────────────────────────────
-
-  Source      demo
-  Workloads   15 workloads analyzed
-  Cost        25 optimizations · save ~$35.39/mo (~$424.68/yr) ±40%
-  Security    49 findings — bonus, surfaced while parsing
-
-━━ Cost optimizations ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ┌─ MED · api ──────────────────────────────────────────────── save ~$29.20/mo ─┐
-  │                                                                              │
-  │ CPU request appears overprovisioned                                          │
-  │                                                                              │
-  │ CPU      2      ███████████████████░░░░░ 2.5   80% of limit                  │
-  │                                                                              │
-  │ Request 2 vs limit 2.5 — typical utilization rarely justifies this           │
-  │ ratio. Consider halving the request.                                         │
-  │                                                                              │
-  │ confidence: ●●○ medium                                                       │
-  └──────────────────────────────────────────────────────────────────────────────┘
-
-  …  more cost cards, ordered by savings descending
-
-━━ Security findings  (bonus, 49) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Spotted while parsing your chart. Cost is the headline; this is a bonus.
-
-   HIGH   admin-tool      ●●●   allowPrivilegeEscalation explicitly enabled
-   HIGH   admin-tool      ●●●   Container declared privileged
-   HIGH   admin-tool      ●●●   Container runs as root
-   MED    api             ●●○   runAsNonRoot not declared
-   …
-
-  Run `optiqor audit` to focus only on these findings.
-
-────────────────────────────────────────────────────────────────────────────────
-  estimated monthly savings: $35.39/mo   (±40%)
-  Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get).
-  → install the agent for exact numbers: optiqor.dev/get
-```
-
-### `--roast` mode
-
-Same findings, snarkier titles. Detail text, severities, dollar estimates, and the mandatory accuracy disclosure are unchanged — only `Title` and the brand tagline get a tone-pass. Zero LLM calls; the rewrite is a static map of detector ID → snark.
-
-```sh
-npx @optiqor/cli demo --roast
-```
-
-```
-  Helm chart cost roast — your YAML deserves it
-  …
-  ┌─ MED · api ──────────────────────────────────────────────── save ~$29.20/mo ─┐
-  │ CPU on a buffet plan, eating air                                             │
-  │ CPU      2      ███████████████████░░░░░ 2.5   80% of limit                  │
-  …
-  Receipts > vibes. Install the agent for the actual bill: optiqor.dev/get
-```
-
-### `score` — letter grade + percentile
-
-`optiqor score` puts the social-shareable signal up top: a letter grade with a percentile rank against a baked-in benchmark distribution. The numeric 0–100 score still appears for CI gates and analytics.
-
-```sh
-npx @optiqor/cli score ./my-chart
-```
-
-```
-  ◐  optiqor score   Helm chart efficiency grade
-
-  Source      ./my-chart/values.yaml
-  Workloads   8 analyzed
-
-  Grade        B+   better than 64% of 100 benchmark charts
-  Score        82 / 100   ●●○ medium
-
-  Penalty breakdown
-    cpu-overprovisioned                 -10
-    image-pinned-latest                 -8
-    …
-
-  Calibration: static benchmark distribution; agent install unlocks live percentile vs your fleet.
-```
-
-The calibration is a static distribution baked into the binary — no telemetry, no network call. Live percentiles against your fleet land with the agent install.
-
----
-
-## CI/CD Integration
-
-The CLI is designed to run inside a CI pipeline. Use exit codes to gate merges, or post the report as a PR comment.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Dev as Developer
-    participant Git as Git host
-    participant CI as CI runner
-    participant CLI as optiqor analyze
-    participant PR as Pull request
-
-    Dev->>Git: push branch with chart change
-    Git->>CI: webhook fires
-    CI->>CLI: analyze ./chart --json --budget=400
-    CLI-->>CI: findings, exit code
-    alt findings exceed budget
-        CI->>PR: block merge, post comment
-    else findings within budget
-        CI->>PR: post advisory comment
-    end
-    Dev->>PR: review and merge
-```
-
-### GitHub Actions
-
-```yaml
-name: Optiqor
+name: optiqor
 on:
   pull_request:
-    paths: ["charts/**", "values/**"]
+    paths: ["charts/**"]
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
-          node-version: "20"
-      - name: Run Optiqor
-        run: npx @optiqor/cli analyze ./charts/api --json > report.json
-      - name: Comment on PR
-        run: |
-          npx @optiqor/cli analyze ./charts/api \
-            | gh pr comment ${{ github.event.pull_request.number }} --body-file -
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          go-version: "1.24"
+      - run: go install github.com/optiqor/optiqor-cli/cmd/optiqor@latest
+      - run: optiqor analyze ./charts/my-app --fail-on high
 ```
 
-### GitLab CI
+Exit codes: `0` clean, `1` a finding hit the `--fail-on` threshold, `2` bad input. Team defaults can live in `.optiqor.yaml`:
 
 ```yaml
-optiqor:
-  image: node:20-alpine
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes: [charts/**, values/**]
-  script:
-    - npx @optiqor/cli analyze ./charts/api --json > report.json
-  artifacts:
-    paths: [report.json]
+min_severity: med
+fail_on: high
+detectors: [cpu-overprovisioned, memory-overprovisioned, idle-workload]
 ```
 
-### pre-commit
+<details>
+<summary><b>All commands and flags</b></summary>
 
-```yaml
-# .pre-commit-config.yaml
-repos:
-  - repo: local
-    hooks:
-      - id: optiqor-analyze
-        name: Optiqor analyze
-        entry: npx @optiqor/cli analyze
-        language: system
-        files: '^charts/.*\.ya?ml$'
-        pass_filenames: true
-```
+<br>
 
----
-
-## CLI vs Agent vs Sandbox
-
-```mermaid
-flowchart TD
-    A[Need Kubernetes<br/>cost analysis] --> B{Where do you<br/>start from?}
-
-    B -->|Just chart files,<br/>no cluster yet| C[CLI]
-    B -->|Cluster running,<br/>want exact dollars| D[Full agent]
-    B -->|Want to try in<br/>3 minutes, no install| E[Web sandbox]
-
-    C --> C1[Runs offline<br/>plus or minus 40 percent accuracy<br/>No login<br/>Free, Apache 2.0]
-    D --> D1[Real Prometheus data<br/>plus or minus 10 to 15 percent accuracy<br/>Verified Receipts vs AWS bill<br/>Apply Fix automation]
-    E --> E1[Paste values.yaml in browser<br/>Same accuracy as CLI<br/>Shareable URL]
-
-    C1 -.->|Upgrade path| D1
-    E1 -.->|Upgrade path| D1
-
-    style C fill:#e7f0ff,stroke:#0a5
-    style D fill:#fff7e0,stroke:#a60
-    style E fill:#f0e7ff,stroke:#60a
-```
-
-| Surface | Accuracy | Setup | When to use |
-| --- | --- | --- | --- |
-| **Web sandbox** | plus or minus 40 percent | None, paste in browser | Curiosity, sharing a one-off finding |
-| **CLI** (this repo) | plus or minus 40 percent | One npx command | PR review, CI gating, offline workflows |
-| **Full agent + SaaS** | plus or minus 10 to 15 percent | Helm install, ~30 minutes | Production teams, paying customers, verified Receipts |
-
----
-
-## Configuration
-
-### Flags
-
-| Flag | Default | Description |
-| --- | --- | --- |
-| `--json` | false | Emit machine-readable JSON |
-| `--offline` | true | Do not perform any network calls |
-| `--share` | false | Upload sanitized analysis to optiqor.dev (opt-in) |
-| `--no-color` | false | Disable ANSI color in output |
-| `--quiet` | false | Suppress all output except findings |
-| `--budget=<USD>` | unset | Exit non-zero if estimated savings exceed this dollar threshold |
-| `--ignore=<rule-id,...>` | empty | Skip specific detector rules |
-| `--namespace=<name>` | unset | Filter to a single namespace if the chart deploys to multiple |
-
-### Environment Variables
-
-| Variable | Purpose |
+| Command | Does |
 | --- | --- |
-| `OPTIQOR_NO_COLOR` | Disable color output (CI-friendly, equivalent to `--no-color`) |
-| `OPTIQOR_OFFLINE` | Force offline mode |
-| `OPTIQOR_SHARE_BASE_URL` | Override the share endpoint (for self-hosted Optiqor) |
-| `OPTIQOR_SKIP_POSTINSTALL` | Skip the npm postinstall binary download (for offline npm caches) |
+| `optiqor analyze <chart>` | Full analysis of a chart directory or values file |
+| `optiqor audit <chart>` | Security findings only, fails on `high` by default |
+| `optiqor score <chart>` | Letter grade, 0 to 100 score and penalty breakdown |
+| `optiqor diff <a.yaml> <b.yaml>` | Cost delta between two values files |
+| `optiqor demo` | Analysis of a bundled demo chart |
 
----
+| Flag | Does |
+| --- | --- |
+| `--json` | Machine-readable output |
+| `--html <path>` | Also write an HTML report |
+| `-o <path>` | Write the report to a file |
+| `--severity low\|med\|high` | Hide findings below a severity |
+| `--detector <id>` | Only run these rules (repeatable) |
+| `--fail-on low\|med\|high` | Exit 1 at or above a severity |
+| `--roast` | Same findings, ruder titles |
+| `--share` | Opt in to a shareable link for a sanitised report |
+| `--config <path>` | Use a specific `.optiqor.yaml` |
+| `--no-color` | Plain output |
 
-## Privacy and Accuracy
+</details>
 
-The CLI was designed to be unambiguously honest about its limitations. Three rules baked into the binary:
+## The Optiqor platform
 
-> [!IMPORTANT]
-> **Accuracy is plus or minus 40 percent.** Every analysis output ends with a disclosure stating this. If you need exact numbers, you need real cluster metrics. The CLI deliberately cannot give you that.
+The CLI is the first stage of the loop Optiqor is built around: detect the waste, fix it with a pull request someone can review, and prove the saving against the real bill. The rest of the platform lives in [`backend/`](backend/).
 
-> [!IMPORTANT]
-> **No telemetry by default.** The CLI does not phone home. It does not collect usage statistics. It does not check for updates over the network unless you explicitly opt in.
-
-> [!IMPORTANT]
-> **`--share` is opt-in only.** When you pass `--share`, a sanitized version of your analysis is uploaded to `optiqor.dev/r/<hash>` for sharing. Sanitization removes commit author emails, repo paths, and free-text comments. The unsanitized analysis is never sent anywhere.
-
-If you want to verify any of these claims, the entire CLI is Apache 2.0 and lives in this repository. Read the source.
-
----
-
-## The Full Optiqor Platform
-
-Optiqor is a three-layer platform. This CLI is the open, free entry point to the first layer. The full platform binds all three with the same trust contract.
-
-| Layer | Component | What it does |
+| Stage | What it does | Status |
 | --- | --- | --- |
-| 1. Detect | **Optiqor Detect** | Cost analysis from real Prometheus data and Helm/Kustomize files. The CLI is the offline subset of this. (Bonus: security misconfigurations spotted along the way.) |
-| 2. Fix | **Optiqor Apply** | One-click Apply Fix PRs with the exact Helm values diff, gated by `kubectl --dry-run=server` against your live cluster. |
-| 3. Prove | **Optiqor Prove** | Ed25519-signed Receipts of realized savings, verified against your AWS / Azure / Hetzner bill. Public, independently verifiable, transparency-logged. |
-
-The CLI is free, open source, deliberately limited to plus or minus 40 percent accuracy because static files are all it sees. **The full platform turns the CLI's directional findings into exact dollar savings, automated PRs, and cryptographically verified Receipts against your actual cloud bill.**
+| Detect: CLI | 31 rules over Helm values, offline | Available |
+| Detect: sandbox API | The same rules behind an HTTP endpoint, with shareable result pages | Preview |
+| Detect: in-cluster agent | Read-only agent that measures real CPU, memory, OOM kills and 30-day p95/p99 from Prometheus | Preview |
+| Fix: Apply Fix | Claude drafts the Helm values change; deterministic checks decide whether it is safe to ship | In development |
+| Prove: signed receipts | Each saving recorded as an Ed25519 or ECDSA P-256 signed receipt anyone can verify | In development |
+| Prove: bill reconciliation | Savings matched against the AWS Cost and Usage Report | Planned |
 
 ```mermaid
 flowchart LR
-    PR[Helm or Kustomize PR] --> DETECT[Optiqor Detect<br/>analysis under 30s]
-    DETECT --> APPLY[Optiqor Apply<br/>Apply Fix PR opens]
-    APPLY --> MERGE[You merge]
-    MERGE --> WATCH[7-day Auto-Rollback<br/>watchdog]
-    WATCH --> MEASURE[Measure savings<br/>against cloud bill]
-    MEASURE --> PROVE[Optiqor Prove<br/>Ed25519 Receipt]
-    PROVE --> SHARE[Share with finance,<br/>verify independently]
-
-    style DETECT fill:#e7f0ff,stroke:#0a5
-    style APPLY fill:#fff7e0,stroke:#a60
-    style PROVE fill:#e8fff0,stroke:#0a5
+    subgraph cluster[Your cluster]
+        AG[Optiqor agent<br/>read-only]
+        PR[(Prometheus)]
+        AG -- Query API --> PR
+    end
+    CLI[optiqor CLI] -. same rules .- API
+    AG -- mTLS + signed token --> API[Optiqor API]
+    WEB[Web app] --> API
+    API --> PG[(Postgres<br/>row-level security)]
+    API -- draft fix --> LLM[Claude]
+    API -.-> GATE{Safety checks}
+    GATE -. pass .-> PRQ[Pull request]
+    PRQ -.-> REC[Signed receipt]
 ```
 
-### What you get when you install the agent
+<sub>Dashed steps are in development.</sub>
 
-| Capability | CLI (this) | Full Platform |
-| --- | --- | --- |
-| Cost analysis from chart files | Yes | Yes, plus exact numbers from real Prometheus |
-| Security findings as a bonus side-effect | Yes | Yes |
-| **Apply Fix** — one-click PR with the exact Helm diff | No | Yes |
-| **Verified Receipts** — Ed25519-signed proof of savings against your AWS bill | No | Yes |
-| **Auto-Rollback Guarantee** — 7-day post-merge watchdog opens a rollback PR if metrics drift | No | Yes |
-| **Cost Spike detection** — bill anomaly mapped back to the merged PR that caused it | No | Yes |
-| Workload classification — bursty workers sized differently than steady web services | No | Yes |
-| Cluster-aware sizing — Karpenter, Cluster Autoscaler, AKS, GKE, Hetzner | Static only | Yes, all five |
-| GitHub + GitLab integration with @optiqor thread Q&A | No | Yes |
-| Operator-aware fixes — Prometheus Operator, Strimzi, cert-manager, Istio | No | Yes |
-| Slack digest, customer dashboard, multi-cluster fleet view | No | Yes |
-| SOC 2 Type 1, GDPR, EU data residency | n/a | Yes |
+## Under the hood
 
-### How customers use it
+The parts engineers usually ask about:
 
-> [!TIP]
-> **Three-minute path:** paste your `values.yaml` at [optiqor.dev/sandbox](https://optiqor.dev/sandbox). No login. See what the SaaS would tell you, with the same plus-or-minus-40-percent disclosure as this CLI.
+- One rule engine, two surfaces. The API imports the CLI's public [`pkg/rules`](pkg/rules) and [`pkg/parser`](pkg/parser) packages, so the web sandbox and the terminal can't disagree. The CLI never imports the backend.
+- Deterministic by construction. Golden files in [`testdata/golden`](testdata/golden) are compared byte for byte on every CI run, on Linux and macOS.
+- The LLM never decides. Claude writes the explanation and the diff. Plain Go checks decide whether it ships: the diff must apply, labels must survive, no resource can be cut by more than half, and PDBs, quotas, LimitRanges, HPA bounds and recent OOM kills are checked first. Calls are sanitised, capped at $0.40 each and cost-recorded. ([ADR-0007](backend/docs/adr/0007-llm-isolation.md))
+- Tenant isolation in the database. Every tenant-scoped query runs with `app.tenant_id` set and Postgres row-level security does the filtering, so a missing `WHERE` clause can't leak data. An integration test proves it against a real Postgres. ([ADR-0003](backend/docs/adr/0003-shared-tables-rls.md))
+- An agent you can let into production. Read-only ClusterRole, outbound connections only, TLS 1.3 client certificates and a signed token on every batch. ([ADR-0008](backend/docs/adr/0008-agent-permissions.md), [ADR-0018](backend/docs/adr/0018-agent-mtls-spiffe.md))
+- Decisions written down. 21 architecture decision records in [`backend/docs/adr`](backend/docs/adr), from choosing a modular monolith over microservices to moving receipt signing to ECDSA so the key can live in KMS.
 
-> [!TIP]
-> **Ten-minute path:** install the GitHub or GitLab App. The next PR you open against any Helm chart in the connected repo gets an Optiqor comment with cost findings (plus any security misconfigurations spotted along the way). Still sandbox accuracy until you install the agent.
+About 24,000 lines of Go, 20,000 lines of Go tests and 600 test functions across the two modules. CI runs `go test -race`, golangci-lint, CodeQL, gosec, govulncheck, gitleaks and Trivy, and release images are signed with cosign.
 
-> [!TIP]
-> **Thirty-minute path:** `helm install optiqor-agent` in your cluster. Within 30 days you receive your first signed Receipt proving exact dollar savings against your AWS, Azure, or Hetzner bill.
+Built with Go, PostgreSQL 16 and TimescaleDB, Next.js 16, React 19, Tailwind 4, client-go, the Anthropic API and Terraform on AWS.
 
-### Pricing
+## Repository
 
-| Plan | Price | What is included |
-| --- | --- | --- |
-| **Free** | $0 forever | 2 clusters, one verified Receipt per month, all detectors |
-| **Team** | $500 / month | 5 clusters, unlimited Receipts, Slack digest, dashboard |
-| **Enterprise** | Custom | Unlimited clusters, dedicated CSM, SLA, in-VPC option, EU residency |
+```
+cmd/optiqor/        the CLI
+pkg/rules/          the 31 rules (public Go API)
+pkg/parser/         Helm values to workloads (public Go API)
+pkg/htmlrender/     HTML report
+internal/           commands, renderers, config
+backend/            API, worker, in-cluster agent, web app, Terraform
+```
 
-Ship with confidence: every recommendation is paired with a Confidence band, every Apply Fix is gated by `kubectl --dry-run=server` against your live cluster, every merged change is watched for 7 days, and every claimed dollar of savings is signed against the real cloud bill.
-
-[**Try the sandbox**](https://optiqor.dev/sandbox) - [**Install the agent**](https://optiqor.dev/get) - [**Book a demo**](https://optiqor.dev/demo) - [**Read the architecture**](https://optiqor.dev/how-it-works)
-
----
-
-## Public Go API
-
-Everything under [`pkg/`](pkg/) is the stable public surface. Anything under `internal/` is CLI-side composition and may change without notice.
-
-| Package | Purpose |
-| --- | --- |
-| [`pkg/parser`](pkg/parser) | Helm `values.yaml` → normalised `Workload` model: resources, image refs, `securityContext`, replicas |
-| [`pkg/rules`](pkg/rules) | The full 31-detector library (16 cost + 15 security as a bonus), the `Detector` interface, `Finding`, severity / confidence enums, and the `All()` registry |
+Use the rules from your own Go program:
 
 ```go
-import (
-    "github.com/optiqor/optiqor-cli/pkg/parser"
-    "github.com/optiqor/optiqor-cli/pkg/rules"
-)
-
-func analyze(values io.Reader) ([]rules.Finding, error) {
-    workloads, err := parser.ParseValues(values)
-    if err != nil {
-        return nil, err
-    }
-    return rules.Run(workloads, rules.All()), nil
+workloads, err := parser.ParseValues(valuesFile)
+if err != nil {
+	return err
 }
+findings := rules.Run(workloads, rules.All())
 ```
 
-The Optiqor proprietary backend imports these two packages directly via `go.mod`; this is *the* mechanism by which the SaaS reuses CLI rule definitions instead of forking them. New detectors land in `pkg/rules` first, the backend follows automatically. Breaking changes to anything under `pkg/` go through semver and a deprecation notice.
+## Build from source
 
----
+```sh
+git clone https://github.com/optiqor/optiqor && cd optiqor
+make build && ./bin/optiqor demo
+make test
+```
 
-## FAQ
-
-<details>
-<summary><b>Why is the CLI rule-based instead of LLM-driven?</b></summary>
-
-Determinism. The same chart should produce the same findings every time. LLMs are non-deterministic and would make CI gating unreliable. The LLM-driven Apply Fix flow lives in the [Optiqor SaaS](https://optiqor.dev) where every recommendation is paired with measured outcomes via Verified Receipts.
-
-</details>
-
-<details>
-<summary><b>Does this work on my Kustomize / ArgoCD / Flux setup?</b></summary>
-
-Yes for any setup that produces Helm-renderable YAML. The CLI parses the rendered output, not the source format. ArgoCD `Application` manifests with Helm sources work directly. Flux `HelmRelease` resources work directly. Kustomize overlays work after `kustomize build`.
-
-</details>
-
-<details>
-<summary><b>What about my Hetzner / on-prem / AKS / GKE cluster?</b></summary>
-
-The CLI is cluster-agnostic. It reads chart files; it does not care where the cluster runs. Note that **dollar estimates** in the output assume AWS pricing today. EUR-denominated estimates for Hetzner customers ship in Q3 2026 alongside the EU GA of the SaaS.
-
-</details>
-
-<details>
-<summary><b>How do I extend it with my own detectors?</b></summary>
-
-The detector library is exported as a stable Go package at [`pkg/rules`](pkg/rules) — see [Public Go API](#public-go-api) below. To add a detector to the upstream library, drop a new file under `pkg/rules/` implementing the `Detector` interface and register it in `pkg/rules/types.go::All()`. PRs adding genuinely useful new detectors are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-</details>
-
-<details>
-<summary><b>Is this a Kubecost competitor?</b></summary>
-
-No. Kubecost is a cluster-installed cost dashboard. We are a static-analysis CLI plus a PR-layer SaaS. Many Optiqor users also run Kubecost for their dashboard view; the products are complementary.
-
-</details>
-
-<details>
-<summary><b>How do I report a security issue?</b></summary>
-
-See [SECURITY.md](SECURITY.md). Email `security@optiqor.dev`. Do not open public GitHub issues for security bugs.
-
-</details>
-
----
+The backend has its own toolchain: `cd backend && make bootstrap && make dev` brings up Postgres, Redis and Temporal in Docker, runs the migrations and starts the API and web app.
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide. Highlights:
-
-- All commits use [Conventional Commits](https://www.conventionalcommits.org/) (`feat(parser): support kustomize overlays`)
-- All commits require DCO sign-off (`git commit -s`)
-- Behavior changes need a golden test in `testdata/fixtures/`
-- No LLM calls, no telemetry, no Windows-specific code paths (these are project-defining constraints)
-- See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-
-Good first issues are labeled [`good-first-issue`](https://github.com/optiqor/optiqor-cli/labels/good-first-issue).
-
----
-
-## Community
-
-- **Discussions** — [github.com/optiqor/optiqor-cli/discussions](https://github.com/optiqor/optiqor-cli/discussions)
-- **Issues** — [github.com/optiqor/optiqor-cli/issues](https://github.com/optiqor/optiqor-cli/issues)
-- **Security** — `security@optiqor.dev` (see [SECURITY.md](SECURITY.md))
-- **General** — [`hello@optiqor.dev`](mailto:hello@optiqor.dev)
-
----
-
-## About the name
-
-**Optiqor** — *optimize* + *quorum*. A quorum of deterministic detectors that agree on what to optimize before anything ships. Detect waste, fix it, prove it.
-
----
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: Conventional Commit titles, DCO sign-off and a golden test for any output change. Report security issues privately through [SECURITY.md](SECURITY.md).
 
 ## License
 
-The CLI (everything outside `backend/`) is Apache License 2.0. See [LICENSE](LICENSE).
+The CLI is [Apache-2.0](LICENSE), and so is the in-cluster agent ([backend/LICENSE-agent](backend/LICENSE-agent)). The rest of `backend/` is under [backend/LICENSE](backend/LICENSE).
 
-> [!NOTE]
-> [`backend/`](backend/) holds the SaaS backend, in-cluster agent, and web app. It is a separate Go module with its own licenses ([backend/LICENSE](backend/LICENSE), [backend/LICENSE-agent](backend/LICENSE-agent)). The backend imports the CLI's `pkg/`; the CLI never imports the backend, so it stays independently buildable and auditable.
-
----
-
-<sub>Optiqor is a product of Optiqor, Inc. Trademark and brand assets are not licensed under Apache 2.0.</sub>
+<p align="center">
+  <br>
+  <b>Optiqor</b> · Detect. Fix. Prove.
+  <br>
+  <sub>Built by <a href="https://github.com/btwshivam">Shivam Kumar</a></sub>
+</p>
