@@ -250,7 +250,7 @@ check "diff command runs on two values files" \
   bash -c "tmp1=\$(mktemp); tmp2=\$(mktemp); echo 'resources: {requests: {cpu: 1}}' > \$tmp1; echo 'resources: {requests: {cpu: 2}}' > \$tmp2; '$BIN' diff \$tmp1 \$tmp2 --no-color >/dev/null 2>&1; rc=\$?; rm -f \$tmp1 \$tmp2; test \"\$rc\" -eq 0"
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║ G. Detector library (30 detectors, two categories)                   ║
+# ║ G. Detector library (31 detectors, two categories)                   ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 section G "Detector library"
 check "rules.Category type exported"          bash -c "grep -q 'type Category string' pkg/rules/types.go"
@@ -258,10 +258,10 @@ check "rules.CategoryCost / CategorySecurity constants exist" \
   bash -c "grep -q 'CategoryCost' pkg/rules/types.go && grep -q 'CategorySecurity' pkg/rules/types.go"
 check "Detector interface requires Category()" \
   bash -c "awk '/type Detector interface/,/^}/' pkg/rules/types.go | grep -q 'Category()'"
-check "All() registers exactly 30 detectors" \
-  bash -c "n=\$(awk '/func All\\(\\)/,/^}/' pkg/rules/types.go | grep -cE '\\bnew[A-Z][a-zA-Z]+\\(\\)'); test \"\$n\" -eq 30 && echo \"\$n detectors\""
-check "exactly 15 cost detectors declared in categories.go" \
-  bash -c "n=\$(grep -cE 'Category\\(\\)[ ]*Category[ ]*\\{ return CategoryCost \\}' pkg/rules/categories.go); test \"\$n\" -eq 15 && echo \"\$n cost\""
+check "All() registers exactly 31 detectors" \
+  bash -c "n=\$(awk '/func All\\(\\)/,/^}/' pkg/rules/types.go | grep -cE '\\bnew[A-Z][a-zA-Z]+\\(\\)'); test \"\$n\" -eq 31 && echo \"\$n detectors\""
+check "exactly 16 cost detectors declared in categories.go" \
+  bash -c "n=\$(grep -cE 'Category\\(\\)[ ]*Category[ ]*\\{ return CategoryCost \\}' pkg/rules/categories.go); test \"\$n\" -eq 16 && echo \"\$n cost\""
 check "exactly 15 security detectors declared in categories.go" \
   bash -c "n=\$(grep -cE 'Category\\(\\)[ ]*Category[ ]*\\{ return CategorySecurity \\}' pkg/rules/categories.go); test \"\$n\" -eq 15 && echo \"\$n security\""
 check "every runtime finding carries a Category" \
