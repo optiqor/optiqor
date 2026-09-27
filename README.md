@@ -552,7 +552,7 @@ Everything under [`pkg/`](pkg/) is the stable public surface. Anything under `in
 | Package | Purpose |
 | --- | --- |
 | [`pkg/parser`](pkg/parser) | Helm `values.yaml` → normalised `Workload` model: resources, image refs, `securityContext`, replicas |
-| [`pkg/rules`](pkg/rules) | The full 30-detector library (15 cost + 15 security as a bonus), the `Detector` interface, `Finding`, severity / confidence enums, and the `All()` registry |
+| [`pkg/rules`](pkg/rules) | The full 31-detector library (16 cost + 15 security as a bonus), the `Detector` interface, `Finding`, severity / confidence enums, and the `All()` registry |
 
 ```go
 import (

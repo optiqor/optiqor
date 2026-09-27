@@ -65,15 +65,17 @@ func TestRedactString_PEMPrivateKeyMasked(t *testing.T) {
 	}
 }
 
-func TestRedactBeforeSend_StripsExceptionAndExtra(t *testing.T) {
+func TestRedactBeforeSend_StripsExceptionAndContexts(t *testing.T) {
 	event := &sentry.Event{
 		Message: "anthropic call failed sk-ant-api03-secretkey0123456789012345",
 		Exception: []sentry.Exception{
 			{Value: "leaked AKIAIOSFODNN7EXAMPLE in stack frame"},
 		},
-		Extra: map[string]any{
-			"github_token": "ghp_secrettoken0123456789012345abcd",
-			"benign":       "ok",
+		Contexts: map[string]sentry.Context{
+			"request_data": {
+				"github_token": "ghp_secrettoken0123456789012345abcd",
+				"benign":       "ok",
+			},
 		},
 	}
 	out := redactBeforeSend(event, nil)
@@ -83,11 +85,12 @@ func TestRedactBeforeSend_StripsExceptionAndExtra(t *testing.T) {
 	if strings.Contains(out.Exception[0].Value, "AKIAIOSFODNN7EXAMPLE") {
 		t.Errorf("exception leaked")
 	}
-	if got, _ := out.Extra["github_token"].(string); strings.Contains(got, "secrettoken") {
-		t.Errorf("extra leaked: %v", got)
+	ctx := out.Contexts["request_data"]
+	if got, _ := ctx["github_token"].(string); strings.Contains(got, "secrettoken") {
+		t.Errorf("context leaked: %v", got)
 	}
-	if out.Extra["benign"].(string) != "ok" {
-		t.Errorf("benign value mutated: %v", out.Extra["benign"])
+	if ctx["benign"].(string) != "ok" {
+		t.Errorf("benign value mutated: %v", ctx["benign"])
 	}
 }
 

@@ -372,7 +372,7 @@ Breaking changes to any of those require an ADR and a versioning plan (e.g. `/v2
 
 Conventional Commits. One concern per commit. DCO sign-off required (`-s` flag).
 
-See [.claude/skills/commit/SKILL.md](.claude/skills/commit/SKILL.md) for the rules and the local quality gate (gofmt + vet + build + test -race + lint).
+See `.claude/skills/commit/SKILL.md` (local, gitignored) for the rules and the local quality gate (gofmt + vet + build + test -race + lint).
 
 ### Pull requests
 
@@ -384,7 +384,7 @@ See [.claude/skills/commit/SKILL.md](.claude/skills/commit/SKILL.md) for the rul
 
 ### Reviews
 
-See [.claude/skills/pr-review/SKILL.md](.claude/skills/pr-review/SKILL.md) for the voice and the line-anchoring + verdict rules.
+See `.claude/skills/pr-review/SKILL.md` (local, gitignored) for the voice and the line-anchoring + verdict rules.
 
 ### Decisions
 

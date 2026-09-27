@@ -1,27 +1,11 @@
 name: Backend CI
 
-# backend/go.mod replaces github.com/optiqor/optiqor-cli with ../, so CLI
-# changes under pkg/ can break the backend too.
+# Runs on every PR (no path filter) so its jobs can be required checks;
+# Dependabot auto-merge only waits for required checks.
 on:
   push:
     branches: [main]
-    paths:
-      - "backend/**"
-      - "pkg/**"
-      - "brand/**"
-      - "docs/api/**"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/backend-ci.yml"
   pull_request:
-    paths:
-      - "backend/**"
-      - "pkg/**"
-      - "brand/**"
-      - "docs/api/**"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/backend-ci.yml"
 
 permissions:
   contents: read
