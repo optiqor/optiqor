@@ -188,7 +188,7 @@ Render a previously-stored analysis. **HTML by default**, JSON on opt-in.
 
 | Selector | Returns |
 | --- | --- |
-| (default) | `text/html; charset=utf-8` — full page rendered via [`pkg/htmlrender`](../../optiqor-cli/pkg/htmlrender/) (same Apache-2.0 renderer `optiqor analyze --html` uses, so the local file and the share page are byte-equivalent) |
+| (default) | `text/html; charset=utf-8` — full page rendered via [`pkg/htmlrender`](../../pkg/htmlrender/) (same Apache-2.0 renderer `optiqor analyze --html` uses, so the local file and the share page are byte-equivalent) |
 | `Accept: application/json` | the original `POST /v1/analyze` response body |
 | `?format=json` | same — query parameter wins over header |
 
@@ -641,7 +641,7 @@ A condensed view for ops dashboards:
 | `/v1/session/whoami`, `/v1/session/issue` | [`internal/auth/handler.go`](../internal/auth/handler.go) | `internal/auth/handler_test.go` |
 | `/v1/onboarding/state`, `/v1/onboarding/transition` | [`internal/onboarding/handler.go`](../internal/onboarding/handler.go) | `internal/onboarding/handler_test.go` |
 | `/v1/meta`, `/healthz`, `/readyz`, `/metrics`, `/webhooks/github`, `/oauth/github/callback`, `/debug/pprof/*` | [`cmd/api/main.go`](../cmd/api/main.go) + [`cmd/api/routes.go`](../cmd/api/routes.go) | `cmd/api/main_test.go` + `cmd/api/routes_test.go` |
-| spec (single source of truth for the public surface) | [`optiqor-cli/docs/api/openapi.yaml`](../../optiqor-cli/docs/api/openapi.yaml) | `scripts/check-openapi-parity.sh` (CI gate) |
+| spec (single source of truth for the public surface) | [`optiqor-cli/docs/api/openapi.yaml`](../../docs/api/openapi.yaml) | `scripts/check-openapi-parity.sh` (CI gate) |
 
 The wire shapes are the Go structs — `AnalyzeResponse`, `VerifyResponse`,
 `PreviewRequest`, `IngestRequest`, `SpikeEnvelope`. If those drift from this

@@ -1,9 +1,9 @@
-// Brand tokens loaded at build time from optiqor-cli/brand/tokens.json
+// Brand tokens loaded at build time from brand/tokens.json
 // (Apache-2.0, single source of truth shared with the CLI's pkg/htmlrender).
 // Backend frontend reads these once and exposes them as TS constants so
 // callers stay decoupled from the file location.
 
-import tokens from "../../../../optiqor-cli/brand/tokens.json";
+import tokens from "../../../../brand/tokens.json";
 
 export const brand = tokens;
 export const color = tokens.color;
