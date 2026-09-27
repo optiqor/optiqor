@@ -1,6 +1,6 @@
 # optiqor-cli — Claude Conventions
 
-The open-source CLI: `@optiqor/cli`. Apache-2.0. Standalone repo so it stays independently auditable, which is the entire reason it doesn't live in the proprietary monorepo. Strategy reference: `docs/open_source_cli_playbook.md` in the Optiqor org docs (not public).
+The open-source CLI: `@optiqor/cli`. Apache-2.0. The repo root is the CLI module; `backend/` holds the backend as a separate Go module with its own `CLAUDE.md` and licenses. The CLI must stay independently buildable and auditable, so nothing outside `backend/` may import backend code. Strategy reference: `docs/open_source_cli_playbook.md` in the Optiqor org docs (not public).
 
 This file is the operating manual. Read it before writing or reviewing code.
 
@@ -30,9 +30,9 @@ These exist because the OSS funnel breaks if any of them slip. They are not pref
 
 3. **Accuracy disclosure in every output.** Every renderer (text, JSON, HTML, roast) emits the mandatory disclosure: `Sandbox accuracy: ±40%. Install the Optiqor agent for exact numbers (optiqor.dev/get).` The string is canonical. The honesty is the whole pitch; don't water it down.
 
-4. **No proprietary backend code may be imported.** `go.mod` must never reference `github.com/optiqor/optiqor`. The CLI is independently buildable, auditable, licensable. CI greps imports on every PR.
+4. **No backend code may be imported.** The root `go.mod` must never reference `github.com/optiqor/optiqor` (the `backend/` module). The CLI is independently buildable, auditable, licensable. CI greps imports on every PR.
 
-5. **`pkg/` is the stable public API.** External programs may import it, including the proprietary backend (which depends on `pkg/rules` and `pkg/parser`). Breaking changes go through semver and a deprecation notice. New detectors land in `pkg/rules` first; the backend follows automatically via `go get -u`.
+5. **`pkg/` is the stable public API.** External programs may import it, including the proprietary backend (which depends on `pkg/rules` and `pkg/parser`). Breaking changes go through semver and a deprecation notice. New detectors land in `pkg/rules` first; the backend picks them up immediately via `replace => ../`, and Backend CI runs on `pkg/**` changes.
 
 6. **`internal/` is private.** Refactor freely. `internal/{analyze,render,share,config,roast}` is CLI-side composition that stays out of the public API.
 
@@ -386,4 +386,4 @@ ADRs in `docs/adr/` for non-trivial architectural changes. Template at `docs/adr
 - Don't TODO without an issue. Open the issue, paste the link, then write the TODO.
 - Don't merge to `main` without a PR.
 - Don't bump dependencies without a one-line justification in the commit message.
-- Don't break `pkg/` without a semver bump and a deprecation notice. The backend imports it directly via `go get -u`.
+- Don't break `pkg/` without a semver bump and a deprecation notice. External programs import it; `backend/` imports it via `replace`.

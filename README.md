@@ -650,10 +650,10 @@ Good first issues are labeled [`good-first-issue`](https://github.com/optiqor/op
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+The CLI (everything outside `backend/`) is Apache License 2.0. See [LICENSE](LICENSE).
 
 > [!NOTE]
-> The CLI is the only part of Optiqor that is open source. The SaaS backend, in-cluster agent, and Apply Fix infrastructure are proprietary. The CLI is independently buildable, independently auditable, and independently licensable; it never imports proprietary code.
+> [`backend/`](backend/) holds the SaaS backend, in-cluster agent, and web app. It is a separate Go module with its own licenses ([backend/LICENSE](backend/LICENSE), [backend/LICENSE-agent](backend/LICENSE-agent)). The backend imports the CLI's `pkg/`; the CLI never imports the backend, so it stays independently buildable and auditable.
 
 ---
 

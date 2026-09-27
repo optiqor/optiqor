@@ -1,6 +1,6 @@
 # optiqor — Claude Conventions
 
-The Optiqor proprietary monorepo. Go modular monolith producing three binaries from `cmd/`: `api`, `worker`, `agent`. Plus the Next.js web frontend (`web/`) and Terraform infrastructure (`infra/`).
+The Optiqor backend, living in `backend/` of the `optiqor-cli` repo as its own Go module. Go modular monolith producing three binaries from `cmd/`: `api`, `worker`, `agent`. Plus the Next.js web frontend (`web/`) and Terraform infrastructure (`infra/`).
 
 Ground truth for stack and architecture is [docs/strategy/technical_implementation.md](docs/strategy/technical_implementation.md). When code disagrees with that doc, the doc wins unless an ADR in [docs/adr/](docs/adr/) records the change.
 
@@ -354,7 +354,7 @@ This repo has no public Go API surface. Everything is `internal/`. The public su
 - HTTP API (`docs/api.md`)
 - Database schema (`migrations/`)
 - Temporal workflow signatures (`internal/worker/workflows/`)
-- The CLI's `pkg/` (imported from `github.com/optiqor/optiqor-cli` via go.mod replace)
+- The CLI's `pkg/` (`github.com/optiqor/optiqor-cli`, the repo root module, wired via `replace => ../`)
 
 Breaking changes to any of those require an ADR and a versioning plan (e.g. `/v2/...` for HTTP, deprecation window for workflows).
 
