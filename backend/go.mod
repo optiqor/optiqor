@@ -10,7 +10,7 @@ require (
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
-	github.com/testcontainers/testcontainers-go/modules/redis v0.42.0
+	github.com/testcontainers/testcontainers-go/modules/redis v0.44.0
 	go.temporal.io/sdk v1.49.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.37.1
