@@ -1,0 +1,116 @@
+image:
+  repository: ghcr.io/optiqor/agent
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# tenantID is set by the install wizard (web/src/app/install/*) and
+# baked into the deployment ENV. The agent uses it as the keyspace
+# prefix and the per-tenant Temporal queue routing key.
+tenantID: ""
+
+# clusterID is the stable identifier the workload-identity hash uses
+# (ADR-0004). Pin per cluster; never rotate (a fresh clusterID
+# orphans every recommendation history).
+clusterID: ""
+
+# Health probe port — kubelet hits /healthz here, separate from the
+# Prometheus metrics port so RBAC for Prometheus stays narrow.
+health:
+  port: 8088
+
+# Backend ingest endpoint. mTLS material lives in the secret named
+# below; Phase 5 fills the certs.
+ingest:
+  url: "https://ingest.optiqor.dev"
+  secretName: optiqor-agent-mtls
+  # requireSecret defaults to true so a missing or misnamed Secret
+  # fails the pod into CrashLoopBackOff instead of silently shipping
+  # snapshots without client certs. Set false only for local dev
+  # against an unauthenticated ingest endpoint.
+  requireSecret: true
+  # snapshotInterval controls how often the agent POSTs a full snapshot.
+  # 60s is the floor; informers serve reads from memory, so a shorter
+  # interval doesn't lower latency, only egress cost.
+  snapshotInterval: 60s
+  # eventsCutoff drops events older than this from each snapshot to
+  # bound payload size after the event cache has grown.
+  eventsCutoff: 10m
+
+# Prometheus query endpoint. Empty disables agent-side scraping (the
+# K8s informer signals still ship). Defaults to the kube-prometheus-stack
+# in-cluster Service so a stock install lights up without overrides.
+# Authentication is none by default; production customers should set
+# `auth: bearer | basic | sa_token | mtls` and the matching fields below.
+# Per ADR-0021 the agent only talks to this endpoint — it never scrapes
+# customer application pods directly.
+prometheus:
+  url: "http://prometheus-operated.monitoring:9090"
+  auth: "none"
+  # bearerTokenFile is a path inside the pod; mount a Secret as a file
+  # via extraVolumeMounts when you set this. File is re-read every
+  # OPTIQOR_PROMETHEUS_TOKEN_REFRESH so kubelet token rotation works.
+  bearerTokenFile: ""
+  username: ""
+  # passwordSecret pulls the basic-auth password from an existing K8s
+  # Secret. Set both name + key when auth: basic.
+  passwordSecret: {}
+  # mtls files are mounted via extraVolumeMounts; the chart does not
+  # generate certs. cert-manager + a Certificate resource is the
+  # recommended provisioning path (see docs/runbooks/agent-install.md).
+  mtls: {}
+  # instantTTL caches per-snapshot queries; 60s keeps repeated ticks
+  # from spamming Prometheus. rangeTTL caches 30-day percentile
+  # roll-ups; 24h aligns with the doc-recommended "run them once daily
+  # during quiet hours".
+  instantTTL: "60s"
+  rangeTTL: "24h"
+
+# Read-only RBAC scope per ADR-0008. Adding a verb here changes the
+# agent's security posture; needs an ADR amendment.
+rbac:
+  create: true
+  verbs:
+    - get
+    - list
+    - watch
+
+serviceAccount:
+  create: true
+  name: ""
+
+# Footprint defaults are deliberately tight; ADR-0008 + customer
+# security review depend on the agent staying invisible at scale.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# NetworkPolicy denies all inbound and only allows egress to the
+# ingest URL. ADR-0008 principle 2.
+networkPolicy:
+  enabled: true
+
+# Agent self-observability. The customer's Prometheus scrapes this so
+# operators can see when the agent's PromQL is slow / failing without
+# logging into the agent pod. Distinct from `prometheus.url` above —
+# that's where the agent reads workload data FROM.
+metrics:
+  enabled: true
+  port: 9090
+  # serviceMonitor.enabled adds a Prometheus Operator CRD that points at
+  # this Service. Set false when the customer runs Prometheus without
+  # the operator (no CRDs) — they wire their own scrape config.
+  serviceMonitor:
+    enabled: true
+    interval: "30s"
+    scrapeTimeout: "10s"
+    additionalLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+podLabels: {}

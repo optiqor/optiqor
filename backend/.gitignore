@@ -1,0 +1,58 @@
+# Binaries
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+*.prof
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+credentials.json
+
+# Go
+/vendor/
+go.work
+go.work.sum
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# Docker / k8s
+docker-compose.override.yml
+kubeconfig
+.kube/
+
+# Coverage
+coverage.out
+coverage.html
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local dev scratch
+/scratch/
+/tmp/
+*.local.*
+
+# Frontend (web/) — populated when framework chosen
+node_modules/
+.next/
+.nuxt/
+.svelte-kit/
+dist/
+build/

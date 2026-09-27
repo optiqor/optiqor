@@ -1,0 +1,2 @@
+# Our own Helm charts (api, worker, optiqor-agent) live here, deployed via
+# the ArgoCD Applications in ../argocd/.

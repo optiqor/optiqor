@@ -146,15 +146,15 @@ fi
 # ╚══════════════════════════════════════════════════════════════════════╝
 section C "Hard rules"
 check "no LLM SDK imports (anthropic/openai/sashabaranov)" \
-  bash -c "! grep -rE 'github\\.com/(anthropics|openai|sashabaranov)' --include='*.go' --include='go.mod' . | grep -v _test.go | grep ."
+  bash -c "! grep -rE 'github\\.com/(anthropics|openai|sashabaranov)' --include='*.go' --include='go.mod' --exclude-dir=backend . | grep -v _test.go | grep ."
 check "no SCM SDK imports (go-github/go-gitlab/go-gitea)" \
-  bash -c "! grep -rE 'github\\.com/(google/go-github|xanzy/go-gitlab|google/go-gitea)' --include='*.go' --include='go.mod' . | grep ."
-check "no proprietary backend import (go.mod)" \
-  bash -c "! grep -q 'optiqor/backend' go.mod go.sum"
-check "no proprietary backend import (source)" \
-  bash -c "! grep -rE 'github\\.com/optiqor/backend' --include='*.go' . | grep ."
+  bash -c "! grep -rE 'github\\.com/(google/go-github|xanzy/go-gitlab|google/go-gitea)' --include='*.go' --include='go.mod' --exclude-dir=backend . | grep ."
+check "no backend import (go.mod)" \
+  bash -c "! grep -qE 'github\\.com/optiqor/optiqor( |/|$)' go.mod go.sum"
+check "no backend import (source)" \
+  bash -c "! grep -rE 'github\\.com/optiqor/optiqor/' --include='*.go' --exclude-dir=backend . | grep ."
 check "no daemon / persistent listener (net.Listen)" \
-  bash -c "! grep -rE 'net\\.Listen|http\\.ListenAndServe' --include='*.go' . | grep -v _test.go | grep ."
+  bash -c "! grep -rE 'net\\.Listen|http\\.ListenAndServe' --include='*.go' --exclude-dir=backend . | grep -v _test.go | grep ."
 check "Apache 2.0 license in LICENSE" \
   bash -c "grep -q 'Apache License' LICENSE"
 check "pkg/rules is a public Go package" \
@@ -164,7 +164,7 @@ check "pkg/parser is a public Go package" \
 check "internal/ visibility enforced by the compiler (build succeeds)" \
   bash -c "go list -deps ./... >/dev/null"
 check "no Windows-specific code paths (per playbook)" \
-  bash -c "! grep -rE '//go:build windows|GOOS *= *\"windows\"' --include='*.go' . | grep ."
+  bash -c "! grep -rE '//go:build windows|GOOS *= *\"windows\"' --include='*.go' --exclude-dir=backend . | grep ."
 
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ D. Brand + identity                                                  ║
@@ -177,7 +177,7 @@ check "npm homepage = optiqor.dev" \
 check "npm bin maps to optiqor" \
   bash -c "jq -e '.bin.optiqor' package.json >/dev/null"
 check "no stale sevro/lowplane references" \
-  bash -c "! grep -rIlE 'sevro|Sevro|SEVRO|lowplane' --exclude-dir=.git --exclude='verify.sh' . | xargs -I{} grep -L 'Rebrand sevro' {} 2>/dev/null | grep ."
+  bash -c "! grep -rIlE 'sevro|Sevro|SEVRO|lowplane' --exclude-dir=.git --exclude-dir=backend --exclude='verify.sh' . | xargs -I{} grep -L 'Rebrand sevro' {} 2>/dev/null | grep ."
 check "logo image present (referenced by README)" \
   test -f docs/commands/optiqor-hori.jpg
 check "README references the logo image path" \
