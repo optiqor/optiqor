@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1.7
+
+# Base images are pinned by digest, not floating tag. The two ARG
+# defaults below carry both a human-readable tag and an immutable
+# digest so a `docker build .` produces a reproducible image without
+# external lookups. Renovate keeps the digests fresh; treat the tag
+# half of the value as documentation, the digest half as the contract.
+# See docs/runbooks/dockerfile-digest-pinning.md for the bump procedure.
+ARG GO_BUILDER_IMAGE=golang:1.23.4-alpine3.21@sha256:c5add2cad8d3149436a6fc4d1bb14f2547077db44c769a3ab73e0d33d6df3e63
+ARG DISTROLESS_RUNTIME_IMAGE=gcr.io/distroless/static-debian12:nonroot@sha256:6d5c25b5bd9fcc5af7d96fd5e30b48eb1ce8aa3edaff34c1afe5e26d6c92024c
+
+FROM ${GO_BUILDER_IMAGE} AS build
+WORKDIR /src
+RUN apk add --no-cache git ca-certificates
+COPY go.mod go.sum* ./
+RUN go mod download || true
+COPY . .
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -trimpath \
+    -ldflags="-s -w -X main.version=${VERSION}" \
+    -o /out/api ./cmd/api
+
+FROM ${DISTROLESS_RUNTIME_IMAGE}
+COPY --from=build /out/api /api
+EXPOSE 8080 9090
+USER nonroot:nonroot
+ENTRYPOINT ["/api"]

@@ -1,0 +1,16 @@
+Copyright (c) 2026 Optiqor, Inc.
+
+All rights reserved.
+
+This source code and accompanying documentation are the proprietary and
+confidential information of Optiqor, Inc. Unauthorized copying, modification,
+distribution, or use of this software, via any medium, is strictly prohibited
+without the express written consent of Optiqor, Inc.
+
+Exception: the in-cluster agent located at `cmd/agent/` and any code in
+`internal/` packages that it imports is licensed under the Apache License,
+Version 2.0. See LICENSE-agent for the full text.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.

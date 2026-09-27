@@ -1,0 +1,19 @@
+# Tempo — distributed tracing, single-binary mode in Phase 1.
+
+tempo:
+  retention: 168h # 7 days; cheap traces, easy to extend later
+  resources:
+    requests: {cpu: "200m", memory: "512Mi"}
+    limits:   {cpu: "1",    memory: "1Gi"}
+  storage:
+    trace:
+      backend: s3
+      s3:
+        # Bucket is created by the s3 module in infra/terraform.
+        bucket: optiqor-prod-tempo
+        region: us-east-1
+
+persistence:
+  enabled: true
+  storageClassName: gp3
+  size: 10Gi

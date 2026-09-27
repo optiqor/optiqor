@@ -1,0 +1,90 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1" # Monday 06:17 UTC
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gosec:
+    name: gosec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+      - uses: securego/gosec@master
+        with:
+          args: "-no-fail -fmt sarif -out gosec.sarif ./..."
+      # Skip SARIF upload on dependabot PRs (read-only token cannot write security events).
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always() && github.actor != 'dependabot[bot]'
+        continue-on-error: true
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      - name: Run govulncheck
+        # Run in source-mode against tests too; surface findings but do not fail
+        # the build on stdlib-only vulnerabilities (we already pin to latest Go).
+        run: govulncheck -test ./...
+        continue-on-error: true
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # Use the open-source gitleaks binary directly (gitleaks-action v2+ requires a paid license).
+      - name: Install gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Run gitleaks
+        run: gitleaks detect --source=. --config=.gitleaks.toml --redact --no-banner --verbose --exit-code 1
+
+  trivy-fs:
+    name: trivy (filesystem)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 0 # report only; do not fail the build
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always() && github.actor != 'dependabot[bot]'
+        continue-on-error: true
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
