@@ -92,3 +92,8 @@ ci:
           - .github/ISSUE_TEMPLATE/**
           - .github/PULL_REQUEST_TEMPLATE.md
           - .github/CODEOWNERS
+
+"area/backend":
+  - changed-files:
+      - any-glob-to-any-file:
+          - backend/**

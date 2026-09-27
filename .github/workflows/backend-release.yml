@@ -1,9 +1,10 @@
-name: Release
+name: Backend release
 
+# Plain v* tags release the CLI (release.yml); backend images use backend/v*.
 on:
   push:
     tags:
-      - "v*"
+      - "backend/v*"
 
 permissions:
   contents: read
@@ -18,7 +19,11 @@ jobs:
       matrix:
         binary: [api, worker, agent]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+
+      - name: Derive image tag
+        id: ver
+        run: echo "tag=${GITHUB_REF_NAME#backend/}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -39,13 +44,13 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.${{ matrix.binary }}
+          file: ./backend/Dockerfile.${{ matrix.binary }}
           push: true
           tags: |
-            ${{ secrets.ECR_REGISTRY }}/optiqor-${{ matrix.binary }}:${{ github.ref_name }}
+            ${{ secrets.ECR_REGISTRY }}/optiqor-${{ matrix.binary }}:${{ steps.ver.outputs.tag }}
             ${{ secrets.ECR_REGISTRY }}/optiqor-${{ matrix.binary }}:latest
           build-args: |
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ steps.ver.outputs.tag }}
           provenance: false
 
       - name: Sign image with cosign
@@ -58,7 +63,7 @@ jobs:
       - name: Trivy scan released image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ secrets.ECR_REGISTRY }}/optiqor-${{ matrix.binary }}:${{ github.ref_name }}
+          image-ref: ${{ secrets.ECR_REGISTRY }}/optiqor-${{ matrix.binary }}:${{ steps.ver.outputs.tag }}
           severity: HIGH,CRITICAL
           exit-code: 1
           ignore-unfixed: true

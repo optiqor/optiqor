@@ -28,3 +28,6 @@
 # Documentation.
 *.md                                    @btwshivam
 /docs/                                  @btwshivam
+
+# Backend (API, worker, agent, web, infra).
+/backend/                               @btwshivam
