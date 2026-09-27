@@ -26,11 +26,14 @@ worker:
 `
 
 func newHandler() *Handler {
+	now := func() time.Time { return time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC) }
+	store := NewInMemoryStore()
+	store.now = now
 	return &Handler{
-		Store:  NewInMemoryStore(),
+		Store:  store,
 		Pricer: cost.NewStaticPricer(),
 		Region: "us-east-1",
-		Now:    func() time.Time { return time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC) },
+		Now:    now,
 	}
 }
 
