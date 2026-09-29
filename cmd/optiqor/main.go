@@ -209,7 +209,7 @@ side-effect of parsing — they are not the headline feature.
 	cmd.Flags().BoolVar(&roast, "roast", false, "humorous output (findings stay accurate)")
 	cmd.Flags().StringVar(&minSev, "severity", "", "drop findings below this severity (low|med|high)")
 	cmd.Flags().StringArrayVar(&detectors, "detector", nil, "only run findings from these detector IDs (repeatable)")
-	cmd.Flags().StringVar(&failOn, "fail-on", "", "exit code 1 when any finding is at this severity or higher (low|med|high)")
+	cmd.Flags().StringVar(&failOn, "fail-on", "high", "exit code 1 when any finding is at this severity or higher (low|med|high)")
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "write the rendered output to a file instead of stdout")
 	return cmd
 }
