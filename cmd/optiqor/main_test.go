@@ -215,3 +215,35 @@ func TestAtoi(t *testing.T) {
 		})
 	}
 }
+
+func TestAnalyze_OfflineFlagSkipsShare(t *testing.T) {
+	cmd := newRootCmd()
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+	cmd.SetArgs([]string{"analyze", "--share", "--offline", "../../testdata/fixtures/basic-chart/values.yaml"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute --offline --share: %v\n%s", err, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "warning: --share is ignored in --offline mode") {
+		t.Errorf("expected offline warning in stderr, got: %s", errBuf.String())
+	}
+	if strings.Contains(errBuf.String(), "share URL:") {
+		t.Errorf("share URL should not appear when offline; got: %s", errBuf.String())
+	}
+}
+
+func TestAnalyze_OfflineEnvSkipsShare(t *testing.T) {
+	cmd := newRootCmd()
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+	t.Setenv("OPTIQOR_OFFLINE", "1")
+	cmd.SetArgs([]string{"analyze", "--share", "../../testdata/fixtures/basic-chart/values.yaml"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute --share with OPTIQOR_OFFLINE=1: %v\n%s", err, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "warning: --share is ignored in --offline mode") {
+		t.Errorf("expected offline warning in stderr, got: %s", errBuf.String())
+	}
+}
