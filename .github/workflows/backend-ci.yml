@@ -35,7 +35,7 @@ jobs:
           if [ -n "$diff" ]; then echo "gofmt would rewrite:"; echo "$diff"; exit 1; fi
       - name: go vet
         run: go vet ./...
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           working-directory: backend
