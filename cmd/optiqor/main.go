@@ -196,16 +196,19 @@ side-effect of parsing — they are not the headline feature.
 				return err
 			}
 			if shareFlag {
-				emitShareURL(cmd, rep)
+				if offline || os.Getenv("OPTIQOR_OFFLINE") == "1" {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: --share is ignored in --offline mode\n")
+				} else {
+					emitShareURL(cmd, rep)
+				}
 			}
-			_ = offline
 			return checkFailOn(rep, effFailOn)
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit machine-readable JSON")
 	cmd.Flags().StringVar(&htmlPath, "html", "", "also write a self-contained HTML report to this path")
-	cmd.Flags().BoolVar(&offline, "offline", true, "do not perform any network calls (always true in Phase 1)")
-	cmd.Flags().BoolVar(&shareFlag, "share", false, "print optiqor.dev/r/<hash> for the sanitised analysis (no upload in Phase 1)")
+	cmd.Flags().BoolVar(&offline, "offline", false, "skip network calls (share upload is skipped with a warning)")
+	cmd.Flags().BoolVar(&shareFlag, "share", false, "print optiqor.dev/r/<hash> for the sanitised analysis")
 	cmd.Flags().BoolVar(&roast, "roast", false, "humorous output (findings stay accurate)")
 	cmd.Flags().StringVar(&minSev, "severity", "", "drop findings below this severity (low|med|high)")
 	cmd.Flags().StringArrayVar(&detectors, "detector", nil, "only run findings from these detector IDs (repeatable)")
