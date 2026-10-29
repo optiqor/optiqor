@@ -348,6 +348,30 @@ func readSecurity(n *yaml.Node) SecurityContext {
 }
 
 func applySecFields(ctx *yaml.Node, out *SecurityContext) {
+	for _, key := range [][2]string{
+		{"hostNetwork", "HostNetwork"},
+		{"hostPID", "HostPID"},
+		{"hostIPC", "HostIPC"},
+	} {
+		if v := findChild(ctx, key[0]); v != nil && v.Kind == yaml.ScalarNode {
+			b := boolValue(v.Value)
+			switch key[1] {
+			case "HostNetwork":
+				if out.HostNetwork == nil {
+					out.HostNetwork = &b
+				}
+			case "HostPID":
+				if out.HostPID == nil {
+					out.HostPID = &b
+				}
+			case "HostIPC":
+				if out.HostIPC == nil {
+					out.HostIPC = &b
+				}
+			}
+		}
+	}
+
 	if v := findChild(ctx, "runAsNonRoot"); v != nil && v.Kind == yaml.ScalarNode {
 		b := boolValue(v.Value)
 		out.RunAsNonRoot = &b
