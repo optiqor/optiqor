@@ -111,10 +111,19 @@ type UploadResult struct {
 	Error  string
 }
 
-// Upload POSTs the sanitised report JSON. Hard rule: the only
-// outbound call the CLI makes, and only on --share. Never retries,
-// never logs bodies, never sends anything but the sanitised payload.
-func Upload(report any, endpoint string) UploadResult {
+// Upload attempts to POST the sanitised report JSON to endpoint and
+// returns the resulting (hash, URL, posted) tuple.
+//
+// When private is true, the request carries X-Optiqor-Private: 1 so
+// the sandbox receiver returns a token-gated URL (Phase 2 backend work).
+// The CLI side only sets the header; the token arrives in the response
+// body once the receiver is live.
+//
+// CLI hard rule: this is the only outbound network call optiqor makes,
+// and only when the user explicitly passes --share. The function never
+// retries; never logs request bodies; never sends anything but the
+// sanitised payload.
+func Upload(report any, endpoint string, private bool) UploadResult {
 	hash, err := Hash(report)
 	if err != nil {
 		return UploadResult{Error: err.Error()}
@@ -142,6 +151,9 @@ func Upload(report any, endpoint string) UploadResult {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Optiqor-Hash", hash)
 	req.Header.Set("User-Agent", "optiqor-cli")
+	if private {
+		req.Header.Set("X-Optiqor-Private", "1")
+	}
 
 	client := &http.Client{Timeout: uploadTimeout}
 	resp, err := client.Do(req)

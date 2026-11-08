@@ -175,7 +175,7 @@ func TestUpload(t *testing.T) {
 				defer srv.Close()
 			}
 
-			res := Upload(tc.input, srv.URL)
+			res := Upload(tc.input, srv.URL, false)
 
 			if res.Posted != tc.wantPost {
 				t.Fatalf("Posted = %v want %v; Error=%q", res.Posted, tc.wantPost, res.Error)
@@ -214,5 +214,36 @@ func TestIsHash(t *testing.T) {
 				t.Errorf("IsHash(%q) = %v, want %v", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestUpload_PrivateHeaderSent(t *testing.T) {
+	var gotPrivate string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPrivate = r.Header.Get("X-Optiqor-Private")
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	res := Upload(sample{Workloads: 1}, srv.URL, true)
+	if !res.Posted {
+		t.Fatalf("Posted = false, error = %q", res.Error)
+	}
+	if gotPrivate != "1" {
+		t.Errorf("X-Optiqor-Private = %q, want %q", gotPrivate, "1")
+	}
+}
+
+func TestUpload_NoPrivateHeaderByDefault(t *testing.T) {
+	var gotPrivate string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPrivate = r.Header.Get("X-Optiqor-Private")
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	Upload(sample{Workloads: 1}, srv.URL, false)
+	if gotPrivate != "" {
+		t.Errorf("X-Optiqor-Private should be absent, got %q", gotPrivate)
 	}
 }
