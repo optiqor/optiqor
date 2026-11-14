@@ -9,7 +9,7 @@ require (
 	github.com/optiqor/optiqor-cli v0.0.0-20260510212345-4127fe767d6b
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/testcontainers/testcontainers-go v0.45.0
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.44.0
 	go.temporal.io/sdk v1.50.0
 	gopkg.in/yaml.v3 v3.0.1
