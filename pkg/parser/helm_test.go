@@ -102,6 +102,60 @@ features:
 			wantErr: true,
 		},
 		{
+			// hostNetwork/PID/IPC nested under podSecurityContext were silently
+			// ignored before the applySecFields fix (issue #39).
+			name: "host-namespace-flags-nested-under-podSecurityContext",
+			in: `
+agent:
+  resources:
+    requests:
+      cpu: "100m"
+  podSecurityContext:
+    hostNetwork: true
+    hostPID: true
+    hostIPC: true
+`,
+			check: func(t *testing.T, wls []Workload) {
+				t.Helper()
+				if len(wls) != 1 {
+					t.Fatalf("expected 1 workload, got %d", len(wls))
+				}
+				sec := wls[0].Security
+				if sec.HostNetwork == nil || !*sec.HostNetwork {
+					t.Errorf("HostNetwork = %v, want *true", sec.HostNetwork)
+				}
+				if sec.HostPID == nil || !*sec.HostPID {
+					t.Errorf("HostPID = %v, want *true", sec.HostPID)
+				}
+				if sec.HostIPC == nil || !*sec.HostIPC {
+					t.Errorf("HostIPC = %v, want *true", sec.HostIPC)
+				}
+			},
+		},
+		{
+			// Workload-level values must not be overwritten by podSecurityContext.
+			name: "workload-level-host-flags-take-precedence",
+			in: `
+agent:
+  resources:
+    requests:
+      cpu: "100m"
+  hostNetwork: false
+  podSecurityContext:
+    hostNetwork: true
+`,
+			check: func(t *testing.T, wls []Workload) {
+				t.Helper()
+				if len(wls) != 1 {
+					t.Fatalf("expected 1 workload, got %d", len(wls))
+				}
+				sec := wls[0].Security
+				if sec.HostNetwork == nil || *sec.HostNetwork {
+					t.Errorf("HostNetwork = %v, want *false (workload level wins)", sec.HostNetwork)
+				}
+			},
+		},
+		{
 			name: "deterministic-alpha-order",
 			in: `
 zeta:
