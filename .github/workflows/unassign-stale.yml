@@ -51,7 +51,7 @@ jobs:
             for (const issue of stale) {
               if (issue.pull_request) continue;
               const labels = (issue.labels || []).map(l => typeof l === 'string' ? l : l.name);
-              if (labels.includes('pinned') || labels.includes('long-running')) continue;
+              if (labels.includes('pinned')) continue;
               const assignees = (issue.assignees || []).map(a => a.login);
               if (assignees.length === 0) continue;
 
