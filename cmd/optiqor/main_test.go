@@ -76,7 +76,7 @@ func TestAnalyze_FixtureFile_FiresWellKnownDetectors(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"--no-color", "analyze", "../../testdata/fixtures/basic-chart/values.yaml"})
+	cmd.SetArgs([]string{"--no-color", "analyze", "--fail-on", "", "../../testdata/fixtures/basic-chart/values.yaml"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute analyze: %v\n%s", err, buf.String())
 	}
@@ -105,7 +105,7 @@ func TestAnalyze_JSON_ShapeContainsDisclosureAndDetectors(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"analyze", "--json", "../../testdata/fixtures/basic-chart/values.yaml"})
+	cmd.SetArgs([]string{"analyze", "--json", "--fail-on", "", "../../testdata/fixtures/basic-chart/values.yaml"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute --json: %v\n%s", err, buf.String())
 	}
